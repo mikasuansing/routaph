@@ -67,7 +67,7 @@ export default function DesignB() {
             Get there faster.
           </h1>
           <p style={{ fontSize: 15, color: '#7a6f5e', maxWidth: 400, margin: '0 auto' }}>
-            Seeded route data for Metro Manila's busiest corridors.
+            Seeded route data for Metro Manila&apos;s busiest corridors.
           </p>
         </div>
 

@@ -1,354 +1,498 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { TRIP_STORAGE_KEY } from '@/lib/trip/types';
 
-// Palette — less is more. Real apps don't use 8 shades of brown.
 const C = {
-  bg:       '#F4F0E8',   // warm page bg
-  surface:  '#FFFFFF',
-  card:     '#F9F7F2',   // barely-there card bg
-  border:   '#E2DBD0',
-  muted:    '#A89E8E',
-  body:     '#3D3530',
-  ink:      '#1A1410',
-  header:   '#1A1410',   // near-black, not brown
-  accent:   '#D05A28',   // single rust accent
-  green:    '#2D7A4F',
-  blue:     '#1A5FA8',
+  bg:      '#F4F0E8',
+  surface: '#FFFFFF',
+  card:    '#F9F7F2',
+  border:  '#E2DBD0',
+  muted:   '#A89E8E',
+  body:    '#3D3530',
+  ink:     '#1A1410',
+  accent:  '#D05A28',
+  green:   '#2D7A4F',
+  blue:    '#1A5FA8',
 };
 
-const STOPS_EDSA = ['Monumento','Balintawak','Trinoma','Quezon Ave','Cubao','Ortigas','Guadalupe','Magallanes','Taft Ave'];
-const STOPS_KATIP = ['Katipunan LRT2','Ateneo Gate','UP Diliman','Balara','Tandang Sora'];
-const ALL_STOPS = [...STOPS_EDSA, ...STOPS_KATIP];
-
-const VEHICLES = [
-  { id:'bus',     label:'EDSA Bus',    sub:'Carousel rapid bus', speedN:22, speedR:12, fareBase:13, fareKm:2.2,  color:'#D05A28', lineColor:'#E87040' },
-  { id:'jeepney', label:'Jeepney',     sub:'Katipunan route',    speedN:18, speedR:10, fareBase:11, fareKm:1.8,  color:'#B8962E', lineColor:'#D4AF37' },
-  { id:'uv',      label:'UV Express',  sub:'Air-conditioned van', speedN:28, speedR:16, fareBase:18, fareKm:3.2,  color:'#2D7A4F', lineColor:'#3A9D65' },
-  { id:'mrt',     label:'MRT / LRT',   sub:'Fastest — rail only', speedN:45, speedR:40, fareBase:15, fareKm:1.5,  color:'#1A5FA8', lineColor:'#2B7FDD' },
-];
-
-const STOP_COORDS: Record<string, [number,number]> = {
-  'Monumento':[14.6543,120.984],'Balintawak':[14.651,120.9842],'Trinoma':[14.652,121.032],
-  'Quezon Ave':[14.6448,121.038],'Cubao':[14.6197,121.051],'Ortigas':[14.5875,121.0584],
-  'Guadalupe':[14.567,121.0469],'Magallanes':[14.5402,121.0039],'Taft Ave':[14.5545,120.9942],
-  'Katipunan LRT2':[14.6284,121.073],'Ateneo Gate':[14.6395,121.0775],'UP Diliman':[14.654,121.0685],
-  'Balara':[14.67,121.072],'Tandang Sora':[14.682,121.044],
+const MODE_META: Record<string, { label: string; color: string; icon: string }> = {
+  mrt:     { label: 'MRT-3',   color: '#1A5FA8', icon: '🚇' },
+  lrt:     { label: 'LRT',     color: '#2A9D8F', icon: '🚈' },
+  bus:     { label: 'Bus',     color: '#D05A28', icon: '🚌' },
+  jeepney: { label: 'Jeepney', color: '#B8962E', icon: '🚐' },
+  walk:    { label: 'Walk',    color: '#A89E8E', icon: '🚶' },
 };
 
-function hav(a:[number,number],b:[number,number]){
-  const R=6371,dLat=(b[0]-a[0])*Math.PI/180,dLng=(b[1]-a[1])*Math.PI/180;
-  const s=Math.sin(dLat/2)**2+Math.cos(a[0]*Math.PI/180)*Math.cos(b[0]*Math.PI/180)*Math.sin(dLng/2)**2;
-  return R*2*Math.atan2(Math.sqrt(s),Math.sqrt(1-s));
+// 2024 fare reference (shown on UI for transparency)
+const FARE_REF: Record<string, string> = {
+  mrt:     '₱13 min · ₱0.94/km',
+  lrt:     '₱12 min · ₱0.89/km',
+  bus:     '₱15 for 5km · ₱2.65/km',
+  jeepney: '₱14 for 4km · ₱1.80/km',
+};
+
+const STOP_COORDS: Record<string, [number, number]> = {
+  'Taft Avenue (MRT)':     [14.5395, 120.9985],
+  'Magallanes':            [14.5401, 121.0038],
+  'Ayala':                 [14.5487, 121.0279],
+  'Buendia':               [14.5536, 121.0347],
+  'Guadalupe':             [14.5658, 121.0469],
+  'Ortigas (MRT)':         [14.5876, 121.0583],
+  'Shaw Blvd':             [14.5811, 121.0543],
+  'Boni':                  [14.5762, 121.0477],
+  'Cubao (MRT)':           [14.6228, 121.0526],
+  'GMA-Kamuning':          [14.6378, 121.0484],
+  'Quezon Ave (MRT)':      [14.6449, 121.0403],
+  'North Avenue':          [14.6521, 121.0322],
+  'Recto':                 [14.5987, 120.9844],
+  'Cubao (LRT-2)':         [14.6224, 121.0524],
+  'Katipunan (LRT-2)':     [14.6284, 121.0731],
+  'Antipolo':              [14.6249, 121.1240],
+  'Monumento (Bus)':       [14.6543, 120.9840],
+  'Trinoma':               [14.6520, 121.0320],
+  'Cubao (Bus)':           [14.6197, 121.0510],
+  'Ortigas (Bus)':         [14.5870, 121.0576],
+  'Taft Ave (Bus)':        [14.5545, 120.9942],
+  'Katipunan LRT2 (Jeep)': [14.6284, 121.0730],
+  'UP Diliman':            [14.6540, 121.0685],
+  'Tandang Sora':          [14.6820, 121.0440],
+};
+
+const ALL_STOPS = Object.keys(STOP_COORDS).sort();
+
+type WalkLeg = {
+  type: 'walk'; fromName: string; toName: string;
+  distKm: number; durationMin: number;
+};
+type RideLeg = {
+  type: 'ride'; mode: string;
+  line: { id: number; name: string; color: string };
+  from: { name: string }; to: { name: string };
+  stops: { name: string }[];
+  distKm: number; durationMin: number; fare: number;
+};
+type Leg = WalkLeg | RideLeg;
+type Itinerary = {
+  legs: Leg[]; totalDurationMin: number; totalFare: number;
+  transfers: number; objective: string;
+};
+
+type Screen = 'home' | 'loading' | 'results' | 'detail';
+type ModeFilter = 'all' | 'train' | 'bus' | 'jeepney';
+
+function rideLegsOf(itin: Itinerary): RideLeg[] {
+  return itin.legs.filter(l => l.type === 'ride') as RideLeg[];
 }
 
-function getDist(from:string,to:string){
-  const iA=STOPS_EDSA.indexOf(from),iB=STOPS_EDSA.indexOf(to);
-  if(iA!==-1&&iB!==-1){
-    const lo=Math.min(iA,iB),hi=Math.max(iA,iB);
-    let d=0;for(let i=lo;i<hi;i++)d+=hav(STOP_COORDS[STOPS_EDSA[i]],STOP_COORDS[STOPS_EDSA[i+1]]);
-    return Math.round(d*10)/10;
-  }
-  const a=STOP_COORDS[from],b=STOP_COORDS[to];
-  return a&&b?Math.round(hav(a,b)*10)/10:5;
+function matchesFilter(itin: Itinerary, f: ModeFilter): boolean {
+  if (f === 'all') return true;
+  const modes = rideLegsOf(itin).map(l => l.mode);
+  if (f === 'train') return modes.some(m => m === 'mrt' || m === 'lrt');
+  if (f === 'bus') return modes.some(m => m === 'bus');
+  if (f === 'jeepney') return modes.some(m => m === 'jeepney');
+  return true;
 }
 
-type Screen='home'|'pick'|'result';
-type Vehicle=typeof VEHICLES[0];
+function primaryColor(itin: Itinerary): string {
+  const first = rideLegsOf(itin)[0];
+  return first ? (MODE_META[first.mode]?.color ?? C.accent) : C.accent;
+}
 
-// ── shared nav bar ──────────────────────────────────────────────────────────
-function NavBar({onBack,label}:{onBack?:()=>void;label?:string}){
-  return(
-    <div style={{height:52,background:C.surface,borderBottom:`1px solid ${C.border}`,display:'flex',alignItems:'center',padding:'0 16px',gap:12,flexShrink:0}}>
-      {onBack&&(
-        <button onClick={onBack} style={{background:'none',border:'none',cursor:'pointer',padding:'6px 0',display:'flex',alignItems:'center',gap:4,color:C.ink}}>
-          <svg width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M13 4l-7 6 7 6"/></svg>
+const OBJ_LABEL: Record<string, string> = {
+  fastest: 'Fastest', fewest_transfers: 'Least transfers', cheapest: 'Cheapest',
+};
+
+// ── Nav ───────────────────────────────────────────────────────────────────────
+function NavBar({ onBack, label }: { onBack?: () => void; label?: string }) {
+  return (
+    <div style={{ height: 52, background: C.surface, borderBottom: `1px solid ${C.border}`, display: 'flex', alignItems: 'center', padding: '0 16px', gap: 12, flexShrink: 0 }}>
+      {onBack && (
+        <button onClick={onBack} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '6px 0', display: 'flex', alignItems: 'center', gap: 4, color: C.ink }}>
+          <svg width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M13 4l-7 6 7 6" /></svg>
         </button>
       )}
-      <span style={{fontFamily:'var(--font)',fontSize:16,fontWeight:700,color:C.ink,letterSpacing:'-0.01em'}}>{label||'ParaPo'}</span>
-      {!onBack&&<span style={{fontSize:10,fontWeight:600,color:C.accent,background:'#FBE9E0',borderRadius:4,padding:'2px 6px',letterSpacing:'0.04em'}}>BETA</span>}
-      {!onBack&&<a href="/auth" style={{marginLeft:'auto',fontSize:12,color:C.muted,textDecoration:'none',fontFamily:'Inter,sans-serif',fontWeight:500}}>Sign out</a>}
+      <span style={{ fontSize: 16, fontWeight: 700, color: C.ink, letterSpacing: '-0.01em' }}>{label || 'ParaPo'}</span>
+      {!onBack && <span style={{ fontSize: 10, fontWeight: 600, color: C.accent, background: '#FBE9E0', borderRadius: 4, padding: '2px 6px', letterSpacing: '0.04em' }}>BETA</span>}
     </div>
   );
 }
 
-export default function DesignD(){
-  const [screen,setScreen]=useState<Screen>('home');
-  const [from,setFrom]=useState('');
-  const [to,setTo]=useState('');
-  const [vehicle,setVehicle]=useState<Vehicle|null>(null);
-  const [rush,setRush]=useState(false);
-  const [dist,setDist]=useState(0);
+// ── Chip ──────────────────────────────────────────────────────────────────────
+function Chip({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
+  return (
+    <button onClick={onClick} style={{
+      padding: '6px 14px', borderRadius: 20, fontSize: 13, fontWeight: active ? 600 : 400,
+      background: active ? C.ink : C.surface, color: active ? '#fff' : C.body,
+      border: `1px solid ${active ? C.ink : C.border}`, cursor: 'pointer', transition: 'all 0.15s', fontFamily: 'inherit',
+    }}>{label}</button>
+  );
+}
 
-  useEffect(()=>{const h=new Date().getHours();setRush((h>=7&&h<=9)||(h>=17&&h<=19));});
+// ── Main component ─────────────────────────────────────────────────────────────
+export default function Planner() {
+  const router = useRouter();
+  const [screen, setScreen] = useState<Screen>('home');
+  const [from, setFrom] = useState('');
+  const [to, setTo] = useState('');
+  const [rush, setRush] = useState(() => { const h = new Date().getHours(); return (h >= 7 && h <= 9) || (h >= 17 && h <= 19); });
+  const [modeFilter, setModeFilter] = useState<ModeFilter>('all');
+  const [itineraries, setItineraries] = useState<Itinerary[]>([]);
+  const [selected, setSelected] = useState<Itinerary | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
-  const eta=vehicle?Math.round((dist/(rush?vehicle.speedR:vehicle.speedN))*60):0;
-  const fare=vehicle?Math.round((vehicle.fareBase+dist*vehicle.fareKm)*100)/100:0;
+  async function search() {
+    const origin = STOP_COORDS[from];
+    const dest = STOP_COORDS[to];
+    if (!origin || !dest) return;
+    setError(null);
+    setModeFilter('all');
+    setScreen('loading');
+    try {
+      const res = await fetch('/api/v1/routes/plan', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ origin: { lat: origin[0], lng: origin[1] }, destination: { lat: dest[0], lng: dest[1] } }),
+      });
+      const json = await res.json() as { data?: Itinerary[]; error?: { message: string } };
+      if (!res.ok || json.error) {
+        setError(json.error?.message ?? 'No route found between those stops.');
+        setScreen('home');
+        return;
+      }
+      setItineraries(json.data ?? []);
+      setScreen('results');
+    } catch {
+      setError('Network error — check your connection.');
+      setScreen('home');
+    }
+  }
 
-  // ── SCREEN: HOME ──────────────────────────────────────────────────────────
-  if(screen==='home') return(
-    <div style={{display:'flex',flexDirection:'column',minHeight:'100vh',background:C.bg,fontFamily:'"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif'}}>
-      {/* Google Fonts Inter */}
-      <style>{`@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');*{box-sizing:border-box;-webkit-font-smoothing:antialiased;}select{-webkit-appearance:none;-moz-appearance:none;appearance:none;}`}</style>
-      <NavBar/>
+  // ── HOME ─────────────────────────────────────────────────────────────────────
+  if (screen === 'home') return (
+    <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', background: C.bg, fontFamily: 'Inter,-apple-system,sans-serif' }}>
+      <style>{`@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');*{box-sizing:border-box;-webkit-font-smoothing:antialiased;}select{-webkit-appearance:none;}`}</style>
+      <NavBar />
 
-      {/* Hero */}
-      <div style={{padding:'24px 20px 0',background:C.surface,borderBottom:`1px solid ${C.border}`}}>
-        <p style={{fontSize:22,fontWeight:700,color:C.ink,letterSpacing:'-0.02em',margin:'0 0 4px'}}>
-          Where are you headed?
-        </p>
-        <p style={{fontSize:13,color:C.muted,margin:'0 0 20px'}}>Pick two stops to compare routes</p>
+      <div style={{ padding: '24px 20px 0', background: C.surface, borderBottom: `1px solid ${C.border}` }}>
+        <p style={{ fontSize: 22, fontWeight: 700, color: C.ink, letterSpacing: '-0.02em', margin: '0 0 4px' }}>Where are you headed?</p>
+        <p style={{ fontSize: 13, color: C.muted, margin: '0 0 20px' }}>Exact 2024 PH fare rates · Real multimodal routes</p>
+
+        {error && (
+          <div style={{ background: '#FEF2F2', border: '1px solid #FCA5A5', borderRadius: 8, padding: '10px 14px', marginBottom: 16, fontSize: 13, color: '#DC2626' }}>
+            {error}
+          </div>
+        )}
 
         {/* From / To */}
-        <div style={{border:`1.5px solid ${C.border}`,borderRadius:12,background:C.surface,overflow:'hidden',marginBottom:16}}>
-          {/* From row */}
-          <div style={{display:'flex',alignItems:'center',padding:'0 14px',gap:10,borderBottom:`1px solid ${C.border}`}}>
-            <svg width="12" height="12" viewBox="0 0 12 12"><circle cx="6" cy="6" r="4" fill="none" stroke={C.green} strokeWidth="2"/><circle cx="6" cy="6" r="1.5" fill={C.green}/></svg>
-            <select value={from} onChange={e=>setFrom(e.target.value)} style={{flex:1,background:'transparent',border:'none',outline:'none',padding:'14px 0',fontSize:15,color:from?C.ink:C.muted,fontFamily:'inherit',fontWeight:from?500:400,cursor:'pointer'}}>
-              <option value="">From</option>
-              {ALL_STOPS.map(s=><option key={s}>{s}</option>)}
+        <div style={{ border: `1.5px solid ${C.border}`, borderRadius: 12, background: C.surface, overflow: 'hidden', marginBottom: 16 }}>
+          <div style={{ display: 'flex', alignItems: 'center', padding: '0 14px', gap: 10, borderBottom: `1px solid ${C.border}` }}>
+            <div style={{ width: 10, height: 10, borderRadius: '50%', border: `2px solid ${C.green}`, background: C.surface, flexShrink: 0 }} />
+            <select value={from} onChange={e => setFrom(e.target.value)} style={{ flex: 1, background: 'transparent', border: 'none', outline: 'none', padding: '14px 0', fontSize: 15, color: from ? C.ink : C.muted, fontFamily: 'inherit', fontWeight: from ? 500 : 400, cursor: 'pointer' }}>
+              <option value="">From stop</option>
+              {ALL_STOPS.map(s => <option key={s}>{s}</option>)}
             </select>
           </div>
-          {/* Swap row */}
-          <div style={{display:'flex',alignItems:'center',padding:'0 14px',gap:10}}>
-            <svg width="12" height="12" viewBox="0 0 12 12"><rect x="3" y="3" width="6" height="6" rx="1" fill={C.accent}/></svg>
-            <select value={to} onChange={e=>setTo(e.target.value)} style={{flex:1,background:'transparent',border:'none',outline:'none',padding:'14px 0',fontSize:15,color:to?C.ink:C.muted,fontFamily:'inherit',fontWeight:to?500:400,cursor:'pointer'}}>
-              <option value="">To</option>
-              {ALL_STOPS.map(s=><option key={s}>{s}</option>)}
+          <div style={{ display: 'flex', alignItems: 'center', padding: '0 14px', gap: 10 }}>
+            <div style={{ width: 10, height: 10, borderRadius: 2, background: C.accent, flexShrink: 0 }} />
+            <select value={to} onChange={e => setTo(e.target.value)} style={{ flex: 1, background: 'transparent', border: 'none', outline: 'none', padding: '14px 0', fontSize: 15, color: to ? C.ink : C.muted, fontFamily: 'inherit', fontWeight: to ? 500 : 400, cursor: 'pointer' }}>
+              <option value="">To stop</option>
+              {ALL_STOPS.map(s => <option key={s}>{s}</option>)}
             </select>
-            <button onClick={()=>{const t=from;setFrom(to);setTo(t);}} style={{background:'none',border:`1px solid ${C.border}`,borderRadius:6,padding:'4px 6px',cursor:'pointer',color:C.muted,fontSize:12,display:'flex',alignItems:'center'}}>
-              <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><path d="M3 5l4-4 4 4M11 9l-4 4-4-4"/></svg>
+            <button onClick={() => { const t = from; setFrom(to); setTo(t); }} style={{ background: 'none', border: `1px solid ${C.border}`, borderRadius: 6, padding: '4px 6px', cursor: 'pointer', color: C.muted, display: 'flex', alignItems: 'center' }}>
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><path d="M3 5l4-4 4 4M11 9l-4 4-4-4" /></svg>
             </button>
           </div>
         </div>
 
         {/* Rush toggle */}
-        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'12px 14px',borderRadius:10,background:rush?'#FBE9E0':C.card,border:`1px solid ${rush?'#EFC4AA':C.border}`,marginBottom:20,transition:'background 0.2s'}}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 14px', borderRadius: 10, background: rush ? '#FBE9E0' : C.card, border: `1px solid ${rush ? '#EFC4AA' : C.border}`, marginBottom: 20 }}>
           <div>
-            <p style={{margin:0,fontSize:14,fontWeight:500,color:C.ink}}>Rush hour</p>
-            <p style={{margin:0,fontSize:12,color:C.muted}}>7–9 am · 5–7 pm</p>
+            <p style={{ margin: 0, fontSize: 14, fontWeight: 500, color: C.ink }}>Rush hour</p>
+            <p style={{ margin: 0, fontSize: 12, color: C.muted }}>7–9 am · 5–7 pm (slower speeds)</p>
           </div>
-          <button onClick={()=>setRush(!rush)} style={{background:'none',border:'none',cursor:'pointer',display:'flex',alignItems:'center',gap:8,padding:0}}>
-            <span style={{fontSize:12,color:rush?C.accent:C.muted,fontWeight:500}}>{rush?'On':'Off'}</span>
-            <div style={{width:42,height:24,borderRadius:12,background:rush?C.accent:'#D9D4CC',position:'relative',transition:'background 0.2s',flexShrink:0}}>
-              <div style={{width:18,height:18,borderRadius:'50%',background:'#fff',position:'absolute',top:3,left:rush?21:3,transition:'left 0.2s',boxShadow:'0 1px 4px rgba(0,0,0,0.18)'}}/>
+          <button onClick={() => setRush(!rush)} style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, padding: 0 }}>
+            <span style={{ fontSize: 12, color: rush ? C.accent : C.muted, fontWeight: 500 }}>{rush ? 'On' : 'Off'}</span>
+            <div style={{ width: 42, height: 24, borderRadius: 12, background: rush ? C.accent : '#D9D4CC', position: 'relative', transition: 'background 0.2s', flexShrink: 0 }}>
+              <div style={{ width: 18, height: 18, borderRadius: '50%', background: '#fff', position: 'absolute', top: 3, left: rush ? 21 : 3, transition: 'left 0.2s', boxShadow: '0 1px 4px rgba(0,0,0,0.18)' }} />
             </div>
           </button>
         </div>
 
         <button
-          onClick={()=>{if(from&&to&&from!==to){setDist(getDist(from,to));setScreen('pick');}}}
-          disabled={!from||!to||from===to}
-          style={{width:'100%',background:from&&to&&from!==to?C.ink:'#D1CCC3',color:'#fff',border:'none',borderRadius:10,padding:'15px',fontSize:15,fontWeight:600,letterSpacing:'-0.01em',cursor:from&&to&&from!==to?'pointer':'default',marginBottom:24,transition:'background 0.15s'}}
+          onClick={search}
+          disabled={!from || !to || from === to}
+          style={{ width: '100%', background: from && to && from !== to ? C.ink : '#D1CCC3', color: '#fff', border: 'none', borderRadius: 10, padding: '15px', fontSize: 15, fontWeight: 600, letterSpacing: '-0.01em', cursor: from && to && from !== to ? 'pointer' : 'default', marginBottom: 24, transition: 'background 0.15s', fontFamily: 'inherit' }}
         >
-          See transport options
+          Find routes
         </button>
       </div>
 
-      {/* Route list */}
-      <div style={{flex:1,padding:'20px 20px 32px'}}>
-        <p style={{fontSize:11,fontWeight:600,color:C.muted,letterSpacing:'0.08em',margin:'0 0 12px'}}>AVAILABLE CORRIDORS</p>
-        <div style={{display:'flex',flexDirection:'column',gap:1,border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden',background:C.surface}}>
-          {[
-            {label:'EDSA Carousel',sub:'Monumento → Taft Ave',stops:9,color:C.accent},
-            {label:'Katipunan Jeepney',sub:'Katipunan LRT2 → Tandang Sora',stops:5,color:C.blue},
-          ].map((r,i)=>(
-            <div key={r.label} style={{display:'flex',alignItems:'center',gap:14,padding:'14px 16px',background:C.surface,borderBottom:i===0?`1px solid ${C.border}`:'none'}}>
-              <div style={{width:4,height:36,borderRadius:2,background:r.color,flexShrink:0}}/>
-              <div style={{flex:1}}>
-                <p style={{margin:0,fontSize:14,fontWeight:600,color:C.ink}}>{r.label}</p>
-                <p style={{margin:'2px 0 0',fontSize:12,color:C.muted}}>{r.sub}</p>
-              </div>
-              <span style={{fontSize:12,color:C.muted}}>{r.stops} stops</span>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      <div style={{padding:'10px 20px',borderTop:`1px solid ${C.border}`,background:C.surface}}>
-        <p style={{margin:0,fontSize:11,color:C.muted,textAlign:'center'}}>Seeded data · Not a live feed</p>
-      </div>
-    </div>
-  );
-
-  // ── SCREEN: VEHICLE PICKER ────────────────────────────────────────────────
-  if(screen==='pick') return(
-    <div style={{display:'flex',flexDirection:'column',minHeight:'100vh',background:C.bg,fontFamily:'"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif'}}>
-      <style>{`@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');*{box-sizing:border-box;-webkit-font-smoothing:antialiased;}`}</style>
-      <NavBar onBack={()=>setScreen('home')} label="Choose transport"/>
-
-      {/* Route summary strip */}
-      <div style={{background:C.surface,borderBottom:`1px solid ${C.border}`,padding:'12px 20px',display:'flex',alignItems:'center',gap:10}}>
-        <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:3,flexShrink:0}}>
-          <div style={{width:8,height:8,borderRadius:'50%',border:`2px solid ${C.green}`,background:C.surface}}/>
-          <div style={{width:1,height:16,background:C.border}}/>
-          <div style={{width:8,height:8,borderRadius:2,background:C.accent}}/>
-        </div>
-        <div style={{flex:1}}>
-          <p style={{margin:0,fontSize:14,fontWeight:500,color:C.ink}}>{from}</p>
-          <p style={{margin:'4px 0 0',fontSize:14,fontWeight:500,color:C.ink}}>{to}</p>
-        </div>
-        <div style={{textAlign:'right'}}>
-          <p style={{margin:0,fontSize:13,fontWeight:600,color:C.ink}}>{dist} km</p>
-          <p style={{margin:'2px 0 0',fontSize:12,color:rush?C.accent:C.green,fontWeight:500}}>{rush?'Rush hour':'Normal'}</p>
-        </div>
-      </div>
-
-      <div style={{flex:1,padding:'16px 20px 32px',overflowY:'auto'}}>
-        <p style={{fontSize:13,color:C.muted,margin:'0 0 16px'}}>Tap a vehicle to see your full route</p>
-
-        <div style={{display:'flex',flexDirection:'column',gap:10}}>
-          {VEHICLES.map(v=>{
-            const spd=rush?v.speedR:v.speedN;
-            const mins=Math.round((dist/spd)*60);
-            const estFare=Math.round((v.fareBase+dist*v.fareKm)*100)/100;
-            return(
-              <button key={v.id} onClick={()=>{setVehicle(v);setScreen('result');}}
-                style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:0,cursor:'pointer',textAlign:'left',display:'block',overflow:'hidden',transition:'box-shadow 0.15s'}}
-                onMouseEnter={e=>{(e.currentTarget as HTMLButtonElement).style.boxShadow='0 2px 12px rgba(0,0,0,0.1)';}}
-                onMouseLeave={e=>{(e.currentTarget as HTMLButtonElement).style.boxShadow='none';}}
-              >
-                {/* Left color bar via border-left — cleaner than a separate div */}
-                <div style={{display:'flex',alignItems:'center',gap:0}}>
-                  <div style={{width:4,background:v.color,alignSelf:'stretch',flexShrink:0,borderRadius:'12px 0 0 12px'}}/>
-                  <div style={{flex:1,padding:'16px 16px 16px 14px',display:'flex',alignItems:'center',gap:14}}>
-                    {/* ETA — the hero number, left-aligned */}
-                    <div style={{minWidth:52,flexShrink:0}}>
-                      <p style={{margin:0,fontSize:28,fontWeight:700,color:C.ink,letterSpacing:'-0.03em',lineHeight:1}}>{mins}</p>
-                      <p style={{margin:'2px 0 0',fontSize:11,color:C.muted}}>min</p>
-                    </div>
-                    {/* Divider */}
-                    <div style={{width:1,height:40,background:C.border,flexShrink:0}}/>
-                    {/* Details */}
-                    <div style={{flex:1}}>
-                      <p style={{margin:0,fontSize:15,fontWeight:600,color:C.ink}}>{v.label}</p>
-                      <p style={{margin:'2px 0 0',fontSize:12,color:C.muted}}>{v.sub}</p>
-                    </div>
-                    {/* Fare */}
-                    <div style={{textAlign:'right',flexShrink:0}}>
-                      <p style={{margin:0,fontSize:15,fontWeight:600,color:C.ink}}>₱{estFare.toFixed(2)}</p>
-                      <p style={{margin:'2px 0 0',fontSize:11,color:C.muted}}>est. fare</p>
-                    </div>
-                  </div>
+      {/* Fare reference */}
+      <div style={{ flex: 1, padding: '20px 20px 32px' }}>
+        <p style={{ fontSize: 11, fontWeight: 600, color: C.muted, letterSpacing: '0.08em', margin: '0 0 12px' }}>2024 FARE RATES</p>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 1, border: `1px solid ${C.border}`, borderRadius: 12, overflow: 'hidden', background: C.surface }}>
+          {Object.entries(FARE_REF).map(([mode, ref], i, a) => {
+            const meta = MODE_META[mode];
+            return (
+              <div key={mode} style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '13px 16px', background: C.surface, borderBottom: i < a.length - 1 ? `1px solid ${C.border}` : 'none' }}>
+                <div style={{ width: 4, height: 32, borderRadius: 2, background: meta.color, flexShrink: 0 }} />
+                <div style={{ flex: 1 }}>
+                  <p style={{ margin: 0, fontSize: 14, fontWeight: 600, color: C.ink }}>{meta.icon} {meta.label}</p>
+                  <p style={{ margin: '2px 0 0', fontSize: 12, color: C.muted }}>{ref}</p>
                 </div>
-              </button>
+              </div>
             );
           })}
         </div>
-
-        <p style={{fontSize:11,color:C.muted,margin:'20px 0 0',lineHeight:1.6}}>
-          ⚠ Seeded / simulated data. Not a live operator feed. Fares are estimates only.
+        <p style={{ fontSize: 11, color: C.muted, margin: '12px 0 0', lineHeight: 1.6 }}>
+          LTFRB-approved rates · Exact per-boarding fare, not per-segment
         </p>
       </div>
     </div>
   );
 
-  // ── SCREEN: RESULT ────────────────────────────────────────────────────────
-  return(
-    <div style={{display:'flex',flexDirection:'column',minHeight:'100vh',background:C.bg,fontFamily:'"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif'}}>
-      <style>{`@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');*{box-sizing:border-box;-webkit-font-smoothing:antialiased;}`}</style>
-      <NavBar onBack={()=>setScreen('pick')} label={vehicle?.label}/>
+  // ── LOADING ───────────────────────────────────────────────────────────────────
+  if (screen === 'loading') return (
+    <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', background: C.bg, fontFamily: 'Inter,-apple-system,sans-serif', alignItems: 'center', justifyContent: 'center', gap: 16 }}>
+      <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+      <div style={{ width: 40, height: 40, border: `3px solid ${C.border}`, borderTopColor: C.accent, borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+      <p style={{ fontSize: 14, color: C.muted, margin: 0 }}>Calculating routes…</p>
+    </div>
+  );
 
-      {/* Vehicle color bar */}
-      <div style={{height:3,background:vehicle?.color}}/>
+  // ── RESULTS ───────────────────────────────────────────────────────────────────
+  if (screen === 'results') {
+    const filtered = itineraries.filter(itin => matchesFilter(itin, modeFilter));
+    const modeFilters: { key: ModeFilter; label: string }[] = [
+      { key: 'all', label: 'All' },
+      { key: 'train', label: '🚇 Train' },
+      { key: 'bus', label: '🚌 Bus' },
+      { key: 'jeepney', label: '🚐 Jeepney' },
+    ];
 
-      {/* Route header */}
-      <div style={{background:C.surface,borderBottom:`1px solid ${C.border}`,padding:'14px 20px',display:'flex',alignItems:'center',gap:12}}>
-        <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:3,flexShrink:0}}>
-          <div style={{width:8,height:8,borderRadius:'50%',border:`2px solid ${C.green}`,background:C.surface}}/>
-          <div style={{width:1,height:16,background:C.border}}/>
-          <div style={{width:8,height:8,borderRadius:2,background:C.accent}}/>
-        </div>
-        <div style={{flex:1}}>
-          <p style={{margin:0,fontSize:14,color:C.ink,fontWeight:500}}>{from}</p>
-          <p style={{margin:'4px 0 0',fontSize:14,color:C.ink,fontWeight:500}}>{to}</p>
-        </div>
-        <button onClick={()=>setScreen('pick')} style={{background:'none',border:`1px solid ${C.border}`,borderRadius:8,padding:'6px 12px',fontSize:12,color:C.body,cursor:'pointer',fontFamily:'inherit',fontWeight:500}}>
-          Change
-        </button>
-      </div>
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', background: C.bg, fontFamily: 'Inter,-apple-system,sans-serif' }}>
+        <NavBar onBack={() => setScreen('home')} label="Route options" />
 
-      <div style={{flex:1,padding:'20px',overflowY:'auto'}}>
-        {/* Big ETA / Fare */}
-        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:16}}>
-          <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:'18px 16px'}}>
-            <p style={{margin:'0 0 8px',fontSize:11,fontWeight:600,color:C.muted,letterSpacing:'0.06em'}}>ETA</p>
-            <p style={{margin:0,fontSize:44,fontWeight:700,color:C.ink,letterSpacing:'-0.04em',lineHeight:1}}>{eta}</p>
-            <p style={{margin:'4px 0 0',fontSize:13,color:C.muted}}>minutes</p>
+        {/* Trip strip */}
+        <div style={{ background: C.surface, borderBottom: `1px solid ${C.border}`, padding: '12px 20px', display: 'flex', alignItems: 'center', gap: 10 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, flexShrink: 0 }}>
+            <div style={{ width: 8, height: 8, borderRadius: '50%', border: `2px solid ${C.green}`, background: C.surface }} />
+            <div style={{ width: 1, height: 14, background: C.border }} />
+            <div style={{ width: 8, height: 8, borderRadius: 2, background: C.accent }} />
           </div>
-          <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:'18px 16px'}}>
-            <p style={{margin:'0 0 8px',fontSize:11,fontWeight:600,color:C.muted,letterSpacing:'0.06em'}}>FARE</p>
-            <p style={{margin:0,fontSize:32,fontWeight:700,color:vehicle?.color??C.accent,letterSpacing:'-0.03em',lineHeight:1}}>₱{fare.toFixed(2)}</p>
-            <p style={{margin:'4px 0 0',fontSize:13,color:C.muted}}>estimated</p>
+          <div style={{ flex: 1 }}>
+            <p style={{ margin: 0, fontSize: 13, fontWeight: 500, color: C.ink }}>{from}</p>
+            <p style={{ margin: '3px 0 0', fontSize: 13, fontWeight: 500, color: C.ink }}>{to}</p>
           </div>
+          <span style={{ fontSize: 12, color: rush ? C.accent : C.green, fontWeight: 500, background: rush ? '#FBE9E0' : '#EDF7F1', padding: '2px 8px', borderRadius: 10 }}>{rush ? 'Rush' : 'Normal'}</span>
         </div>
 
-        {/* Secondary row */}
-        <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:8,marginBottom:24}}>
-          {[
-            {l:'DISTANCE',v:`${dist} km`},
-            {l:'TRAFFIC',v:rush?'Heavy':'Clear'},
-            {l:'AVG SPEED',v:`${rush?(vehicle?.speedR??0):(vehicle?.speedN??0)} km/h`},
-          ].map(s=>(
-            <div key={s.l} style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:10,padding:'12px 10px',textAlign:'center'}}>
-              <p style={{margin:'0 0 4px',fontSize:10,fontWeight:600,color:C.muted,letterSpacing:'0.06em'}}>{s.l}</p>
-              <p style={{margin:0,fontSize:13,fontWeight:600,color:C.ink}}>{s.v}</p>
-            </div>
+        {/* Mode filter */}
+        <div style={{ background: C.surface, borderBottom: `1px solid ${C.border}`, padding: '10px 20px', display: 'flex', gap: 8, overflowX: 'auto' }}>
+          {modeFilters.map(f => (
+            <Chip key={f.key} label={f.label} active={modeFilter === f.key} onClick={() => setModeFilter(f.key)} />
           ))}
         </div>
 
-        {/* Compare section */}
-        <p style={{fontSize:11,fontWeight:600,color:C.muted,letterSpacing:'0.08em',margin:'0 0 10px'}}>OTHER OPTIONS</p>
-        <div style={{display:'flex',flexDirection:'column',gap:1,border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden',background:C.surface,marginBottom:24}}>
-          {VEHICLES.filter(v=>v.id!==vehicle?.id).map((v,i,arr)=>{
-            const mins=Math.round((dist/(rush?v.speedR:v.speedN))*60);
-            const estFare=Math.round((v.fareBase+dist*v.fareKm)*100)/100;
-            return(
-              <button key={v.id} onClick={()=>setVehicle(v)}
-                style={{display:'flex',alignItems:'center',gap:14,padding:'13px 16px',background:'none',border:'none',borderBottom:i<arr.length-1?`1px solid ${C.border}`:'none',cursor:'pointer',textAlign:'left',fontFamily:'inherit',transition:'background 0.1s'}}
-                onMouseEnter={e=>{(e.currentTarget as HTMLButtonElement).style.background=C.card;}}
-                onMouseLeave={e=>{(e.currentTarget as HTMLButtonElement).style.background='none';}}
-              >
-                <div style={{width:3,height:32,borderRadius:2,background:v.color,flexShrink:0}}/>
-                <div style={{flex:1}}>
-                  <p style={{margin:0,fontSize:14,fontWeight:500,color:C.ink}}>{v.label}</p>
-                  <p style={{margin:'1px 0 0',fontSize:12,color:C.muted}}>{v.sub}</p>
+        <div style={{ flex: 1, padding: '16px 20px 32px', overflowY: 'auto' }}>
+          {filtered.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '40px 20px' }}>
+              <p style={{ fontSize: 15, fontWeight: 600, color: C.ink, margin: '0 0 8px' }}>No {modeFilter === 'all' ? '' : modeFilter + ' '}routes found</p>
+              <p style={{ fontSize: 13, color: C.muted, margin: 0 }}>
+                {modeFilter !== 'all' ? 'Try "All" or pick a different filter.' : 'Try stops that are farther apart or on different lines.'}
+              </p>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              {filtered.map((itin, idx) => {
+                const rides = rideLegsOf(itin);
+                const color = primaryColor(itin);
+                const modeIcons = rides.map(l => MODE_META[l.mode]?.icon ?? '').join(' → ');
+                return (
+                  <button key={idx} onClick={() => { setSelected(itin); setScreen('detail'); }}
+                    style={{ background: C.surface, border: `1.5px solid ${C.border}`, borderRadius: 14, padding: 0, cursor: 'pointer', textAlign: 'left', display: 'block', overflow: 'hidden', transition: 'box-shadow 0.15s' }}
+                    onMouseEnter={e => (e.currentTarget.style.boxShadow = '0 4px 16px rgba(0,0,0,0.10)')}
+                    onMouseLeave={e => (e.currentTarget.style.boxShadow = 'none')}>
+                    {/* Color bar */}
+                    <div style={{ height: 4, background: color }} />
+                    <div style={{ padding: '16px' }}>
+                      {/* Header row */}
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
+                        <div>
+                          <p style={{ margin: 0, fontSize: 32, fontWeight: 700, color: C.ink, letterSpacing: '-0.04em', lineHeight: 1 }}>{itin.totalDurationMin} <span style={{ fontSize: 14, fontWeight: 500, color: C.muted }}>min</span></p>
+                          <p style={{ margin: '4px 0 0', fontSize: 12, color: C.muted }}>{itin.transfers} transfer{itin.transfers !== 1 ? 's' : ''}</p>
+                        </div>
+                        <div style={{ textAlign: 'right' }}>
+                          <p style={{ margin: 0, fontSize: 22, fontWeight: 700, color: color }}>₱{itin.totalFare.toFixed(2)}</p>
+                          <span style={{ fontSize: 10, fontWeight: 600, background: `${color}18`, color, borderRadius: 6, padding: '2px 8px' }}>
+                            {OBJ_LABEL[itin.objective] ?? itin.objective}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Mode pills */}
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 10 }}>
+                        {rides.map((leg, li) => {
+                          const meta = MODE_META[leg.mode] ?? { label: leg.mode, color: C.muted, icon: '' };
+                          return (
+                            <span key={li} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '4px 10px', borderRadius: 20, background: `${meta.color}18`, border: `1px solid ${meta.color}40`, fontSize: 12, fontWeight: 600, color: meta.color }}>
+                              {meta.icon} {meta.label}
+                            </span>
+                          );
+                        })}
+                        {modeIcons && rides.length === 0 && (
+                          <span style={{ fontSize: 12, color: C.muted }}>Walk only</span>
+                        )}
+                      </div>
+
+                      {/* Per-leg fare breakdown */}
+                      <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: 10 }}>
+                        {rides.map((leg, li) => (
+                          <div key={li} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: C.body, marginBottom: 3 }}>
+                            <span>{MODE_META[leg.mode]?.icon} {leg.line.name} · {leg.from.name} → {leg.to.name}</span>
+                            <span style={{ fontWeight: 600, color: C.ink, flexShrink: 0, marginLeft: 8 }}>₱{leg.fare.toFixed(2)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+          <p style={{ fontSize: 11, color: C.muted, margin: '20px 0 0', textAlign: 'center', lineHeight: 1.6 }}>
+            Fares are per person per boarding · LTFRB 2024 rates · Walk legs are free
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  // ── DETAIL ────────────────────────────────────────────────────────────────────
+  if (!selected) return null;
+  const detailColor = primaryColor(selected);
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', background: C.bg, fontFamily: 'Inter,-apple-system,sans-serif' }}>
+      <NavBar onBack={() => setScreen('results')} label="Trip details" />
+      <div style={{ height: 4, background: detailColor }} />
+
+      <div style={{ flex: 1, padding: '20px', overflowY: 'auto' }}>
+        {/* Summary tiles */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 20 }}>
+          <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: '18px 16px' }}>
+            <p style={{ margin: '0 0 6px', fontSize: 11, fontWeight: 600, color: C.muted, letterSpacing: '0.06em' }}>TOTAL TIME</p>
+            <p style={{ margin: 0, fontSize: 40, fontWeight: 700, color: C.ink, letterSpacing: '-0.04em', lineHeight: 1 }}>{selected.totalDurationMin}</p>
+            <p style={{ margin: '4px 0 0', fontSize: 12, color: C.muted }}>minutes · {selected.transfers} transfer{selected.transfers !== 1 ? 's' : ''}</p>
+          </div>
+          <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: '18px 16px' }}>
+            <p style={{ margin: '0 0 6px', fontSize: 11, fontWeight: 600, color: C.muted, letterSpacing: '0.06em' }}>TOTAL FARE</p>
+            <p style={{ margin: 0, fontSize: 32, fontWeight: 700, color: detailColor, letterSpacing: '-0.03em', lineHeight: 1 }}>₱{selected.totalFare.toFixed(2)}</p>
+            <p style={{ margin: '4px 0 0', fontSize: 12, color: C.muted }}>per person</p>
+          </div>
+        </div>
+
+        {/* Step-by-step */}
+        <p style={{ fontSize: 11, fontWeight: 600, color: C.muted, letterSpacing: '0.08em', margin: '0 0 10px' }}>STEP BY STEP</p>
+        <div style={{ border: `1px solid ${C.border}`, borderRadius: 12, overflow: 'hidden', background: C.surface, marginBottom: 20 }}>
+          {selected.legs.map((leg, i) => {
+            const isLast = i === selected.legs.length - 1;
+            const divider = !isLast ? `1px solid ${C.border}` : 'none';
+
+            if (leg.type === 'walk') {
+              return (
+                <div key={i} style={{ display: 'flex', gap: 14, padding: '14px 16px', borderBottom: divider, alignItems: 'flex-start' }}>
+                  <div style={{ width: 32, height: 32, borderRadius: '50%', background: C.card, border: `1px solid ${C.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: 1, fontSize: 15 }}>🚶</div>
+                  <div style={{ flex: 1 }}>
+                    <p style={{ margin: 0, fontSize: 14, fontWeight: 500, color: C.ink }}>Walk to {leg.toName}</p>
+                    <p style={{ margin: '3px 0 0', fontSize: 12, color: C.muted }}>{leg.durationMin} min · {leg.distKm.toFixed(2)} km</p>
+                  </div>
+                  <span style={{ fontSize: 13, fontWeight: 600, color: C.muted, flexShrink: 0 }}>Free</span>
                 </div>
-                <div style={{textAlign:'right'}}>
-                  <p style={{margin:0,fontSize:14,fontWeight:600,color:C.ink}}>{mins} min</p>
-                  <p style={{margin:'1px 0 0',fontSize:12,color:C.muted}}>₱{estFare.toFixed(2)}</p>
+              );
+            }
+
+            const ride = leg as RideLeg;
+            const meta = MODE_META[ride.mode] ?? { label: ride.mode, color: C.muted, icon: '🚌' };
+            return (
+              <div key={i} style={{ borderBottom: divider }}>
+                {/* Leg header */}
+                <div style={{ display: 'flex', gap: 14, padding: '14px 16px 10px', alignItems: 'flex-start' }}>
+                  <div style={{ width: 32, height: 32, borderRadius: 8, background: meta.color, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: 1, fontSize: 16 }}>{meta.icon}</div>
+                  <div style={{ flex: 1 }}>
+                    <p style={{ margin: 0, fontSize: 14, fontWeight: 600, color: C.ink }}>{ride.line.name}</p>
+                    <p style={{ margin: '2px 0 0', fontSize: 13, color: C.body }}>{ride.from.name} → {ride.to.name}</p>
+                    <p style={{ margin: '3px 0 0', fontSize: 12, color: C.muted }}>
+                      {ride.stops.length} stop{ride.stops.length !== 1 ? 's' : ''} · {ride.durationMin} min · {ride.distKm.toFixed(1)} km
+                    </p>
+                  </div>
+                  <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                    <p style={{ margin: 0, fontSize: 16, fontWeight: 700, color: meta.color }}>₱{ride.fare.toFixed(2)}</p>
+                    <p style={{ margin: '2px 0 0', fontSize: 10, color: C.muted }}>1 boarding</p>
+                  </div>
                 </div>
-                <svg width="16" height="16" fill="none" stroke={C.muted} strokeWidth="1.5" strokeLinecap="round"><path d="M6 4l5 4-5 4"/></svg>
-              </button>
+                {/* Stop list (collapsed to first/last + count) */}
+                {ride.stops.length > 2 && (
+                  <div style={{ margin: '0 16px 12px 60px', padding: '8px 12px', background: C.card, borderRadius: 8, fontSize: 12, color: C.muted }}>
+                    {ride.stops.slice(0, -1).map((s, si) => (
+                      <span key={si}>{s.name}{si < ride.stops.length - 2 ? ' → ' : ''}</span>
+                    ))}
+                    <span style={{ fontWeight: 600, color: C.body }}> → {ride.stops[ride.stops.length - 1].name}</span>
+                  </div>
+                )}
+              </div>
             );
           })}
         </div>
 
-        {/* Trip detail sheet */}
-        <p style={{fontSize:11,fontWeight:600,color:C.muted,letterSpacing:'0.08em',margin:'0 0 10px'}}>TRIP DETAILS</p>
-        <div style={{border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden',background:C.surface,marginBottom:24}}>
-          {[
-            ['Departure',from],
-            ['Arrival',to],
-            ['Vehicle',vehicle?.label??''],
-            ['Route type',vehicle?.sub??''],
-            ['Travel time',`${eta} min`],
-            ['Est. fare',`₱${fare.toFixed(2)}`],
-          ].map(([l,v],i,a)=>(
-            <div key={l} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'13px 16px',borderBottom:i<a.length-1?`1px solid ${C.border}`:'none'}}>
-              <span style={{fontSize:13,color:C.muted}}>{l}</span>
-              <span style={{fontSize:13,fontWeight:500,color:C.ink}}>{v}</span>
-            </div>
-          ))}
+        {/* Fare breakdown */}
+        <p style={{ fontSize: 11, fontWeight: 600, color: C.muted, letterSpacing: '0.08em', margin: '0 0 10px' }}>FARE BREAKDOWN</p>
+        <div style={{ border: `1px solid ${C.border}`, borderRadius: 12, overflow: 'hidden', background: C.surface, marginBottom: 24 }}>
+          {selected.legs.map((leg, i) => {
+            const isLast = i === selected.legs.length - 1;
+            if (leg.type === 'walk') {
+              return (
+                <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '11px 16px', borderBottom: isLast ? 'none' : `1px solid ${C.border}` }}>
+                  <span style={{ fontSize: 13, color: C.muted }}>Walk · {leg.distKm.toFixed(2)} km</span>
+                  <span style={{ fontSize: 13, color: C.muted }}>Free</span>
+                </div>
+              );
+            }
+            const ride = leg as RideLeg;
+            const meta = MODE_META[ride.mode] ?? { label: ride.mode, color: C.muted, icon: '🚌' };
+            return (
+              <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '11px 16px', borderBottom: isLast ? 'none' : `1px solid ${C.border}` }}>
+                <div>
+                  <span style={{ fontSize: 13, color: C.ink, fontWeight: 500 }}>{meta.icon} {meta.label}</span>
+                  <span style={{ fontSize: 12, color: C.muted, marginLeft: 6 }}>{ride.distKm.toFixed(1)} km</span>
+                </div>
+                <span style={{ fontSize: 14, fontWeight: 700, color: meta.color }}>₱{ride.fare.toFixed(2)}</span>
+              </div>
+            );
+          })}
+          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '13px 16px', background: C.card, borderTop: `1.5px solid ${C.border}` }}>
+            <span style={{ fontSize: 14, fontWeight: 700, color: C.ink }}>Total per person</span>
+            <span style={{ fontSize: 16, fontWeight: 700, color: detailColor }}>₱{selected.totalFare.toFixed(2)}</span>
+          </div>
         </div>
 
-        <button onClick={()=>{setFrom('');setTo('');setVehicle(null);setScreen('home');}}
-          style={{width:'100%',background:C.ink,color:'#fff',border:'none',borderRadius:10,padding:'15px',fontSize:15,fontWeight:600,cursor:'pointer',letterSpacing:'-0.01em',fontFamily:'inherit'}}>
+        {/* Start Trip (F15) */}
+        <button
+          onClick={() => {
+            try { sessionStorage.setItem(TRIP_STORAGE_KEY, JSON.stringify(selected)); } catch { /* noop */ }
+            router.push('/trip');
+          }}
+          style={{ width: '100%', background: C.accent, color: '#fff', border: 'none', borderRadius: 10, padding: '15px', fontSize: 15, fontWeight: 600, cursor: 'pointer', letterSpacing: '-0.01em', fontFamily: 'inherit', marginBottom: 12 }}
+        >
+          🗺️ Start trip — track live
+        </button>
+
+        <button onClick={() => { setFrom(''); setTo(''); setSelected(null); setItineraries([]); setScreen('home'); }}
+          style={{ width: '100%', background: C.ink, color: '#fff', border: 'none', borderRadius: 10, padding: '15px', fontSize: 15, fontWeight: 600, cursor: 'pointer', letterSpacing: '-0.01em', fontFamily: 'inherit' }}>
           Plan another trip
         </button>
-      </div>
-
-      <div style={{padding:'10px 20px',borderTop:`1px solid ${C.border}`,background:C.surface}}>
-        <p style={{margin:0,fontSize:11,color:C.muted,textAlign:'center'}}>Seeded data · Not a live feed</p>
       </div>
     </div>
   );

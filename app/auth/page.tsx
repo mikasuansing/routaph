@@ -223,7 +223,7 @@ export default function AuthFlow() {
           <GoogleBtn />
         </div>
         <p style={{ fontSize: 14, color: C.muted, textAlign: 'center', marginTop: 'auto' }}>
-          Don't have an account?{' '}
+          Don&apos;t have an account?{' '}
           <button onClick={() => setScreen('signup')} style={{ background: 'none', border: 'none', color: C.accent, fontWeight: 600, cursor: 'pointer', fontSize: 14, fontFamily: 'Inter,sans-serif' }}>Sign up</button>
         </p>
       </div>
@@ -357,7 +357,7 @@ export default function AuthFlow() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           <PrimaryBtn label="Verify account" disabled={otp.join('').length < 6} onClick={() => setScreen('success')} />
           <button style={{ background: 'none', border: 'none', fontSize: 14, color: C.muted, cursor: 'pointer', fontFamily: 'Inter,sans-serif', padding: '10px 0', textAlign: 'center' }}>
-            Didn't receive it? <span style={{ color: C.accent, fontWeight: 600 }}>Resend code</span>
+            Didn&apos;t receive it? <span style={{ color: C.accent, fontWeight: 600 }}>Resend code</span>
           </button>
         </div>
       </div>
@@ -375,7 +375,7 @@ export default function AuthFlow() {
         <div>
           <Logo size={26} />
           <p style={{ fontSize: 22, fontWeight: 700, color: C.ink, letterSpacing: '-0.02em', marginTop: 14, marginBottom: 8 }}>
-            You're all set{signupName ? `, ${signupName.split(' ')[0]}` : ''}!
+            You&apos;re all set{signupName ? `, ${signupName.split(' ')[0]}` : ''}!
           </p>
           <p style={{ fontSize: 14, color: C.muted, lineHeight: 1.6 }}>
             Your account is ready. Start planning your first commute.

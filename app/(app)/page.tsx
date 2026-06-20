@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 
 // Palette — less is more. Real apps don't use 8 shades of brown.
 const C = {
@@ -75,10 +75,8 @@ export default function DesignD(){
   const [from,setFrom]=useState('');
   const [to,setTo]=useState('');
   const [vehicle,setVehicle]=useState<Vehicle|null>(null);
-  const [rush,setRush]=useState(false);
+  const [rush,setRush]=useState(()=>{const h=new Date().getHours();return(h>=7&&h<=9)||(h>=17&&h<=19);});
   const [dist,setDist]=useState(0);
-
-  useEffect(()=>{const h=new Date().getHours();setRush((h>=7&&h<=9)||(h>=17&&h<=19));});
 
   const eta=vehicle?Math.round((dist/(rush?vehicle.speedR:vehicle.speedN))*60):0;
   const fare=vehicle?Math.round((vehicle.fareBase+dist*vehicle.fareKm)*100)/100:0;
