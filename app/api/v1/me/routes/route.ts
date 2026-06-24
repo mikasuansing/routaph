@@ -1,6 +1,6 @@
 import { type NextRequest } from 'next/server';
-import { z } from 'zod';
 import { Errors, ok, okList } from '@/lib/api/envelope';
+import { SavedRouteSchema } from '@/lib/validation';
 
 export const dynamic = 'force-dynamic';
 
@@ -15,19 +15,18 @@ async function getUser(req: NextRequest) {
   return user;
 }
 
-const createSchema = z.object({
-  name:        z.string().min(1).max(120),
-  originLat:   z.number(),
-  originLng:   z.number(),
-  originName:  z.string().min(1),
-  destLat:     z.number(),
-  destLng:     z.number(),
-  destName:    z.string().min(1),
-});
-
 export async function GET(req: NextRequest) {
   const user = await getUser(req);
   if (!user) return Errors.unauthorized();
+
+  // Rate limiting
+  try {
+    const { authLimiter, clientKey } = await import('@/lib/ratelimit');
+    const { success } = await authLimiter.limit(clientKey(req, user.id));
+    if (!success) return Errors.rateLimited();
+  } catch {
+    // Redis not configured — skip in dev
+  }
 
   const { supabaseServer } = await import('@/lib/supabase/server');
   const { data, error } = await supabaseServer
@@ -44,11 +43,20 @@ export async function POST(req: NextRequest) {
   const user = await getUser(req);
   if (!user) return Errors.unauthorized();
 
+  // Rate limiting
+  try {
+    const { authLimiter, clientKey } = await import('@/lib/ratelimit');
+    const { success } = await authLimiter.limit(clientKey(req, user.id));
+    if (!success) return Errors.rateLimited();
+  } catch {
+    // Redis not configured — skip in dev
+  }
+
   let body: unknown;
   try { body = await req.json(); }
   catch { return Errors.validation('Request body must be valid JSON'); }
 
-  const parsed = createSchema.safeParse(body);
+  const parsed = SavedRouteSchema.safeParse(body);
   if (!parsed.success) {
     return Errors.validation('Invalid request', {
       issues: parsed.error.issues.map(i => ({ path: i.path.join('.'), message: i.message })),

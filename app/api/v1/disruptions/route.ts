@@ -15,9 +15,17 @@ export async function GET(req: NextRequest) {
     return Errors.validation('Invalid lineId parameter');
   }
 
+  // Rate limiting
+  try {
+    const { searchLimiter, clientKey } = await import('@/lib/ratelimit');
+    const { success } = await searchLimiter.limit(clientKey(req));
+    if (!success) return Errors.rateLimited();
+  } catch {
+    // Redis not configured — skip in dev
+  }
+
   const { lineId } = parsed.data;
 
-  // No Supabase configured — return empty list (dev / test)
   if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
     return ok([]);
   }

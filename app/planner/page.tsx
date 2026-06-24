@@ -4,16 +4,16 @@ import { useRouter } from 'next/navigation';
 import { TRIP_STORAGE_KEY } from '@/lib/trip/types';
 
 const C = {
-  bg:      '#F4F0E8',
-  surface: '#FFFFFF',
-  card:    '#F9F7F2',
-  border:  '#E2DBD0',
-  muted:   '#A89E8E',
-  body:    '#3D3530',
-  ink:     '#1A1410',
-  accent:  '#D05A28',
-  green:   '#2D7A4F',
-  blue:    '#1A5FA8',
+  bg:      'var(--color-bg)',
+  surface: 'var(--color-surface)',
+  card:    'var(--color-card)',
+  border:  'var(--color-border)',
+  muted:   'var(--color-muted)',
+  body:    'var(--color-body)',
+  ink:     'var(--color-ink)',
+  accent:  'var(--color-accent)',
+  green:   'var(--color-green)',
+  blue:    'var(--color-blue)',
 };
 
 const MODE_META: Record<string, { label: string; color: string; icon: string }> = {
@@ -113,7 +113,7 @@ function NavBar({ onBack, label }: { onBack?: () => void; label?: string }) {
         </button>
       )}
       <span style={{ fontSize: 16, fontWeight: 700, color: C.ink, letterSpacing: '-0.01em' }}>{label || 'ParaPo'}</span>
-      {!onBack && <span style={{ fontSize: 10, fontWeight: 600, color: C.accent, background: '#FBE9E0', borderRadius: 4, padding: '2px 6px', letterSpacing: '0.04em' }}>BETA</span>}
+      {!onBack && <span style={{ fontSize: 10, fontWeight: 600, color: C.accent, background: C.card, borderRadius: 4, padding: '2px 6px', letterSpacing: '0.04em' }}>BETA</span>}
     </div>
   );
 }
@@ -179,7 +179,7 @@ export default function Planner() {
         <p style={{ fontSize: 13, color: C.muted, margin: '0 0 20px' }}>Exact 2024 PH fare rates · Real multimodal routes</p>
 
         {error && (
-          <div style={{ background: '#FEF2F2', border: '1px solid #FCA5A5', borderRadius: 8, padding: '10px 14px', marginBottom: 16, fontSize: 13, color: '#DC2626' }}>
+          <div style={{ background: 'color-mix(in srgb, var(--color-error) 12%, var(--color-surface))', border: `1px solid var(--color-error)`, borderRadius: 8, padding: '10px 14px', marginBottom: 16, fontSize: 13, color: 'var(--color-error)' }}>
             {error}
           </div>
         )}
@@ -206,15 +206,15 @@ export default function Planner() {
         </div>
 
         {/* Rush toggle */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 14px', borderRadius: 10, background: rush ? '#FBE9E0' : C.card, border: `1px solid ${rush ? '#EFC4AA' : C.border}`, marginBottom: 20 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 14px', borderRadius: 10, background: rush ? 'color-mix(in srgb, var(--color-accent) 12%, var(--color-surface))' : C.card, border: `1px solid ${rush ? 'color-mix(in srgb, var(--color-accent) 30%, var(--color-border))' : C.border}`, marginBottom: 20 }}>
           <div>
             <p style={{ margin: 0, fontSize: 14, fontWeight: 500, color: C.ink }}>Rush hour</p>
             <p style={{ margin: 0, fontSize: 12, color: C.muted }}>7–9 am · 5–7 pm (slower speeds)</p>
           </div>
           <button onClick={() => setRush(!rush)} style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, padding: 0 }}>
             <span style={{ fontSize: 12, color: rush ? C.accent : C.muted, fontWeight: 500 }}>{rush ? 'On' : 'Off'}</span>
-            <div style={{ width: 42, height: 24, borderRadius: 12, background: rush ? C.accent : '#D9D4CC', position: 'relative', transition: 'background 0.2s', flexShrink: 0 }}>
-              <div style={{ width: 18, height: 18, borderRadius: '50%', background: '#fff', position: 'absolute', top: 3, left: rush ? 21 : 3, transition: 'left 0.2s', boxShadow: '0 1px 4px rgba(0,0,0,0.18)' }} />
+            <div style={{ width: 42, height: 24, borderRadius: 12, background: rush ? C.accent : C.border, position: 'relative', transition: 'background 0.2s', flexShrink: 0 }}>
+              <div style={{ width: 18, height: 18, borderRadius: '50%', background: C.surface, position: 'absolute', top: 3, left: rush ? 21 : 3, transition: 'left 0.2s', boxShadow: '0 1px 4px rgba(0,0,0,0.18)' }} />
             </div>
           </button>
         </div>
@@ -222,7 +222,7 @@ export default function Planner() {
         <button
           onClick={search}
           disabled={!from || !to || from === to}
-          style={{ width: '100%', background: from && to && from !== to ? C.ink : '#D1CCC3', color: '#fff', border: 'none', borderRadius: 10, padding: '15px', fontSize: 15, fontWeight: 600, letterSpacing: '-0.01em', cursor: from && to && from !== to ? 'pointer' : 'default', marginBottom: 24, transition: 'background 0.15s', fontFamily: 'inherit' }}
+          style={{ width: '100%', background: from && to && from !== to ? C.ink : C.border, color: 'var(--color-surface)', border: 'none', borderRadius: 10, padding: '15px', fontSize: 15, fontWeight: 600, letterSpacing: '-0.01em', cursor: from && to && from !== to ? 'pointer' : 'default', marginBottom: 24, transition: 'background 0.15s', fontFamily: 'inherit' }}
         >
           Find routes
         </button>
@@ -286,7 +286,7 @@ export default function Planner() {
             <p style={{ margin: 0, fontSize: 13, fontWeight: 500, color: C.ink }}>{from}</p>
             <p style={{ margin: '3px 0 0', fontSize: 13, fontWeight: 500, color: C.ink }}>{to}</p>
           </div>
-          <span style={{ fontSize: 12, color: rush ? C.accent : C.green, fontWeight: 500, background: rush ? '#FBE9E0' : '#EDF7F1', padding: '2px 8px', borderRadius: 10 }}>{rush ? 'Rush' : 'Normal'}</span>
+          <span style={{ fontSize: 12, color: rush ? C.accent : C.green, fontWeight: 500, background: rush ? 'color-mix(in srgb, var(--color-accent) 12%, var(--color-surface))' : 'color-mix(in srgb, var(--color-green) 12%, var(--color-surface))', padding: '2px 8px', borderRadius: 10 }}>{rush ? 'Rush' : 'Normal'}</span>
         </div>
 
         {/* Mode filter */}
@@ -477,6 +477,35 @@ export default function Planner() {
             <span style={{ fontSize: 16, fontWeight: 700, color: detailColor }}>₱{selected.totalFare.toFixed(2)}</span>
           </div>
         </div>
+
+        {/* Navigate with Waze — sends destination coordinate to Waze (best-effort, additive) */}
+        {(() => {
+          const lastRideLeg = [...selected.legs].reverse().find(l => l.type === 'ride') as RideLeg | undefined;
+          const dest = lastRideLeg ? { name: lastRideLeg.to.name } : null;
+          if (!dest) return null;
+          const destCoords = STOP_COORDS[dest.name];
+          const wazeUrl = destCoords
+            ? `https://waze.com/ul?ll=${destCoords[0]},${destCoords[1]}&navigate=yes&utm_source=parapo`
+            : `https://waze.com/ul?q=${encodeURIComponent(dest.name + ' Metro Manila')}&navigate=yes&utm_source=parapo`;
+          return (
+            <a
+              href={wazeUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                width: '100%', background: '#00B0FF', color: '#fff', borderRadius: 10,
+                padding: '15px', fontSize: 15, fontWeight: 600, letterSpacing: '-0.01em',
+                textDecoration: 'none', fontFamily: 'inherit', marginBottom: 12,
+              }}
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                <path d="M20.54 6.63C19.44 3.23 16.22 1 12 1 6.48 1 2 5.48 2 11c0 2.76 1.12 5.26 2.93 7.08C5.78 19 6 19.93 6 21v1h12v-1c0-1.07.22-2 1.07-2.92C20.88 16.26 22 13.76 22 11c0-1.57-.53-3.04-1.46-4.37z"/>
+              </svg>
+              Navigate with Waze
+            </a>
+          );
+        })()}
 
         {/* Start Trip (F15) */}
         <button

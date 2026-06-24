@@ -18,7 +18,15 @@ export async function GET(req: NextRequest) {
     bboxFilter = (lat, lng) => lat >= minLat && lat <= maxLat && lng >= minLng && lng <= maxLng;
   }
 
-  // Try Supabase first; fall back to seed data
+  // Rate limiting
+  try {
+    const { searchLimiter, clientKey } = await import('@/lib/ratelimit');
+    const { success } = await searchLimiter.limit(clientKey(req));
+    if (!success) return Errors.rateLimited();
+  } catch {
+    // Redis not configured — skip in dev
+  }
+
   if (process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY) {
     try {
       const { supabaseServer } = await import('@/lib/supabase/server');
@@ -33,7 +41,6 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  // Seed fallback
   let stops = seedStops;
   if (bboxFilter) stops = stops.filter(s => bboxFilter!(s.lat, s.lng));
   return ok(stops);

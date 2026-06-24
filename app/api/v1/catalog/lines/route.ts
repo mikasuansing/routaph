@@ -1,10 +1,22 @@
+import { type NextRequest } from 'next/server';
 import { ok } from '@/lib/api/envelope';
 import { seedLines, seedLineStops, seedStops } from '@/lib/routing/graph';
 
 export const dynamic = 'force-dynamic';
 
-export async function GET() {
-  // Try Supabase first; fall back to seed data
+export async function GET(req: NextRequest) {
+  // Rate limiting
+  try {
+    const { searchLimiter, clientKey } = await import('@/lib/ratelimit');
+    const { success } = await searchLimiter.limit(clientKey(req));
+    if (!success) {
+      const { Errors } = await import('@/lib/api/envelope');
+      return Errors.rateLimited();
+    }
+  } catch {
+    // Redis not configured — skip in dev
+  }
+
   if (process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY) {
     try {
       const { supabaseServer } = await import('@/lib/supabase/server');
@@ -46,7 +58,6 @@ export async function GET() {
     }
   }
 
-  // Seed fallback
   const stopMap = new Map(seedStops.map(s => [s.id, s]));
   const lines = seedLines.map(line => {
     const stopIds = (seedLineStops.find(([lid]) => lid === line.id)?.[1]) ?? [];

@@ -9,8 +9,6 @@ const DISCLAIMER =
   'Estimated fare only — not an official or live quote. Subject to surge pricing and availability. ' +
   'ParaPo does not process payment or guarantee accuracy.';
 
-// Static fallback providers — used when DB is unconfigured.
-// Rates are approximate 2024 NCR estimates; verify against ltfrb.gov.ph before production.
 const STATIC_PROVIDERS = [
   {
     id: 1,
@@ -51,7 +49,6 @@ function buildDeepLink(
 
 function estimateFare(baseFare: number, perKm: number, distKm: number) {
   const raw = baseFare + distKm * perKm;
-  // ±20 % range to communicate that this is an estimate, not a fixed price
   return {
     fareMin: Math.round(raw * 0.8),
     fareMax: Math.round(raw * 1.2),
@@ -59,7 +56,6 @@ function estimateFare(baseFare: number, perKm: number, distKm: number) {
 }
 
 function estimateEta(distKm: number) {
-  // Rough NCR traffic assumption: 20 km/h average speed
   const base = (distKm / 20) * 60;
   return {
     etaMin: Math.max(3, Math.round(base * 0.7)),
@@ -81,12 +77,20 @@ export async function GET(req: NextRequest) {
     });
   }
 
+  // Rate limiting
+  try {
+    const { searchLimiter, clientKey } = await import('@/lib/ratelimit');
+    const { success } = await searchLimiter.limit(clientKey(req));
+    if (!success) return Errors.rateLimited();
+  } catch {
+    // Redis not configured — skip in dev
+  }
+
   const { originLat, originLng, destLat, destLng } = parsed.data;
   const distKm = haversineKm(originLat, originLng, destLat, destLng);
 
   let providers = STATIC_PROVIDERS;
 
-  // Prefer DB-sourced rates when available
   if (process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY) {
     try {
       const { supabaseServer } = await import('@/lib/supabase/server');

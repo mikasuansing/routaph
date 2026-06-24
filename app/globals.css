@@ -1,3 +1,39 @@
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 html { scroll-behavior: smooth; }
 body { font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; }
+
+/* ── Light theme (default / warm brand) ─────────────────────────────────── */
+:root,
+[data-theme="light"] {
+  --color-bg:      #F4F0E8;
+  --color-surface: #FFFFFF;
+  --color-card:    #F9F7F2;
+  --color-border:  #E2DBD0;
+  --color-muted:   #A89E8E;
+  --color-body:    #3D3530;
+  --color-ink:     #1A1410;
+  --color-accent:  #D05A28;
+  --color-green:   #2D7A4F;
+  --color-blue:    #1A5FA8;
+  --color-error:   #B83030;
+
+  /* Map tile URL toggled by ThemeProvider */
+  --map-tile: "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png";
+}
+
+/* ── Dark theme (warm charcoal, on-brand) ───────────────────────────────── */
+[data-theme="dark"] {
+  --color-bg:      #1C1914;
+  --color-surface: #272219;
+  --color-card:    #302A20;
+  --color-border:  #3E362A;
+  --color-muted:   #7A7060;
+  --color-body:    #C8BEB0;
+  --color-ink:     #EDE6D6;
+  --color-accent:  #E8714A;
+  --color-green:   #3DA368;
+  --color-blue:    #4A8FD4;
+  --color-error:   #E05050;
+
+  --map-tile: "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png";
+}

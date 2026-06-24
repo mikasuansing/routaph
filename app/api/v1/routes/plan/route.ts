@@ -1,24 +1,17 @@
 import { type NextRequest } from 'next/server';
-import { z } from 'zod';
 import { planRoute } from '@/lib/routing/engine';
 import { Errors, ok } from '@/lib/api/envelope';
 import { geohash, timeBucket } from '@/lib/routing/utils';
+import { SearchBodySchema } from '@/lib/validation';
 
 export const dynamic = 'force-dynamic';
-
-const schema = z.object({
-  origin:      z.object({ lat: z.number(), lng: z.number() }),
-  destination: z.object({ lat: z.number(), lng: z.number() }),
-  departAt:    z.string().datetime().optional(),
-  preference:  z.enum(['fastest', 'fewest_transfers', 'cheapest']).optional(),
-});
 
 export async function POST(req: NextRequest) {
   let body: unknown;
   try { body = await req.json(); }
   catch { return Errors.validation('Request body must be valid JSON'); }
 
-  const parsed = schema.safeParse(body);
+  const parsed = SearchBodySchema.safeParse(body);
   if (!parsed.success) {
     return Errors.validation('Invalid request', {
       issues: parsed.error.issues.map(i => ({ path: i.path.join('.'), message: i.message })),
@@ -29,9 +22,8 @@ export async function POST(req: NextRequest) {
 
   // Rate limiting (graceful degradation if Redis unconfigured)
   try {
-    const { ratelimit } = await import('@/lib/redis/client');
-    const ip = req.headers.get('x-forwarded-for') ?? 'unknown';
-    const { success } = await ratelimit.limit(ip);
+    const { searchLimiter, clientKey } = await import('@/lib/ratelimit');
+    const { success } = await searchLimiter.limit(clientKey(req));
     if (!success) return Errors.rateLimited();
   } catch {
     // Redis not configured — skip rate limiting in dev
@@ -76,7 +68,7 @@ export async function POST(req: NextRequest) {
     // non-fatal
   }
 
-  // Log search (fire-and-forget, non-fatal)
+  // Log search via service-role (fire-and-forget, never blocks the response)
   try {
     const { supabaseServer } = await import('@/lib/supabase/server');
     await supabaseServer.from('search_logs').insert({

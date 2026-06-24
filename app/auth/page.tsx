@@ -2,17 +2,17 @@
 import { useState } from 'react';
 
 const C = {
-  bg:      '#F4F0E8',
-  surface: '#FFFFFF',
-  card:    '#F9F7F2',
-  border:  '#E2DBD0',
-  muted:   '#A89E8E',
-  body:    '#3D3530',
-  ink:     '#1A1410',
-  accent:  '#D05A28',
-  green:   '#2D7A4F',
-  blue:    '#1A5FA8',
-  error:   '#B83030',
+  bg:      'var(--color-bg)',
+  surface: 'var(--color-surface)',
+  card:    'var(--color-card)',
+  border:  'var(--color-border)',
+  muted:   'var(--color-muted)',
+  body:    'var(--color-body)',
+  ink:     'var(--color-ink)',
+  accent:  'var(--color-accent)',
+  green:   'var(--color-green)',
+  blue:    'var(--color-blue)',
+  error:   'var(--color-error)',
 };
 
 const FONT = `@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
@@ -65,8 +65,8 @@ function Input({ label, type='text', value, onChange, placeholder, error, hint, 
 function PrimaryBtn({ label, onClick, loading, disabled }: { label: string; onClick: () => void; loading?: boolean; disabled?: boolean }) {
   return (
     <button onClick={onClick} disabled={loading || disabled} style={{
-      width: '100%', background: loading || disabled ? '#C8C0B4' : C.ink,
-      color: '#fff', border: 'none', borderRadius: 10, padding: '15px',
+      width: '100%', background: loading || disabled ? C.border : C.ink,
+      color: C.surface, border: 'none', borderRadius: 10, padding: '15px',
       fontSize: 15, fontWeight: 600, cursor: loading || disabled ? 'default' : 'pointer',
       fontFamily: 'Inter,sans-serif', letterSpacing: '-0.01em', transition: 'background 0.15s',
     }}>
@@ -141,6 +141,7 @@ export default function AuthFlow() {
   const [showPw2, setShowPw2]         = useState(false);
   const [signupErr, setSignupErr]     = useState('');
   const [signupLoading, setSignupLoading] = useState(false);
+  const [privacyConsent, setPrivacyConsent] = useState(false);
   const [forgotEmail, setForgotEmail] = useState('');
   const [forgotSent, setForgotSent]   = useState(false);
   const [otp, setOtp] = useState(['','','','','','']);
@@ -183,7 +184,8 @@ export default function AuthFlow() {
           I already have an account
         </button>
         <p style={{ fontSize: 11, color: C.muted, textAlign: 'center', lineHeight: 1.6, marginTop: 4 }}>
-          By continuing you agree to our Terms of Service and Privacy Policy.
+          By continuing you agree to our{' '}
+          <a href="/privacy" style={{ color: C.accent }}>Privacy Policy</a>.
         </p>
       </div>
     </div>
@@ -256,19 +258,36 @@ export default function AuthFlow() {
                 {[0,1,2,3].map(i => (
                   <div key={i} style={{ flex: 1, height: 3, borderRadius: 2, transition: 'background 0.2s',
                     background: i < Math.min(Math.floor(signupPw.length / 2), 4)
-                      ? (signupPw.length < 6 ? C.error : signupPw.length < 10 ? '#B8962E' : C.green)
+                      ? (signupPw.length < 6 ? C.error : signupPw.length < 10 ? C.accent : C.green)
                       : C.border }}/>
                 ))}
               </div>
             )}
           </div>
         </div>
+        {/* Privacy consent */}
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, marginBottom: 20, padding: '12px 14px', borderRadius: 10, background: C.card, border: `1px solid ${C.border}` }}>
+          <input
+            type="checkbox"
+            id="privacy-consent"
+            checked={privacyConsent}
+            onChange={e => setPrivacyConsent(e.target.checked)}
+            style={{ marginTop: 2, accentColor: C.ink, cursor: 'pointer', flexShrink: 0 }}
+          />
+          <label htmlFor="privacy-consent" style={{ fontSize: 13, color: C.body, lineHeight: 1.5, cursor: 'pointer' }}>
+            I have read and agree to the{' '}
+            <a href="/privacy" target="_blank" rel="noopener noreferrer" style={{ color: C.accent, fontWeight: 500 }}>Privacy Policy</a>.
+            I understand that ParaPo collects my account email and saved routes, and stores anonymised (geohashed) search logs for up to 90 days.
+          </label>
+        </div>
+
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 20 }}>
-          <PrimaryBtn label="Create account" loading={signupLoading} disabled={!signupName || !signupEmail || !signupPw}
+          <PrimaryBtn label="Create account" loading={signupLoading} disabled={!signupName || !signupEmail || !signupPw || !privacyConsent}
             onClick={() => {
               if (!signupName.trim()) { setSignupErr('Enter your name'); return; }
               if (!signupEmail.includes('@')) { setSignupErr('Enter a valid email address'); return; }
               if (signupPw.length < 8) { setSignupErr('Password must be at least 8 characters'); return; }
+              if (!privacyConsent) { setSignupErr('You must accept the Privacy Policy to continue'); return; }
               setSignupLoading(true);
               setTimeout(() => { setSignupLoading(false); setScreen('verify'); }, 1400);
             }}
@@ -290,7 +309,7 @@ export default function AuthFlow() {
       <style>{FONT}</style>
       <div style={{ padding: '56px 24px 0' }}><BackBtn onClick={() => setScreen('login')} /></div>
       <div style={{ flex: 1, padding: '28px 24px', display: 'flex', flexDirection: 'column' }}>
-        <div style={{ width: 56, height: 56, borderRadius: 16, background: '#FBE9E0', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 20 }}>
+        <div style={{ width: 56, height: 56, borderRadius: 16, background: 'color-mix(in srgb, var(--color-accent) 12%, var(--color-surface))', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 20 }}>
           <svg width="26" height="26" fill="none" stroke={C.accent} strokeWidth="1.8" strokeLinecap="round">
             <rect x="4" y="11" width="18" height="13" rx="2"/>
             <path d="M8 11V7a5 5 0 0110 0v4"/>
@@ -330,7 +349,7 @@ export default function AuthFlow() {
       `}</style>
       <div style={{ padding: '56px 24px 0' }}><BackBtn onClick={() => setScreen('signup')} /></div>
       <div style={{ flex: 1, padding: '28px 24px', display: 'flex', flexDirection: 'column' }}>
-        <div style={{ width: 56, height: 56, borderRadius: 16, background: '#E8F3EC', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 20 }}>
+        <div style={{ width: 56, height: 56, borderRadius: 16, background: 'color-mix(in srgb, var(--color-green) 12%, var(--color-surface))', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 20 }}>
           <svg width="26" height="26" fill="none" stroke={C.green} strokeWidth="1.8" strokeLinecap="round">
             <rect x="3" y="7" width="20" height="14" rx="2"/>
             <path d="M3 9l10 7 10-7"/>
@@ -369,7 +388,7 @@ export default function AuthFlow() {
     <div style={{ ...wrap, alignItems: 'center', justifyContent: 'center', background: C.surface }}>
       <style>{FONT}</style>
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 20, padding: '0 32px', textAlign: 'center', maxWidth: 360, width: '100%' }}>
-        <div style={{ width: 72, height: 72, borderRadius: 20, background: '#E8F3EC', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{ width: 72, height: 72, borderRadius: 20, background: 'color-mix(in srgb, var(--color-green) 12%, var(--color-surface))', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <svg width="36" height="36" fill="none" stroke={C.green} strokeWidth="2.2" strokeLinecap="round"><path d="M8 18l7 7L28 11"/></svg>
         </div>
         <div>
@@ -383,7 +402,7 @@ export default function AuthFlow() {
         </div>
         <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 10, marginTop: 8 }}>
           <a href="/planner" style={{
-            display: 'block', background: C.ink, color: '#fff', borderRadius: 10,
+            display: 'block', background: C.ink, color: C.surface, borderRadius: 10,
             padding: '15px', fontSize: 15, fontWeight: 600, textAlign: 'center',
             textDecoration: 'none', letterSpacing: '-0.01em',
           }}>

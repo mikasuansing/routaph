@@ -30,11 +30,10 @@ export async function POST(req: NextRequest) {
 
   const { origin, destination, departAt, preference, excludeLines, excludeModes } = parsed.data;
 
-  // Rate limiting (graceful degradation if Redis unconfigured)
+  // Rate limiting
   try {
-    const { ratelimit } = await import('@/lib/redis/client');
-    const ip = req.headers.get('x-forwarded-for') ?? 'unknown';
-    const { success } = await ratelimit.limit(ip);
+    const { searchLimiter, clientKey } = await import('@/lib/ratelimit');
+    const { success } = await searchLimiter.limit(clientKey(req));
     if (!success) return Errors.rateLimited();
   } catch {
     // Redis not configured — skip in dev
