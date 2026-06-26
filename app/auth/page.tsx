@@ -1,6 +1,22 @@
 'use client';
 import { useState } from 'react';
 
+const FONT = `
+@import url('https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,400;0,14..32,500;0,14..32,600;0,14..32,700&display=swap');
+*{box-sizing:border-box;-webkit-font-smoothing:antialiased;}
+body{font-family:'Inter',system-ui,sans-serif;}
+input::placeholder{color:rgba(249,250,251,0.3);}
+[data-theme="light"] input::placeholder{color:#A89E8E;}
+input:focus{outline:none;}
+button:active{opacity:0.85;}
+@keyframes mesh{0%,100%{background-position:0% 50%}50%{background-position:100% 50%}}
+@keyframes fadeUp{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:none}}
+@keyframes pulse{0%,100%{opacity:.6;transform:scale(1)}50%{opacity:1;transform:scale(1.08)}}
+@keyframes spin{to{transform:rotate(360deg)}}
+.fade-up{animation:fadeUp 0.45s ease both;}
+`;
+
+/* tokens — all pages use var() so they adapt to both themes */
 const C = {
   bg:      'var(--color-bg)',
   surface: 'var(--color-surface)',
@@ -10,44 +26,53 @@ const C = {
   body:    'var(--color-body)',
   ink:     'var(--color-ink)',
   accent:  'var(--color-accent)',
+  accent2: 'var(--color-accent-2)',
   green:   'var(--color-green)',
-  blue:    'var(--color-blue)',
   error:   'var(--color-error)',
+  glass:   'var(--color-glass)',
+  glassBorder: 'var(--color-glass-border)',
 };
-
-const FONT = `@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
-*{box-sizing:border-box;-webkit-font-smoothing:antialiased;margin:0;padding:0;}
-input::placeholder{color:#A89E8E;}
-input:focus{outline:none;border-color:#1A1410 !important;}
-button:active{opacity:0.85;}`;
 
 type Screen = 'splash' | 'login' | 'signup' | 'forgot' | 'verify' | 'success';
 
-function Logo({ size = 24 }: { size?: number }) {
+/* ── Logo ──────────────────────────────────────────────────────────────── */
+function Logo({ size = 26 }: { size?: number }) {
   return (
     <div style={{ display: 'flex', alignItems: 'baseline', gap: 0 }}>
-      <span style={{ fontSize: size, fontWeight: 700, color: C.ink, letterSpacing: '-0.03em', fontFamily: 'Inter,sans-serif' }}>Para</span>
-      <span style={{ fontSize: size, fontWeight: 700, color: C.accent, letterSpacing: '-0.03em', fontFamily: 'Inter,sans-serif' }}>Po</span>
+      <span style={{ fontSize: size, fontWeight: 800, letterSpacing: '-0.04em', background: 'var(--gradient-primary)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>Para</span>
+      <span style={{ fontSize: size, fontWeight: 800, letterSpacing: '-0.04em', color: C.ink }}>Po</span>
     </div>
   );
 }
 
-function Input({ label, type='text', value, onChange, placeholder, error, hint, rightEl }: {
+/* ── Glass input ───────────────────────────────────────────────────────── */
+function Input({ label, type = 'text', value, onChange, placeholder, error, hint, rightEl }: {
   label: string; type?: string; value: string; onChange: (v: string) => void;
   placeholder?: string; error?: string; hint?: string; rightEl?: React.ReactNode;
 }) {
+  const [focused, setFocused] = useState(false);
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-      <label style={{ fontSize: 13, fontWeight: 500, color: C.ink }}>{label}</label>
-      <div style={{ position: 'relative' }}>
+      <label style={{ fontSize: 12, fontWeight: 600, color: C.muted, letterSpacing: '0.05em', textTransform: 'uppercase' }}>{label}</label>
+      <div style={{
+        position: 'relative',
+        borderRadius: 12,
+        background: C.glass,
+        border: `1.5px solid ${error ? C.error : focused ? C.accent : C.glassBorder}`,
+        transition: 'border-color 0.15s, box-shadow 0.15s',
+        boxShadow: focused ? `0 0 0 3px rgba(99,102,241,0.15)` : 'none',
+      }}>
         <input
-          type={type} value={value} onChange={e => onChange(e.target.value)}
+          type={type} value={value}
+          onChange={e => onChange(e.target.value)}
+          onFocus={() => setFocused(true)}
+          onBlur={() => setFocused(false)}
           placeholder={placeholder}
           style={{
-            width: '100%', border: `1.5px solid ${error ? C.error : C.border}`,
-            borderRadius: 10, padding: rightEl ? '13px 44px 13px 14px' : '13px 14px',
-            fontSize: 15, color: C.ink, background: C.surface,
-            fontFamily: 'Inter,sans-serif', transition: 'border-color 0.15s',
+            width: '100%', border: 'none', borderRadius: 12, outline: 'none',
+            padding: rightEl ? '13px 44px 13px 16px' : '13px 16px',
+            fontSize: 15, color: C.ink, background: 'transparent',
+            fontFamily: 'inherit',
           }}
         />
         {rightEl && (
@@ -62,36 +87,58 @@ function Input({ label, type='text', value, onChange, placeholder, error, hint, 
   );
 }
 
+/* ── Gradient primary button ────────────────────────────────────────────── */
 function PrimaryBtn({ label, onClick, loading, disabled }: { label: string; onClick: () => void; loading?: boolean; disabled?: boolean }) {
   return (
     <button onClick={onClick} disabled={loading || disabled} style={{
-      width: '100%', background: loading || disabled ? C.border : C.ink,
-      color: C.surface, border: 'none', borderRadius: 10, padding: '15px',
-      fontSize: 15, fontWeight: 600, cursor: loading || disabled ? 'default' : 'pointer',
-      fontFamily: 'Inter,sans-serif', letterSpacing: '-0.01em', transition: 'background 0.15s',
+      width: '100%', border: 'none', borderRadius: 12, padding: '15px',
+      fontSize: 15, fontWeight: 700, cursor: loading || disabled ? 'default' : 'pointer',
+      fontFamily: 'inherit', letterSpacing: '-0.01em', transition: 'opacity 0.15s, transform 0.1s',
+      background: loading || disabled ? C.card : 'var(--gradient-primary)',
+      color: loading || disabled ? C.muted : '#fff',
+      boxShadow: loading || disabled ? 'none' : '0 4px 20px rgba(99,102,241,0.35)',
     }}>
-      {loading ? 'Please wait…' : label}
+      {loading ? (
+        <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+          <span style={{ width: 16, height: 16, border: '2px solid rgba(255,255,255,0.3)', borderTopColor: '#fff', borderRadius: '50%', display: 'inline-block', animation: 'spin 0.7s linear infinite' }} />
+          Please wait…
+        </span>
+      ) : label}
     </button>
   );
 }
 
+/* ── Ghost button ───────────────────────────────────────────────────────── */
+function GhostBtn({ label, onClick }: { label: string; onClick: () => void }) {
+  return (
+    <button onClick={onClick} style={{
+      width: '100%', background: C.glass, border: `1.5px solid ${C.glassBorder}`,
+      borderRadius: 12, padding: '14px', fontSize: 15, fontWeight: 600,
+      color: C.ink, cursor: 'pointer', fontFamily: 'inherit',
+      backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)',
+    }}>{label}</button>
+  );
+}
+
+/* ── Divider ────────────────────────────────────────────────────────────── */
 function Divider({ label }: { label: string }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-      <div style={{ flex: 1, height: 1, background: C.border }} />
+      <div style={{ flex: 1, height: 1, background: C.glassBorder }} />
       <span style={{ fontSize: 12, color: C.muted }}>{label}</span>
-      <div style={{ flex: 1, height: 1, background: C.border }} />
+      <div style={{ flex: 1, height: 1, background: C.glassBorder }} />
     </div>
   );
 }
 
+/* ── Google button ──────────────────────────────────────────────────────── */
 function GoogleBtn() {
   return (
     <button style={{
-      width: '100%', background: C.surface, border: `1.5px solid ${C.border}`,
-      borderRadius: 10, padding: '13px', fontSize: 14, fontWeight: 500, color: C.ink,
-      cursor: 'pointer', fontFamily: 'Inter,sans-serif', display: 'flex',
-      alignItems: 'center', justifyContent: 'center', gap: 10,
+      width: '100%', background: C.glass, border: `1.5px solid ${C.glassBorder}`,
+      borderRadius: 12, padding: '13px', fontSize: 14, fontWeight: 600, color: C.ink,
+      cursor: 'pointer', fontFamily: 'inherit', display: 'flex', alignItems: 'center',
+      justifyContent: 'center', gap: 10, backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)',
     }}>
       <svg width="18" height="18" viewBox="0 0 18 18">
         <path fill="#4285F4" d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844a4.14 4.14 0 01-1.796 2.716v2.259h2.908c1.702-1.567 2.684-3.875 2.684-6.615z"/>
@@ -104,113 +151,137 @@ function GoogleBtn() {
   );
 }
 
-function EyeIcon({ open }: { open: boolean }) {
+/* ── Eye icon ───────────────────────────────────────────────────────────── */
+function Eye({ open }: { open: boolean }) {
   return open ? (
-    <svg width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
-      <path d="M1 9s3-6 8-6 8 6 8 6-3 6-8 6-8-6-8-6z"/>
-      <circle cx="9" cy="9" r="2.5"/>
-    </svg>
+    <svg width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><path d="M1 9s3-6 8-6 8 6 8 6-3 6-8 6-8-6-8-6z"/><circle cx="9" cy="9" r="2.5"/></svg>
   ) : (
-    <svg width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
-      <path d="M1 9s3-6 8-6 8 6 8 6-3 6-8 6-8-6-8-6z"/>
-      <circle cx="9" cy="9" r="2.5"/>
-      <line x1="3" y1="3" x2="15" y2="15"/>
-    </svg>
+    <svg width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><path d="M1 9s3-6 8-6 8 6 8 6-3 6-8 6-8-6-8-6z"/><circle cx="9" cy="9" r="2.5"/><line x1="3" y1="3" x2="15" y2="15"/></svg>
   );
 }
 
+/* ── Back button ────────────────────────────────────────────────────────── */
 function BackBtn({ onClick }: { onClick: () => void }) {
   return (
-    <button onClick={onClick} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px 0', display: 'flex', alignItems: 'center', gap: 6, color: C.ink, fontFamily: 'Inter,sans-serif', fontSize: 14, fontWeight: 500 }}>
-      <svg width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M12 4l-7 5 7 5"/></svg>
+    <button onClick={onClick} style={{ background: C.glass, border: `1.5px solid ${C.glassBorder}`, borderRadius: 10, cursor: 'pointer', padding: '8px 14px', display: 'inline-flex', alignItems: 'center', gap: 6, color: C.ink, fontSize: 14, fontWeight: 500 }}>
+      <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M11 3l-6 5 6 5"/></svg>
       Back
     </button>
   );
 }
 
+/* ── Circuit SVG hero illustration ─────────────────────────────────────── */
+function CircuitHero() {
+  return (
+    <svg width="200" height="200" viewBox="0 0 200 200" style={{ animation: 'pulse 3s ease-in-out infinite' }}>
+      <defs>
+        <linearGradient id="g1" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stopColor="#6366F1"/>
+          <stop offset="100%" stopColor="#06B6D4"/>
+        </linearGradient>
+        <linearGradient id="g2" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stopColor="#6366F1" stopOpacity="0.2"/>
+          <stop offset="100%" stopColor="#06B6D4" stopOpacity="0.2"/>
+        </linearGradient>
+        <filter id="glow"><feGaussianBlur stdDeviation="2.5" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+      </defs>
+      {/* grid */}
+      {[40,80,120,160].map(x => <line key={`v${x}`} x1={x} y1="0" x2={x} y2="200" stroke="rgba(99,102,241,0.08)" strokeWidth="1"/>)}
+      {[40,80,120,160].map(y => <line key={`h${y}`} x1="0" y1={y} x2="200" y2={y} stroke="rgba(99,102,241,0.08)" strokeWidth="1"/>)}
+      {/* circuit traces */}
+      <polyline points="40,160 40,120 80,120 80,80 120,80 120,40 160,40" fill="none" stroke="url(#g1)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" filter="url(#glow)"/>
+      <polyline points="40,160 80,160 80,120 120,120 160,120 160,80" fill="none" stroke="rgba(99,102,241,0.3)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+      {/* nodes */}
+      <circle cx="40"  cy="160" r="6" fill="url(#g1)" filter="url(#glow)"/>
+      <circle cx="80"  cy="120" r="4" fill="rgba(99,102,241,0.5)"/>
+      <circle cx="120" cy="80"  r="4" fill="rgba(99,102,241,0.5)"/>
+      <circle cx="160" cy="40"  r="6" fill="url(#g1)" filter="url(#glow)"/>
+      <circle cx="160" cy="80"  r="4" fill="rgba(6,182,212,0.5)"/>
+      {/* halos */}
+      <circle cx="40"  cy="160" r="12" fill="url(#g2)"/>
+      <circle cx="160" cy="40"  r="12" fill="url(#g2)"/>
+    </svg>
+  );
+}
+
+/* ── Wrap ───────────────────────────────────────────────────────────────── */
+const wrapStyle: React.CSSProperties = {
+  minHeight: '100vh', background: C.bg,
+  display: 'flex', flexDirection: 'column',
+  fontFamily: 'Inter,system-ui,sans-serif',
+};
+
 export default function AuthFlow() {
-  const [screen, setScreen] = useState<Screen>('splash');
-  const [loginEmail, setLoginEmail] = useState('');
-  const [loginPw, setLoginPw]       = useState('');
-  const [showPw, setShowPw]         = useState(false);
-  const [loginErr, setLoginErr]     = useState('');
-  const [loginLoading, setLoginLoading] = useState(false);
-  const [signupName, setSignupName]   = useState('');
-  const [signupEmail, setSignupEmail] = useState('');
-  const [signupPw, setSignupPw]       = useState('');
-  const [showPw2, setShowPw2]         = useState(false);
-  const [signupErr, setSignupErr]     = useState('');
+  const [screen, setScreen]               = useState<Screen>('splash');
+  const [loginEmail, setLoginEmail]       = useState('');
+  const [loginPw, setLoginPw]             = useState('');
+  const [showPw, setShowPw]               = useState(false);
+  const [loginErr, setLoginErr]           = useState('');
+  const [loginLoading, setLoginLoading]   = useState(false);
+  const [signupName, setSignupName]       = useState('');
+  const [signupEmail, setSignupEmail]     = useState('');
+  const [signupPw, setSignupPw]           = useState('');
+  const [showPw2, setShowPw2]             = useState(false);
+  const [signupErr, setSignupErr]         = useState('');
   const [signupLoading, setSignupLoading] = useState(false);
   const [privacyConsent, setPrivacyConsent] = useState(false);
-  const [forgotEmail, setForgotEmail] = useState('');
-  const [forgotSent, setForgotSent]   = useState(false);
-  const [otp, setOtp] = useState(['','','','','','']);
+  const [forgotEmail, setForgotEmail]     = useState('');
+  const [forgotSent, setForgotSent]       = useState(false);
+  const [otp, setOtp]                     = useState(['','','','','','']);
 
-  const wrap: React.CSSProperties = {
-    minHeight: '100vh', background: C.bg,
-    display: 'flex', flexDirection: 'column',
-    fontFamily: 'Inter,-apple-system,BlinkMacSystemFont,sans-serif',
-  };
-
-  // ── SPLASH ────────────────────────────────────────────────────────────────
+  /* ── SPLASH ─────────────────────────────────────────────────────────── */
   if (screen === 'splash') return (
-    <div style={wrap}>
+    <div style={wrapStyle}>
       <style>{FONT}</style>
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '60px 32px 40px' }}>
-        <div style={{ width: 220, height: 220, marginBottom: 40 }}>
-          <svg width="220" height="220" viewBox="0 0 220 220">
-            <circle cx="110" cy="110" r="106" fill="#EDE6D6" stroke={C.border} strokeWidth="1"/>
-            <line x1="20" y1="80"  x2="200" y2="80"  stroke={C.border} strokeWidth="8"  strokeLinecap="round"/>
-            <line x1="20" y1="110" x2="200" y2="110" stroke={C.border} strokeWidth="12" strokeLinecap="round"/>
-            <line x1="20" y1="145" x2="200" y2="145" stroke={C.border} strokeWidth="6"  strokeLinecap="round"/>
-            <line x1="70"  y1="20" x2="70"  y2="200" stroke={C.border} strokeWidth="6"  strokeLinecap="round"/>
-            <line x1="110" y1="20" x2="110" y2="200" stroke={C.border} strokeWidth="10" strokeLinecap="round"/>
-            <line x1="155" y1="20" x2="155" y2="200" stroke={C.border} strokeWidth="6"  strokeLinecap="round"/>
-            <polyline points="40,80 70,80 70,110 155,110 155,145 180,145" fill="none" stroke={C.accent} strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round"/>
-            <circle cx="40"  cy="80"  r="6" fill={C.green}  stroke="white" strokeWidth="2"/>
-            <circle cx="70"  cy="110" r="5" fill={C.border} stroke="white" strokeWidth="2"/>
-            <circle cx="155" cy="110" r="5" fill={C.border} stroke="white" strokeWidth="2"/>
-            <circle cx="180" cy="145" r="6" fill={C.accent} stroke="white" strokeWidth="2"/>
-          </svg>
+      {/* Hero */}
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '60px 32px 24px', gap: 0 }}>
+        <div style={{ marginBottom: 32, filter: 'drop-shadow(0 0 32px rgba(99,102,241,0.4))' }}>
+          <CircuitHero />
         </div>
-        <Logo size={32} />
-        <p style={{ fontSize: 15, color: C.muted, marginTop: 10, textAlign: 'center', lineHeight: 1.6, maxWidth: 260 }}>
+        <Logo size={36} />
+        <p style={{ fontSize: 15, color: C.muted, marginTop: 10, textAlign: 'center', lineHeight: 1.6, maxWidth: 280 }}>
           Metro Manila commute intelligence — plan faster, ride smarter.
         </p>
+        {/* subtle feature pills */}
+        <div style={{ display: 'flex', gap: 8, marginTop: 24, flexWrap: 'wrap', justifyContent: 'center' }}>
+          {['A* Routing', '2024 Fares', 'MRT · LRT · Bus', 'Jeepney'].map(f => (
+            <span key={f} style={{ fontSize: 11, fontWeight: 600, color: C.accent, background: 'rgba(99,102,241,0.1)', border: '1px solid rgba(99,102,241,0.2)', borderRadius: 20, padding: '4px 10px', letterSpacing: '0.03em' }}>{f}</span>
+          ))}
+        </div>
       </div>
-      <div style={{ background: C.surface, borderRadius: '24px 24px 0 0', padding: '28px 24px 44px', display: 'flex', flexDirection: 'column', gap: 12, boxShadow: '0 -4px 24px rgba(0,0,0,0.07)' }}>
-        <PrimaryBtn label="Get started" onClick={() => setScreen('signup')} />
-        <button onClick={() => setScreen('login')} style={{ width: '100%', background: 'transparent', border: `1.5px solid ${C.border}`, borderRadius: 10, padding: '15px', fontSize: 15, fontWeight: 600, color: C.ink, cursor: 'pointer', fontFamily: 'Inter,sans-serif' }}>
-          I already have an account
-        </button>
-        <p style={{ fontSize: 11, color: C.muted, textAlign: 'center', lineHeight: 1.6, marginTop: 4 }}>
+
+      {/* CTA sheet */}
+      <div style={{ background: C.surface, borderRadius: '24px 24px 0 0', padding: '28px 24px 44px', display: 'flex', flexDirection: 'column', gap: 12, boxShadow: '0 -1px 0 rgba(255,255,255,0.06)' }}>
+        <PrimaryBtn label="Get started →" onClick={() => setScreen('signup')} />
+        <GhostBtn label="I already have an account" onClick={() => setScreen('login')} />
+        <p style={{ fontSize: 11, color: C.muted, textAlign: 'center', lineHeight: 1.6 }}>
           By continuing you agree to our{' '}
-          <a href="/privacy" style={{ color: C.accent }}>Privacy Policy</a>.
+          <a href="/privacy" style={{ color: C.accent, textDecoration: 'none', fontWeight: 600 }}>Privacy Policy</a>.
         </p>
       </div>
     </div>
   );
 
-  // ── LOGIN ─────────────────────────────────────────────────────────────────
+  /* ── LOGIN ──────────────────────────────────────────────────────────── */
   if (screen === 'login') return (
-    <div style={wrap}>
+    <div style={wrapStyle}>
       <style>{FONT}</style>
       <div style={{ padding: '56px 24px 0' }}><BackBtn onClick={() => setScreen('splash')} /></div>
       <div style={{ flex: 1, padding: '28px 24px', display: 'flex', flexDirection: 'column', gap: 0 }}>
-        <div style={{ marginBottom: 32 }}>
-          <Logo size={28} />
-          <p style={{ fontSize: 24, fontWeight: 700, color: C.ink, letterSpacing: '-0.02em', marginTop: 16, marginBottom: 4 }}>Welcome back</p>
-          <p style={{ fontSize: 14, color: C.muted }}>Sign in to continue</p>
+        <div className="fade-up" style={{ marginBottom: 32 }}>
+          <Logo size={26} />
+          <p style={{ fontSize: 26, fontWeight: 700, color: C.ink, letterSpacing: '-0.03em', marginTop: 20, marginBottom: 4 }}>Welcome back</p>
+          <p style={{ fontSize: 14, color: C.muted }}>Sign in to continue planning</p>
         </div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 16, marginBottom: 10 }}>
+        <div className="fade-up" style={{ display: 'flex', flexDirection: 'column', gap: 16, marginBottom: 10, animationDelay: '0.05s' }}>
           <Input label="Email" type="email" value={loginEmail} onChange={v => { setLoginEmail(v); setLoginErr(''); }} placeholder="you@email.com" error={loginErr && loginErr.includes('email') ? loginErr : ''} />
           <Input label="Password" type={showPw ? 'text' : 'password'} value={loginPw} onChange={v => { setLoginPw(v); setLoginErr(''); }} placeholder="••••••••"
             error={loginErr && !loginErr.includes('email') ? loginErr : ''}
-            rightEl={<span onClick={() => setShowPw(!showPw)}><EyeIcon open={showPw}/></span>}
+            rightEl={<span onClick={() => setShowPw(!showPw)} style={{ color: C.muted }}><Eye open={showPw}/></span>}
           />
         </div>
         <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 24 }}>
-          <button onClick={() => setScreen('forgot')} style={{ background: 'none', border: 'none', fontSize: 13, color: C.accent, cursor: 'pointer', fontFamily: 'Inter,sans-serif', fontWeight: 500 }}>Forgot password?</button>
+          <button onClick={() => setScreen('forgot')} style={{ background: 'none', border: 'none', fontSize: 13, color: C.accent, cursor: 'pointer', fontFamily: 'inherit', fontWeight: 600 }}>Forgot password?</button>
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 24 }}>
           <PrimaryBtn label="Sign in" loading={loginLoading} disabled={!loginEmail || !loginPw}
@@ -226,24 +297,24 @@ export default function AuthFlow() {
         </div>
         <p style={{ fontSize: 14, color: C.muted, textAlign: 'center', marginTop: 'auto' }}>
           Don&apos;t have an account?{' '}
-          <button onClick={() => setScreen('signup')} style={{ background: 'none', border: 'none', color: C.accent, fontWeight: 600, cursor: 'pointer', fontSize: 14, fontFamily: 'Inter,sans-serif' }}>Sign up</button>
+          <button onClick={() => setScreen('signup')} style={{ background: 'none', border: 'none', color: C.accent, fontWeight: 700, cursor: 'pointer', fontSize: 14, fontFamily: 'inherit' }}>Sign up</button>
         </p>
       </div>
     </div>
   );
 
-  // ── SIGN UP ───────────────────────────────────────────────────────────────
+  /* ── SIGN UP ────────────────────────────────────────────────────────── */
   if (screen === 'signup') return (
-    <div style={wrap}>
+    <div style={wrapStyle}>
       <style>{FONT}</style>
       <div style={{ padding: '56px 24px 0' }}><BackBtn onClick={() => setScreen('splash')} /></div>
-      <div style={{ flex: 1, padding: '28px 24px', display: 'flex', flexDirection: 'column' }}>
-        <div style={{ marginBottom: 28 }}>
-          <Logo size={28} />
-          <p style={{ fontSize: 24, fontWeight: 700, color: C.ink, letterSpacing: '-0.02em', marginTop: 16, marginBottom: 4 }}>Create account</p>
+      <div style={{ flex: 1, padding: '28px 24px', display: 'flex', flexDirection: 'column', overflowY: 'auto' }}>
+        <div className="fade-up" style={{ marginBottom: 28 }}>
+          <Logo size={26} />
+          <p style={{ fontSize: 26, fontWeight: 700, color: C.ink, letterSpacing: '-0.03em', marginTop: 20, marginBottom: 4 }}>Create account</p>
           <p style={{ fontSize: 14, color: C.muted }}>Plan your commute smarter</p>
         </div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 14, marginBottom: 24 }}>
+        <div className="fade-up" style={{ display: 'flex', flexDirection: 'column', gap: 14, marginBottom: 20, animationDelay: '0.05s' }}>
           <Input label="Full name" value={signupName} onChange={v => { setSignupName(v); setSignupErr(''); }} placeholder="Juan dela Cruz" error={signupErr && signupErr.includes('name') ? signupErr : ''} />
           <Input label="Email" type="email" value={signupEmail} onChange={v => { setSignupEmail(v); setSignupErr(''); }} placeholder="you@email.com" error={signupErr && signupErr.includes('email') ? signupErr : ''} />
           <div>
@@ -251,36 +322,28 @@ export default function AuthFlow() {
               placeholder="At least 8 characters"
               error={signupErr && !signupErr.includes('name') && !signupErr.includes('email') ? signupErr : ''}
               hint={signupPw.length > 0 && signupPw.length < 8 ? `${8 - signupPw.length} more characters needed` : ''}
-              rightEl={<span onClick={() => setShowPw2(!showPw2)}><EyeIcon open={showPw2}/></span>}
+              rightEl={<span onClick={() => setShowPw2(!showPw2)}><Eye open={showPw2}/></span>}
             />
             {signupPw.length > 0 && (
               <div style={{ display: 'flex', gap: 4, marginTop: 8 }}>
-                {[0,1,2,3].map(i => (
-                  <div key={i} style={{ flex: 1, height: 3, borderRadius: 2, transition: 'background 0.2s',
-                    background: i < Math.min(Math.floor(signupPw.length / 2), 4)
-                      ? (signupPw.length < 6 ? C.error : signupPw.length < 10 ? C.accent : C.green)
-                      : C.border }}/>
-                ))}
+                {[0,1,2,3].map(i => {
+                  const filled = i < Math.min(Math.floor(signupPw.length / 2), 4);
+                  const col = signupPw.length < 6 ? C.error : signupPw.length < 10 ? '#F97316' : C.green;
+                  return <div key={i} style={{ flex: 1, height: 3, borderRadius: 2, transition: 'background 0.25s', background: filled ? col : C.card }} />;
+                })}
               </div>
             )}
           </div>
         </div>
         {/* Privacy consent */}
-        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, marginBottom: 20, padding: '12px 14px', borderRadius: 10, background: C.card, border: `1px solid ${C.border}` }}>
-          <input
-            type="checkbox"
-            id="privacy-consent"
-            checked={privacyConsent}
-            onChange={e => setPrivacyConsent(e.target.checked)}
-            style={{ marginTop: 2, accentColor: C.ink, cursor: 'pointer', flexShrink: 0 }}
-          />
-          <label htmlFor="privacy-consent" style={{ fontSize: 13, color: C.body, lineHeight: 1.5, cursor: 'pointer' }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, marginBottom: 20, padding: '12px 14px', borderRadius: 12, background: C.glass, border: `1px solid ${C.glassBorder}` }}>
+          <input type="checkbox" id="consent" checked={privacyConsent} onChange={e => setPrivacyConsent(e.target.checked)} style={{ marginTop: 2, accentColor: 'var(--color-accent)', cursor: 'pointer', flexShrink: 0, width: 16, height: 16 }} />
+          <label htmlFor="consent" style={{ fontSize: 12, color: C.body, lineHeight: 1.6, cursor: 'pointer' }}>
             I have read and agree to the{' '}
-            <a href="/privacy" target="_blank" rel="noopener noreferrer" style={{ color: C.accent, fontWeight: 500 }}>Privacy Policy</a>.
-            I understand that ParaPo collects my account email and saved routes, and stores anonymised (geohashed) search logs for up to 90 days.
+            <a href="/privacy" target="_blank" rel="noopener noreferrer" style={{ color: C.accent, fontWeight: 600, textDecoration: 'none' }}>Privacy Policy</a>.
+            ParaPo stores anonymised (geohashed) search logs for up to 90 days.
           </label>
         </div>
-
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 20 }}>
           <PrimaryBtn label="Create account" loading={signupLoading} disabled={!signupName || !signupEmail || !signupPw || !privacyConsent}
             onClick={() => {
@@ -297,19 +360,19 @@ export default function AuthFlow() {
         </div>
         <p style={{ fontSize: 14, color: C.muted, textAlign: 'center' }}>
           Already have an account?{' '}
-          <button onClick={() => setScreen('login')} style={{ background: 'none', border: 'none', color: C.accent, fontWeight: 600, cursor: 'pointer', fontSize: 14, fontFamily: 'Inter,sans-serif' }}>Sign in</button>
+          <button onClick={() => setScreen('login')} style={{ background: 'none', border: 'none', color: C.accent, fontWeight: 700, cursor: 'pointer', fontSize: 14, fontFamily: 'inherit' }}>Sign in</button>
         </p>
       </div>
     </div>
   );
 
-  // ── FORGOT PASSWORD ───────────────────────────────────────────────────────
+  /* ── FORGOT PASSWORD ─────────────────────────────────────────────────── */
   if (screen === 'forgot') return (
-    <div style={wrap}>
+    <div style={wrapStyle}>
       <style>{FONT}</style>
       <div style={{ padding: '56px 24px 0' }}><BackBtn onClick={() => setScreen('login')} /></div>
       <div style={{ flex: 1, padding: '28px 24px', display: 'flex', flexDirection: 'column' }}>
-        <div style={{ width: 56, height: 56, borderRadius: 16, background: 'color-mix(in srgb, var(--color-accent) 12%, var(--color-surface))', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 20 }}>
+        <div style={{ width: 56, height: 56, borderRadius: 16, background: 'rgba(99,102,241,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 20, border: '1px solid rgba(99,102,241,0.2)' }}>
           <svg width="26" height="26" fill="none" stroke={C.accent} strokeWidth="1.8" strokeLinecap="round">
             <rect x="4" y="11" width="18" height="13" rx="2"/>
             <path d="M8 11V7a5 5 0 0110 0v4"/>
@@ -317,11 +380,13 @@ export default function AuthFlow() {
             <line x1="13" y1="18.5" x2="13" y2="20.5"/>
           </svg>
         </div>
-        <p style={{ fontSize: 24, fontWeight: 700, color: C.ink, letterSpacing: '-0.02em', marginBottom: 8 }}>
+        <p style={{ fontSize: 26, fontWeight: 700, color: C.ink, letterSpacing: '-0.02em', marginBottom: 8 }}>
           {forgotSent ? 'Check your email' : 'Forgot password?'}
         </p>
-        <p style={{ fontSize: 14, color: C.muted, marginBottom: 32, lineHeight: 1.6 }}>
-          {forgotSent ? `We sent a reset link to ${forgotEmail}. Check your inbox and spam folder.` : "Enter your email and we'll send you a link to reset your password."}
+        <p style={{ fontSize: 14, color: C.muted, marginBottom: 32, lineHeight: 1.7 }}>
+          {forgotSent
+            ? `We sent a reset link to ${forgotEmail}. Check your inbox and spam folder.`
+            : "Enter your email and we'll send you a reset link."}
         </p>
         {!forgotSent ? (
           <>
@@ -333,31 +398,37 @@ export default function AuthFlow() {
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             <PrimaryBtn label="Back to sign in" onClick={() => setScreen('login')} />
-            <button onClick={() => setForgotSent(false)} style={{ background: 'none', border: 'none', fontSize: 14, color: C.muted, cursor: 'pointer', fontFamily: 'Inter,sans-serif', padding: '10px 0' }}>Resend email</button>
+            <button onClick={() => setForgotSent(false)} style={{ background: 'none', border: 'none', fontSize: 14, color: C.muted, cursor: 'pointer', fontFamily: 'inherit', padding: '10px 0', textAlign: 'center' }}>Resend email</button>
           </div>
         )}
       </div>
     </div>
   );
 
-  // ── VERIFY OTP ────────────────────────────────────────────────────────────
+  /* ── VERIFY OTP ─────────────────────────────────────────────────────── */
   if (screen === 'verify') return (
-    <div style={wrap}>
+    <div style={wrapStyle}>
       <style>{`${FONT}
-        .otp-box{width:46px;height:54px;border:1.5px solid #E2DBD0;border-radius:10px;text-align:center;font-size:22px;font-weight:700;color:#1A1410;background:#fff;font-family:Inter,sans-serif;transition:border-color 0.15s;}
-        .otp-box:focus{outline:none;border-color:#1A1410;}
+        .otp-box{
+          width:46px;height:56px;border:1.5px solid var(--color-glass-border);
+          border-radius:12px;text-align:center;font-size:22px;font-weight:700;
+          color:var(--color-ink);background:var(--color-glass);
+          font-family:inherit;transition:border-color 0.15s,box-shadow 0.15s;
+          backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);
+        }
+        .otp-box:focus{outline:none;border-color:var(--color-accent);box-shadow:0 0 0 3px rgba(99,102,241,0.15);}
       `}</style>
       <div style={{ padding: '56px 24px 0' }}><BackBtn onClick={() => setScreen('signup')} /></div>
       <div style={{ flex: 1, padding: '28px 24px', display: 'flex', flexDirection: 'column' }}>
-        <div style={{ width: 56, height: 56, borderRadius: 16, background: 'color-mix(in srgb, var(--color-green) 12%, var(--color-surface))', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 20 }}>
+        <div style={{ width: 56, height: 56, borderRadius: 16, background: 'rgba(16,185,129,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 20, border: '1px solid rgba(16,185,129,0.2)' }}>
           <svg width="26" height="26" fill="none" stroke={C.green} strokeWidth="1.8" strokeLinecap="round">
             <rect x="3" y="7" width="20" height="14" rx="2"/>
             <path d="M3 9l10 7 10-7"/>
           </svg>
         </div>
-        <p style={{ fontSize: 24, fontWeight: 700, color: C.ink, letterSpacing: '-0.02em', marginBottom: 8 }}>Verify your email</p>
-        <p style={{ fontSize: 14, color: C.muted, marginBottom: 32, lineHeight: 1.6 }}>
-          We sent a 6-digit code to <strong style={{ color: C.ink }}>{signupEmail || 'your email'}</strong>. Enter it below to confirm your account.
+        <p style={{ fontSize: 26, fontWeight: 700, color: C.ink, letterSpacing: '-0.02em', marginBottom: 8 }}>Verify your email</p>
+        <p style={{ fontSize: 14, color: C.muted, marginBottom: 32, lineHeight: 1.7 }}>
+          We sent a 6-digit code to <strong style={{ color: C.ink }}>{signupEmail || 'your email'}</strong>.
         </p>
         <div style={{ display: 'flex', gap: 8, justifyContent: 'center', marginBottom: 32 }}>
           {otp.map((digit, i) => (
@@ -368,14 +439,14 @@ export default function AuthFlow() {
                 if (val && i < 5) { const els = document.querySelectorAll('.otp-box') as NodeListOf<HTMLInputElement>; els[i+1]?.focus(); }
               }}
               onKeyDown={e => {
-                if (e.key==='Backspace' && !otp[i] && i>0) { const els = document.querySelectorAll('.otp-box') as NodeListOf<HTMLInputElement>; els[i-1]?.focus(); }
+                if (e.key === 'Backspace' && !otp[i] && i > 0) { const els = document.querySelectorAll('.otp-box') as NodeListOf<HTMLInputElement>; els[i-1]?.focus(); }
               }}
             />
           ))}
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           <PrimaryBtn label="Verify account" disabled={otp.join('').length < 6} onClick={() => setScreen('success')} />
-          <button style={{ background: 'none', border: 'none', fontSize: 14, color: C.muted, cursor: 'pointer', fontFamily: 'Inter,sans-serif', padding: '10px 0', textAlign: 'center' }}>
+          <button style={{ background: 'none', border: 'none', fontSize: 14, color: C.muted, cursor: 'pointer', fontFamily: 'inherit', padding: '10px 0', textAlign: 'center' }}>
             Didn&apos;t receive it? <span style={{ color: C.accent, fontWeight: 600 }}>Resend code</span>
           </button>
         </div>
@@ -383,33 +454,38 @@ export default function AuthFlow() {
     </div>
   );
 
-  // ── SUCCESS ───────────────────────────────────────────────────────────────
+  /* ── SUCCESS ────────────────────────────────────────────────────────── */
   return (
-    <div style={{ ...wrap, alignItems: 'center', justifyContent: 'center', background: C.surface }}>
+    <div style={{ ...wrapStyle, alignItems: 'center', justifyContent: 'center' }}>
       <style>{FONT}</style>
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 20, padding: '0 32px', textAlign: 'center', maxWidth: 360, width: '100%' }}>
-        <div style={{ width: 72, height: 72, borderRadius: 20, background: 'color-mix(in srgb, var(--color-green) 12%, var(--color-surface))', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <svg width="36" height="36" fill="none" stroke={C.green} strokeWidth="2.2" strokeLinecap="round"><path d="M8 18l7 7L28 11"/></svg>
+      <div className="fade-up" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 20, padding: '0 32px', textAlign: 'center', maxWidth: 360, width: '100%' }}>
+        {/* Success ring */}
+        <div style={{ position: 'relative', width: 80, height: 80 }}>
+          <div style={{ width: 80, height: 80, borderRadius: '50%', background: 'rgba(16,185,129,0.1)', border: '1.5px solid rgba(16,185,129,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <svg width="38" height="38" fill="none" stroke={C.green} strokeWidth="2.5" strokeLinecap="round"><path d="M9 19l8 8L30 10"/></svg>
+          </div>
+          <div style={{ position: 'absolute', inset: -8, borderRadius: '50%', border: '1px solid rgba(16,185,129,0.15)', animation: 'pulse 2s ease-in-out infinite' }} />
         </div>
         <div>
-          <Logo size={26} />
-          <p style={{ fontSize: 22, fontWeight: 700, color: C.ink, letterSpacing: '-0.02em', marginTop: 14, marginBottom: 8 }}>
+          <Logo size={24} />
+          <p style={{ fontSize: 24, fontWeight: 700, color: C.ink, letterSpacing: '-0.02em', marginTop: 16, marginBottom: 8 }}>
             You&apos;re all set{signupName ? `, ${signupName.split(' ')[0]}` : ''}!
           </p>
-          <p style={{ fontSize: 14, color: C.muted, lineHeight: 1.6 }}>
+          <p style={{ fontSize: 14, color: C.muted, lineHeight: 1.7 }}>
             Your account is ready. Start planning your first commute.
           </p>
         </div>
         <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 10, marginTop: 8 }}>
           <a href="/planner" style={{
-            display: 'block', background: C.ink, color: C.surface, borderRadius: 10,
-            padding: '15px', fontSize: 15, fontWeight: 600, textAlign: 'center',
-            textDecoration: 'none', letterSpacing: '-0.01em',
+            display: 'block', textDecoration: 'none', borderRadius: 12,
+            padding: '15px', fontSize: 15, fontWeight: 700, textAlign: 'center',
+            background: 'var(--gradient-primary)', color: '#fff',
+            boxShadow: '0 4px 20px rgba(99,102,241,0.35)', letterSpacing: '-0.01em',
           }}>
             Start planning →
           </a>
           <button onClick={() => { setScreen('splash'); setSignupName(''); setSignupEmail(''); setSignupPw(''); setLoginEmail(''); setLoginPw(''); setOtp(['','','','','','']); }}
-            style={{ background: 'none', border: 'none', fontSize: 13, color: C.muted, cursor: 'pointer', fontFamily: 'Inter,sans-serif', padding: '8px 0' }}>
+            style={{ background: 'none', border: 'none', fontSize: 13, color: C.muted, cursor: 'pointer', fontFamily: 'inherit', padding: '8px 0' }}>
             Use a different account
           </button>
         </div>
