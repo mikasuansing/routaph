@@ -68,6 +68,15 @@ describe('POST /api/v1/routes/plan', () => {
     ({ POST } = await import('../v1/routes/plan/route'));
   });
 
+  it('returns 401 when unauthenticated', async () => {
+    const req = makeRequest('POST', {
+      origin: { lat: 14.55, lng: 121.0 },
+      destination: { lat: 14.62, lng: 121.05 },
+    });
+    const res = await POST(req);
+    expect(res.status).toBe(401);
+  });
+
   it('returns 400 when body is missing required fields', async () => {
     const req = makeRequest('POST', {});
     const res = await POST(req);
@@ -106,6 +115,101 @@ describe('POST /api/v1/routes/plan', () => {
     expect(res.status).toBe(404);
     const json = await res.json();
     expect(json.error.code).toBe('no_route_found');
+  });
+});
+
+// ── POST /api/v1/routes/reroute ────────────────────────────────────────────
+
+describe('POST /api/v1/routes/reroute', () => {
+  let POST: (req: NextRequest) => Promise<Response>;
+
+  beforeEach(async () => {
+    vi.resetModules();
+    ({ POST } = await import('../v1/routes/reroute/route'));
+  });
+
+  it('returns 401 when unauthenticated', async () => {
+    const req = makeRequest('POST', {
+      origin: { lat: 14.55, lng: 121.0 },
+      destination: { lat: 14.62, lng: 121.05 },
+    });
+    const res = await POST(req);
+    expect(res.status).toBe(401);
+  });
+});
+
+// ── GET /api/v1/transport/options ────────────────────────────────────────────
+
+describe('GET /api/v1/transport/options', () => {
+  let GET: (req: NextRequest) => Promise<Response>;
+
+  beforeEach(async () => {
+    vi.resetModules();
+    ({ GET } = await import('../v1/transport/options/route'));
+  });
+
+  it('returns 401 when unauthenticated', async () => {
+    const url = 'http://localhost:3000/api/v1/transport/options?originLat=14.55&originLng=121.0&destLat=14.62&destLng=121.05';
+    const req = new NextRequest(url);
+    const res = await GET(req);
+    expect(res.status).toBe(401);
+  });
+});
+
+// ── POST /api/v1/geo/isochrone ─────────────────────────────────────────────
+
+describe('POST /api/v1/geo/isochrone', () => {
+  let POST: (req: NextRequest) => Promise<Response>;
+
+  beforeEach(async () => {
+    vi.resetModules();
+    ({ POST } = await import('../v1/geo/isochrone/route'));
+  });
+
+  it('returns 401 when unauthenticated', async () => {
+    const req = makeRequest('POST', { lat: 14.55, lng: 121.0, minutes: 20 });
+    const res = await POST(req);
+    expect(res.status).toBe(401);
+  });
+});
+
+// ── GET /api/v1/accessibility/score ────────────────────────────────────────
+
+describe('GET /api/v1/accessibility/score', () => {
+  let GET: (req: NextRequest) => Promise<Response>;
+
+  beforeEach(async () => {
+    vi.resetModules();
+    ({ GET } = await import('../v1/accessibility/score/route'));
+  });
+
+  it('returns 401 when unauthenticated', async () => {
+    const req = new NextRequest('http://localhost:3000/api/v1/accessibility/score?stopId=1');
+    const res = await GET(req);
+    expect(res.status).toBe(401);
+  });
+});
+
+// ── POST /api/v1/me/trips ───────────────────────────────────────────────────
+
+describe('POST /api/v1/me/trips', () => {
+  let POST: (req: NextRequest) => Promise<Response>;
+
+  beforeEach(async () => {
+    vi.resetModules();
+    ({ POST } = await import('../v1/me/trips/route'));
+  });
+
+  it('returns 401 when unauthenticated', async () => {
+    const req = makeRequest('POST', {
+      origin: 'Katipunan',
+      destination: 'UP Diliman',
+      distanceKm: 4.2,
+      fareEstimate: 42,
+      modesUsed: ['lrt', 'walk'],
+    });
+    const res = await POST(req);
+    expect(res.status).toBe(401);
   });
 });
 

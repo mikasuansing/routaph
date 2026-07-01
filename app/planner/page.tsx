@@ -2,6 +2,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { TRIP_STORAGE_KEY } from '@/lib/trip/types';
+import { supabaseBrowser } from '@/lib/supabase/browser';
 
 /* ── Design tokens ─────────────────────────────────────────────────────────── */
 const C = {
@@ -179,6 +180,7 @@ function PurpleDot() {
 export default function Planner() {
   const router = useRouter();
   const [screen, setScreen]       = useState<Screen>('home');
+  const [isAuthed, setIsAuthed] = useState<boolean | null>(null);
   const [from, setFrom]           = useState('');
   const [to, setTo]               = useState('');
   const [rush, setRush]           = useState(() => { const h = new Date().getHours(); return (h >= 7 && h <= 9) || (h >= 17 && h <= 19); });
@@ -186,6 +188,19 @@ export default function Planner() {
   const [itineraries, setItineraries] = useState<Itinerary[]>([]);
   const [selected, setSelected]   = useState<Itinerary | null>(null);
   const [error, setError]         = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    supabaseBrowser.auth.getSession().then(({ data }) => {
+      if (!active) return;
+      if (!data.session) {
+        router.replace('/auth');
+        return;
+      }
+      setIsAuthed(true);
+    });
+    return () => { active = false; };
+  }, [router]);
 
   /* ── Leaflet map refs ─────────────────────────────────────────────── */
   const mapElRef    = useRef<HTMLDivElement>(null);
@@ -342,6 +357,8 @@ export default function Planner() {
     .leaflet-attribution-flag{display:none!important;}
     .leaflet-control-attribution{font-size:9px!important;opacity:0.4!important;background:transparent!important;color:inherit!important;}
   `;
+
+  if (isAuthed === false) return null;
 
   /* ════════════════════════════════════════════════════════════════
      RENDER — map is always mounted; screens overlay it

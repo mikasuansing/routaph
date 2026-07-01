@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect } from 'react';
+import { supabaseBrowser } from '@/lib/supabase/browser';
 import { useRouter } from 'next/navigation';
 import { TripProvider, useTripContext } from '@/lib/trip/context';
 import type { Itinerary, RideLeg, WalkLeg } from '@/lib/routing/types';
@@ -12,6 +13,15 @@ import { distToNextStop, etaToNextStop } from '@/lib/trip/geo';
 function TripScreen() {
   const router = useRouter();
   const trip = useTripContext();
+
+  useEffect(() => {
+    let active = true;
+    supabaseBrowser.auth.getSession().then(({ data }) => {
+      if (!active) return;
+      if (!data.session) router.replace('/auth');
+    });
+    return () => { active = false; };
+  }, [router]);
 
   // On mount: restore itinerary from sessionStorage and start trip
   useEffect(() => {
@@ -81,12 +91,12 @@ function TripScreen() {
   };
 
   return (
-    <div className="flex flex-col min-h-screen bg-gray-50">
+    <div className="flex flex-col min-h-screen bg-slate-950 text-slate-100">
       {/* Header */}
-      <header className="bg-blue-700 text-white p-4 flex items-center justify-between">
+      <header className="bg-slate-900 text-slate-100 p-4 flex items-center justify-between">
         <h1 className="font-bold text-lg">Trip in progress</h1>
         <button
-          className="text-sm underline opacity-80"
+          className="text-sm underline opacity-90 text-slate-200"
           onClick={() => { trip.endTrip(); router.replace('/planner'); }}
         >
           End trip
@@ -95,12 +105,12 @@ function TripScreen() {
 
       {/* Active disruption banner */}
       {activeDisruption && status !== 'rerouting' && (
-        <div className="bg-yellow-100 border-b border-yellow-400 px-4 py-2 flex items-center justify-between">
-          <span className="text-yellow-800 text-sm">
+        <div className="bg-amber-900 border-b border-amber-700 px-4 py-2 flex items-center justify-between">
+          <span className="text-amber-100 text-sm">
             ⚠️ {activeDisruption.description}
           </span>
           <button
-            className="ml-2 text-sm font-semibold text-yellow-900 underline"
+            className="ml-2 text-sm font-semibold text-amber-100 underline"
             onClick={() => trip.triggerReroute()}
           >
             Reroute
@@ -111,22 +121,22 @@ function TripScreen() {
       {/* Current leg card */}
       <main className="flex-1 overflow-y-auto p-4 flex flex-col gap-4">
         {currentLeg && (
-          <div className="bg-white rounded-2xl shadow p-5">
+          <div className="bg-slate-900 rounded-2xl shadow-xl shadow-black/20 p-5">
             <div className="flex items-start gap-3">
               <span className="text-3xl">{modeIcon(currentLeg)}</span>
               <div className="flex-1">
-                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">
+                <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1">
                   Now
                 </p>
                 <p className="font-semibold text-gray-900">{legLabel(currentLeg)}</p>
                 {distKm !== null && (
-                  <p className="text-sm text-gray-500 mt-1">
+                  <p className="text-sm text-slate-300 mt-1">
                     {distKm < 1 ? `${Math.round(distKm * 1000)} m` : `${distKm.toFixed(1)} km`}
                     {eta !== null && ` · ~${eta} min`} to next stop
                   </p>
                 )}
                 {position === null && (
-                  <p className="text-xs text-gray-400 mt-1">Waiting for GPS…</p>
+                  <p className="text-xs text-slate-500 mt-1">Waiting for GPS…</p>
                 )}
               </div>
             </div>
@@ -135,21 +145,21 @@ function TripScreen() {
 
         {/* Next action */}
         {nextLeg && !isLastLeg && (
-          <div className="bg-gray-100 rounded-2xl p-4">
-            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">Next</p>
-            <p className="text-gray-700">{modeIcon(nextLeg)} {legLabel(nextLeg)}</p>
+          <div className="bg-slate-950 rounded-2xl p-4">
+            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1">Next</p>
+            <p className="text-slate-200">{modeIcon(nextLeg)} {legLabel(nextLeg)}</p>
           </div>
         )}
 
         {isLastLeg && (
-          <div className="bg-green-50 rounded-2xl p-4 text-green-800 text-sm font-medium">
+          <div className="bg-emerald-950 rounded-2xl p-4 text-emerald-200 text-sm font-medium">
             Almost there — this is the last leg!
           </div>
         )}
 
         {/* Leg progress list */}
-        <div className="bg-white rounded-2xl shadow p-4">
-          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">
+        <div className="bg-slate-900 rounded-2xl shadow-xl shadow-black/20 p-4">
+          <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-3">
             Full itinerary
           </p>
           {itinerary.legs.map((leg, i) => (
@@ -181,8 +191,8 @@ function TripScreen() {
 
         {/* Reroute results */}
         {status !== 'rerouting' && reroutes.length > 0 && (
-          <div className="bg-white rounded-2xl shadow p-4">
-            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">
+          <div className="bg-slate-900 rounded-2xl shadow-xl shadow-black/20 p-4">
+            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-3">
               Alternative routes
             </p>
             {reroutes.map((r, i) => (
@@ -201,8 +211,8 @@ function TripScreen() {
 
         {/* Ride-hailing options */}
         {rideOptions.length > 0 && (
-          <div className="bg-white rounded-2xl shadow p-4">
-            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">
+          <div className="bg-slate-900 rounded-2xl shadow-xl shadow-black/20 p-4">
+            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-3">
               Ride options
             </p>
             {rideOptions.map((opt, i) => (
@@ -232,7 +242,7 @@ function TripScreen() {
 
       {/* Sticky stuck button */}
       {status === 'active' && (
-        <div className="sticky bottom-0 p-4 bg-white border-t border-gray-100 flex gap-3">
+        <div className="sticky bottom-0 p-4 bg-slate-950 border-t border-slate-800 flex gap-3">
           <button
             className="flex-1 py-3 bg-red-600 text-white font-semibold rounded-full"
             onClick={() => trip.triggerReroute()}
@@ -240,7 +250,7 @@ function TripScreen() {
             I&apos;m stuck / line down
           </button>
           <button
-            className="px-5 py-3 bg-gray-100 text-gray-700 font-semibold rounded-full"
+            className="px-5 py-3 bg-slate-800 text-slate-100 font-semibold rounded-full"
             onClick={() => { trip.endTrip(); router.replace('/planner'); }}
           >
             End

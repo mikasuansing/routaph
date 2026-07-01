@@ -8,6 +8,7 @@ import {
   useReducer,
   useRef,
 } from 'react';
+import { supabaseBrowser } from '@/lib/supabase/browser';
 import type { Itinerary } from '@/lib/routing/types';
 import type {
   Disruption,
@@ -96,8 +97,13 @@ const DISRUPTION_POLL_MS = 30_000;
 
 export function TripProvider({ children }: { children: React.ReactNode }) {
   const [state, dispatch] = useReducer(reducer, INITIAL);
+  const latestStateRef = useRef<TripState>(INITIAL);
   const watchIdRef = useRef<number | null>(null);
   const pollRef    = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => {
+    latestStateRef.current = state;
+  }, [state]);
 
   // Stop the GPS watcher and disruption poll
   const cleanup = useCallback(() => {
@@ -129,6 +135,40 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
     try { sessionStorage.removeItem(TRIP_STORAGE_KEY); } catch { /* noop */ }
   }, [cleanup]);
 
+  const saveTripHistory = useCallback(async (itinerary: Itinerary, status: TripState['status']) => {
+    if (status !== 'arrived') return;
+    const session = (await supabaseBrowser.auth.getSession()).data.session;
+    if (!session) return;
+    const destinationLeg = itinerary.legs.at(-1);
+    const destinationName = destinationLeg?.type === 'walk'
+      ? destinationLeg.toName
+      : destinationLeg?.type === 'ride'
+        ? destinationLeg.to.name
+        : 'Destination';
+    const originName = itinerary.legs[0]?.type === 'walk'
+      ? itinerary.legs[0].fromName
+      : itinerary.legs[0]?.type === 'ride'
+        ? itinerary.legs[0].from.name
+        : 'Origin';
+    const payload = {
+      origin: originName,
+      destination: destinationName,
+      distanceKm: Number(itinerary.totalFare > 0 ? itinerary.totalFare / 10 : 0),
+      fareEstimate: itinerary.totalFare,
+      modesUsed: itinerary.legs.filter((leg) => leg.type === 'ride').map((leg) => leg.type === 'ride' ? leg.mode : 'walk'),
+    };
+
+    try {
+      await fetch('/api/v1/me/trips', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+    } catch {
+      // non-fatal
+    }
+  }, []);
+
   // Start GPS watcher whenever status transitions to 'active'
   useEffect(() => {
     if (state.status !== 'active' || !state.itinerary) return;
@@ -144,14 +184,31 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
         };
         dispatch({ type: 'SET_POS', position: gp });
 
-        // Auto-advance check
+        const latest = latestStateRef.current;
         if (
-          state.itinerary &&
-          state.currentLegIndex < state.itinerary.legs.length &&
-          shouldAdvanceLeg(gp, state.itinerary, state.currentLegIndex)
+          latest.itinerary &&
+          latest.currentLegIndex < latest.itinerary.legs.length &&
+          shouldAdvanceLeg(gp, latest.itinerary, latest.currentLegIndex)
         ) {
           dispatch({ type: 'ADVANCE_LEG' });
         }
+      },
+      () => { /* position error — user may have denied; continue gracefully */ },
+      { enableHighAccuracy: true, maximumAge: 5000, timeout: 10000 },
+    );
+
+    return cleanup;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.status, state.itinerary]);
+
+  useEffect(() => {
+    if (state.status !== 'arrived' || !state.itinerary) return;
+    void saveTripHistory(state.itinerary, state.status);
+  }, [saveTripHistory, state.itinerary, state.status]);
+
+  // Disruption poll — runs while a trip is active
+  useEffect(() => {
+    if (state.status !== 'active' || !state.itinerary) {
       },
       () => { /* position error — user may have denied; continue gracefully */ },
       { enableHighAccuracy: true, maximumAge: 5000, timeout: 10000 },
