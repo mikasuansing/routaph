@@ -1,6 +1,6 @@
 # ParaPo — API Contracts
 
-> Last verified from code: 2026-06-20
+> Last verified from code: 2026-07-02
 
 All responses use the standard envelope:
 
@@ -30,8 +30,9 @@ Auth: `Authorization: Bearer <supabase-access-token>` where required.
 {
   "origin":      { "lat": number, "lng": number },
   "destination": { "lat": number, "lng": number },
-  "departAt":    "ISO8601 datetime (optional)",
-  "preference":  "fastest | fewest_transfers | cheapest (optional, default: all three)"
+  "departAt":     "ISO8601 datetime (optional)",
+  "preference":   "fastest | fewest_transfers | cheapest (optional, default: all three)",
+  "excludeModes": ["jeepney" | "bus" | "mrt" | "lrt"]  // optional, max 3 of 4 — at least one mode must remain
 }
 ```
 **Returns:** `{ "data": Itinerary[] }`  
@@ -58,6 +59,7 @@ RideLeg {
   line: { id, name, mode, color };
   from: Stop; to: Stop; stops: Stop[];
   distKm: number; durationMin: number; fare: number;
+  fareRule?: { baseFare: number; perKmRate: number; flagDistanceKm: number };  // rule applied to this boarding
 }
 
 WalkLeg {

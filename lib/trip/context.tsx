@@ -31,6 +31,7 @@ const INITIAL: TripState = {
   originalDest:     null,
   currentLegIndex:  0,
   position:         null,
+  gpsDenied:        false,
   reroutes:         [],
   rideOptions:      [],
   activeDisruption: null,
@@ -56,7 +57,9 @@ function reducer(state: TripState, action: TripAction): TripState {
     case 'END':
       return { ...INITIAL, status: 'ended' };
     case 'SET_POS':
-      return { ...state, position: action.position };
+      return { ...state, position: action.position, gpsDenied: false };
+    case 'GPS_DENIED':
+      return { ...state, gpsDenied: true };
     case 'ADVANCE_LEG': {
       if (!state.itinerary) return state;
       const next = state.currentLegIndex + 1;
@@ -86,6 +89,7 @@ function reducer(state: TripState, action: TripAction): TripState {
 type TripContextValue = TripState & {
   startTrip:      (itinerary: Itinerary) => void;
   endTrip:        () => void;
+  advanceLeg:     () => void;
   triggerReroute: () => Promise<void>;
 };
 
@@ -135,6 +139,12 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
     try { sessionStorage.removeItem(TRIP_STORAGE_KEY); } catch { /* noop */ }
   }, [cleanup]);
 
+  // Manual advance — "mark this leg done". Works with or without GPS; on the
+  // last leg it transitions the trip to 'arrived'.
+  const advanceLeg = useCallback(() => {
+    dispatch({ type: 'ADVANCE_LEG' });
+  }, []);
+
   const saveTripHistory = useCallback(async (itinerary: Itinerary, status: TripState['status']) => {
     if (status !== 'arrived') return;
     const session = (await supabaseBrowser.auth.getSession()).data.session;
@@ -150,10 +160,11 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
       : itinerary.legs[0]?.type === 'ride'
         ? itinerary.legs[0].from.name
         : 'Origin';
+    const distanceKm = itinerary.legs.reduce((sum, leg) => sum + leg.distKm, 0);
     const payload = {
       origin: originName,
       destination: destinationName,
-      distanceKm: Number(itinerary.totalFare > 0 ? itinerary.totalFare / 10 : 0),
+      distanceKm: Math.round(distanceKm * 100) / 100,
       fareEstimate: itinerary.totalFare,
       modesUsed: itinerary.legs.filter((leg) => leg.type === 'ride').map((leg) => leg.type === 'ride' ? leg.mode : 'walk'),
     };
@@ -161,7 +172,10 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
     try {
       await fetch('/api/v1/me/trips', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.access_token}`,
+        },
         body: JSON.stringify(payload),
       });
     } catch {
@@ -181,6 +195,7 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
           lng:       pos.coords.longitude,
           accuracyM: pos.coords.accuracy,
           timestamp: pos.timestamp,
+          speedMps:  pos.coords.speed ?? undefined,
         };
         dispatch({ type: 'SET_POS', position: gp });
 
@@ -193,7 +208,11 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
           dispatch({ type: 'ADVANCE_LEG' });
         }
       },
-      () => { /* position error — user may have denied; continue gracefully */ },
+      (err) => {
+        // PERMISSION_DENIED (1) — surface it so the UI offers manual advance.
+        // Transient errors (unavailable/timeout) keep the watcher alive.
+        if (err.code === 1) dispatch({ type: 'GPS_DENIED' });
+      },
       { enableHighAccuracy: true, maximumAge: 5000, timeout: 10000 },
     );
 
@@ -205,18 +224,6 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
     if (state.status !== 'arrived' || !state.itinerary) return;
     void saveTripHistory(state.itinerary, state.status);
   }, [saveTripHistory, state.itinerary, state.status]);
-
-  // Disruption poll — runs while a trip is active
-  useEffect(() => {
-    if (state.status !== 'active' || !state.itinerary) {
-      },
-      () => { /* position error — user may have denied; continue gracefully */ },
-      { enableHighAccuracy: true, maximumAge: 5000, timeout: 10000 },
-    );
-
-    return cleanup;
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [state.status, state.itinerary]);
 
   // Disruption poll — runs while a trip is active
   useEffect(() => {
@@ -290,7 +297,7 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
   }, [state.itinerary, state.position, state.originalDest, state.currentLegIndex]);
 
   return (
-    <TripContext.Provider value={{ ...state, startTrip, endTrip, triggerReroute }}>
+    <TripContext.Provider value={{ ...state, startTrip, endTrip, advanceLeg, triggerReroute }}>
       {children}
     </TripContext.Provider>
   );

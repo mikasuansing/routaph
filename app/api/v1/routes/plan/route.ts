@@ -3,14 +3,12 @@ import { planRoute } from '@/lib/routing/engine';
 import { Errors, ok } from '@/lib/api/envelope';
 import { geohash, timeBucket } from '@/lib/routing/utils';
 import { SearchBodySchema } from '@/lib/validation';
-import { requireAuthenticatedUser } from '@/lib/auth/guards';
 
 export const dynamic = 'force-dynamic';
 
+// Guest-accessible (BASELINE §7.2 — only F5 saved commutes require auth).
+// Abuse is contained by the rate limiter below.
 export async function POST(req: NextRequest) {
-  const userOrError = await requireAuthenticatedUser(req);
-  if (userOrError instanceof Response) return userOrError;
-
   let body: unknown;
   try { body = await req.json(); }
   catch { return Errors.validation('Request body must be valid JSON'); }
@@ -22,7 +20,7 @@ export async function POST(req: NextRequest) {
     });
   }
 
-  const { origin, destination, departAt, preference } = parsed.data;
+  const { origin, destination, departAt, preference, excludeModes } = parsed.data;
 
   // Rate limiting (graceful degradation if Redis unconfigured)
   try {
@@ -38,7 +36,8 @@ export async function POST(req: NextRequest) {
   const dhash = geohash(destination.lat, destination.lng);
   const bucket = timeBucket(departAt ? new Date(departAt) : undefined);
   const pref = preference ?? 'all';
-  const cacheKey = `route:v1:${ohash}:${dhash}:${bucket}:${pref}`;
+  const modesKey = excludeModes?.length ? [...excludeModes].sort().join(',') : 'none';
+  const cacheKey = `route:v1:${ohash}:${dhash}:${bucket}:${pref}:${modesKey}`;
 
   try {
     const { redis } = await import('@/lib/redis/client');
@@ -60,6 +59,7 @@ export async function POST(req: NextRequest) {
     destLng: destination.lng,
     departAt: departAt ? new Date(departAt) : undefined,
     preference,
+    excludeModes,
   });
 
   if (itineraries.length === 0) return Errors.noRoute();

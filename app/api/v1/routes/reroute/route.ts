@@ -2,7 +2,6 @@ import { type NextRequest } from 'next/server';
 import { z } from 'zod';
 import { planRoute } from '@/lib/routing/engine';
 import { Errors, ok } from '@/lib/api/envelope';
-import { requireAuthenticatedUser } from '@/lib/auth/guards';
 
 export const dynamic = 'force-dynamic';
 
@@ -17,10 +16,8 @@ const schema = z.object({
   excludeModes: z.array(modeEnum).optional().default([]),
 });
 
+// Guest-accessible — mid-trip reroutes must work without an account.
 export async function POST(req: NextRequest) {
-  const userOrError = await requireAuthenticatedUser(req);
-  if (userOrError instanceof Response) return userOrError;
-
   let body: unknown;
   try { body = await req.json(); }
   catch { return Errors.validation('Request body must be valid JSON'); }

@@ -3,17 +3,17 @@ import { useState } from 'react';
 
 // Palette — less is more. Real apps don't use 8 shades of brown.
 const C = {
-  bg:       '#F4F0E8',   // warm page bg
-  surface:  '#FFFFFF',
-  card:     '#F9F7F2',   // barely-there card bg
-  border:   '#E2DBD0',
-  muted:    '#A89E8E',
-  body:     '#3D3530',
-  ink:      '#1A1410',
-  header:   '#1A1410',   // near-black, not brown
-  accent:   '#D05A28',   // single rust accent
-  green:    '#2D7A4F',
-  blue:     '#1A5FA8',
+  bg:       '#050913',
+  surface:  '#0b1121',
+  card:     'rgba(255,255,255,0.04)',
+  border:   'rgba(255,255,255,0.10)',
+  muted:    '#94a3b8',
+  body:     '#cbd5e1',
+  ink:      '#f8fafc',
+  header:   '#f8fafc',
+  accent:   '#6366F1',
+  green:    '#10B981',
+  blue:     '#06B6D4',
 };
 
 const STOPS_EDSA = ['Monumento','Balintawak','Trinoma','Quezon Ave','Cubao','Ortigas','Guadalupe','Magallanes','Taft Ave'];

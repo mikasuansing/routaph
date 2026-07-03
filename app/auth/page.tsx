@@ -1,157 +1,126 @@
 'use client';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { supabaseBrowser } from '@/lib/supabase/browser';
+
+/*
+ * Auth — wired to Supabase Auth.
+ * Monochrome minimal: typography carries the hierarchy; the single accent
+ * (transit green) marks success states only. No gradients, no glass.
+ */
 
 const FONT = `
-@import url('https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,400;0,14..32,500;0,14..32,600;0,14..32,700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,400;0,14..32,500;0,14..32,600;0,14..32,700;0,14..32,800&display=swap');
 *{box-sizing:border-box;-webkit-font-smoothing:antialiased;}
 body{font-family:'Inter',system-ui,sans-serif;}
-input::placeholder{color:rgba(249,250,251,0.3);}
-[data-theme="light"] input::placeholder{color:#A89E8E;}
 input:focus{outline:none;}
 button:active{opacity:0.85;}
-@keyframes mesh{0%,100%{background-position:0% 50%}50%{background-position:100% 50%}}
-@keyframes fadeUp{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:none}}
-@keyframes pulse{0%,100%{opacity:.6;transform:scale(1)}50%{opacity:1;transform:scale(1.08)}}
 @keyframes spin{to{transform:rotate(360deg)}}
-.fade-up{animation:fadeUp 0.45s ease both;}
 `;
 
-/* tokens — all pages use var() so they adapt to both themes */
 const C = {
-  bg:      'var(--color-bg)',
-  surface: 'var(--color-surface)',
-  card:    'var(--color-card)',
-  border:  'var(--color-border)',
-  muted:   'var(--color-muted)',
-  body:    'var(--color-body)',
-  ink:     'var(--color-ink)',
-  accent:  'var(--color-accent)',
-  accent2: 'var(--color-accent-2)',
-  green:   'var(--color-green)',
-  error:   'var(--color-error)',
-  glass:   'var(--color-glass)',
-  glassBorder: 'var(--color-glass-border)',
+  bg:     'var(--color-bg)',
+  border: 'var(--color-border)',
+  muted:  'var(--color-muted)',
+  body:   'var(--color-body)',
+  ink:    'var(--color-ink)',
+  accent: 'var(--color-accent)',
+  error:  'var(--color-error)',
+  onPrimary: 'var(--color-on-primary)',
 };
 
 type Screen = 'splash' | 'login' | 'signup' | 'forgot' | 'verify' | 'success';
 
-/* ── Logo ──────────────────────────────────────────────────────────────── */
-function Logo({ size = 26 }: { size?: number }) {
+const DEMO_EMAIL = 'demo@parapo.app';
+const DEMO_PASSWORD = 'ParaPo2026!';
+
+function nextUrl(): string {
+  try {
+    const next = new URLSearchParams(window.location.search).get('next');
+    if (next && next.startsWith('/')) return next;
+  } catch { /* SSR guard */ }
+  return '/planner';
+}
+
+/* ── Wordmark ─────────────────────────────────────────────────────────────── */
+function Logo({ size = 24 }: { size?: number }) {
   return (
-    <div style={{ display: 'flex', alignItems: 'baseline', gap: 0 }}>
-      <span style={{ fontSize: size, fontWeight: 800, letterSpacing: '-0.04em', background: 'var(--gradient-primary)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>Para</span>
-      <span style={{ fontSize: size, fontWeight: 800, letterSpacing: '-0.04em', color: C.ink }}>Po</span>
-    </div>
+    <span style={{ fontSize: size, fontWeight: 800, letterSpacing: '-0.05em', color: C.ink }}>
+      ParaPo<span style={{ color: C.accent }}>.</span>
+    </span>
   );
 }
 
-/* ── Glass input ───────────────────────────────────────────────────────── */
-function Input({ label, type = 'text', value, onChange, placeholder, error, hint, rightEl }: {
+/* ── Underline input — no boxes ───────────────────────────────────────────── */
+function Field({ label, type = 'text', value, onChange, placeholder, error, hint, rightEl, autoComplete }: {
   label: string; type?: string; value: string; onChange: (v: string) => void;
-  placeholder?: string; error?: string; hint?: string; rightEl?: React.ReactNode;
+  placeholder?: string; error?: string; hint?: string; rightEl?: React.ReactNode; autoComplete?: string;
 }) {
   const [focused, setFocused] = useState(false);
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-      <label style={{ fontSize: 12, fontWeight: 600, color: C.muted, letterSpacing: '0.05em', textTransform: 'uppercase' }}>{label}</label>
-      <div style={{
-        position: 'relative',
-        borderRadius: 12,
-        background: C.glass,
-        border: `1.5px solid ${error ? C.error : focused ? C.accent : C.glassBorder}`,
-        transition: 'border-color 0.15s, box-shadow 0.15s',
-        boxShadow: focused ? `0 0 0 3px rgba(99,102,241,0.15)` : 'none',
-      }}>
+    <div>
+      <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: error ? C.error : focused ? C.ink : C.muted, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 2 }}>
+        {label}
+      </label>
+      <div style={{ position: 'relative', borderBottom: `2px solid ${error ? C.error : focused ? C.ink : C.border}`, transition: 'border-color 0.15s' }}>
         <input
-          type={type} value={value}
+          type={type} value={value} autoComplete={autoComplete}
           onChange={e => onChange(e.target.value)}
           onFocus={() => setFocused(true)}
           onBlur={() => setFocused(false)}
           placeholder={placeholder}
-          style={{
-            width: '100%', border: 'none', borderRadius: 12, outline: 'none',
-            padding: rightEl ? '13px 44px 13px 16px' : '13px 16px',
-            fontSize: 15, color: C.ink, background: 'transparent',
-            fontFamily: 'inherit',
-          }}
+          style={{ width: '100%', border: 'none', background: 'transparent', padding: rightEl ? '12px 40px 12px 0' : '12px 0', fontSize: 17, fontWeight: 500, color: C.ink, fontFamily: 'inherit' }}
         />
         {rightEl && (
-          <div style={{ position: 'absolute', right: 14, top: '50%', transform: 'translateY(-50%)', cursor: 'pointer', color: C.muted }}>
+          <div style={{ position: 'absolute', right: 0, top: '50%', transform: 'translateY(-50%)', cursor: 'pointer', color: C.muted }}>
             {rightEl}
           </div>
         )}
       </div>
-      {error && <span style={{ fontSize: 12, color: C.error }}>{error}</span>}
-      {hint && !error && <span style={{ fontSize: 12, color: C.muted }}>{hint}</span>}
+      {error && <p style={{ margin: '6px 0 0', fontSize: 13, fontWeight: 600, color: C.error }}>{error}</p>}
+      {hint && !error && <p style={{ margin: '6px 0 0', fontSize: 13, color: C.muted }}>{hint}</p>}
     </div>
   );
 }
 
-/* ── Gradient primary button ────────────────────────────────────────────── */
+/* ── Buttons ──────────────────────────────────────────────────────────────── */
 function PrimaryBtn({ label, onClick, loading, disabled }: { label: string; onClick: () => void; loading?: boolean; disabled?: boolean }) {
+  const inactive = loading || disabled;
   return (
-    <button onClick={onClick} disabled={loading || disabled} style={{
-      width: '100%', border: 'none', borderRadius: 12, padding: '15px',
-      fontSize: 15, fontWeight: 700, cursor: loading || disabled ? 'default' : 'pointer',
-      fontFamily: 'inherit', letterSpacing: '-0.01em', transition: 'opacity 0.15s, transform 0.1s',
-      background: loading || disabled ? C.card : 'var(--gradient-primary)',
-      color: loading || disabled ? C.muted : '#fff',
-      boxShadow: loading || disabled ? 'none' : '0 4px 20px rgba(99,102,241,0.35)',
+    <button onClick={onClick} disabled={inactive} style={{
+      width: '100%', border: 'none', borderRadius: 2, padding: '16px',
+      fontSize: 15, fontWeight: 700, cursor: inactive ? 'default' : 'pointer',
+      fontFamily: 'inherit', letterSpacing: '0.01em',
+      background: inactive ? 'var(--color-card-el)' : 'var(--gradient-primary)',
+      color: inactive ? C.muted : C.onPrimary,
     }}>
       {loading ? (
         <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
-          <span style={{ width: 16, height: 16, border: '2px solid rgba(255,255,255,0.3)', borderTopColor: '#fff', borderRadius: '50%', display: 'inline-block', animation: 'spin 0.7s linear infinite' }} />
-          Please wait…
+          <span style={{ width: 14, height: 14, border: `2px solid ${C.muted}`, borderTopColor: C.onPrimary, borderRadius: '50%', display: 'inline-block', animation: 'spin 0.7s linear infinite' }} />
+          Please wait
         </span>
       ) : label}
     </button>
   );
 }
 
-/* ── Ghost button ───────────────────────────────────────────────────────── */
 function GhostBtn({ label, onClick }: { label: string; onClick: () => void }) {
   return (
     <button onClick={onClick} style={{
-      width: '100%', background: C.glass, border: `1.5px solid ${C.glassBorder}`,
-      borderRadius: 12, padding: '14px', fontSize: 15, fontWeight: 600,
+      width: '100%', background: 'transparent', border: `1.5px solid ${C.ink}`,
+      borderRadius: 2, padding: '15px', fontSize: 15, fontWeight: 700,
       color: C.ink, cursor: 'pointer', fontFamily: 'inherit',
-      backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)',
     }}>{label}</button>
   );
 }
 
-/* ── Divider ────────────────────────────────────────────────────────────── */
-function Divider({ label }: { label: string }) {
+function TextBtn({ label, onClick, strong }: { label: string; onClick: () => void; strong?: boolean }) {
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-      <div style={{ flex: 1, height: 1, background: C.glassBorder }} />
-      <span style={{ fontSize: 12, color: C.muted }}>{label}</span>
-      <div style={{ flex: 1, height: 1, background: C.glassBorder }} />
-    </div>
-  );
-}
-
-/* ── Google button ──────────────────────────────────────────────────────── */
-function GoogleBtn() {
-  return (
-    <button style={{
-      width: '100%', background: C.glass, border: `1.5px solid ${C.glassBorder}`,
-      borderRadius: 12, padding: '13px', fontSize: 14, fontWeight: 600, color: C.ink,
-      cursor: 'pointer', fontFamily: 'inherit', display: 'flex', alignItems: 'center',
-      justifyContent: 'center', gap: 10, backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)',
-    }}>
-      <svg width="18" height="18" viewBox="0 0 18 18">
-        <path fill="#4285F4" d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844a4.14 4.14 0 01-1.796 2.716v2.259h2.908c1.702-1.567 2.684-3.875 2.684-6.615z"/>
-        <path fill="#34A853" d="M9 18c2.43 0 4.467-.806 5.956-2.18l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 009 18z"/>
-        <path fill="#FBBC05" d="M3.964 10.71A5.41 5.41 0 013.682 9c0-.593.102-1.17.282-1.71V4.958H.957A8.996 8.996 0 000 9c0 1.452.348 2.827.957 4.042l3.007-2.332z"/>
-        <path fill="#EA4335" d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 00.957 4.958L3.964 7.29C4.672 5.163 6.656 3.58 9 3.58z"/>
-      </svg>
-      Continue with Google
+    <button onClick={onClick} style={{ background: 'none', border: 'none', fontSize: 14, fontWeight: strong ? 700 : 500, color: strong ? C.ink : C.muted, cursor: 'pointer', fontFamily: 'inherit', textDecoration: strong ? 'underline' : 'none', padding: 0 }}>
+      {label}
     </button>
   );
 }
 
-/* ── Eye icon ───────────────────────────────────────────────────────────── */
 function Eye({ open }: { open: boolean }) {
   return open ? (
     <svg width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><path d="M1 9s3-6 8-6 8 6 8 6-3 6-8 6-8-6-8-6z"/><circle cx="9" cy="9" r="2.5"/></svg>
@@ -160,53 +129,8 @@ function Eye({ open }: { open: boolean }) {
   );
 }
 
-/* ── Back button ────────────────────────────────────────────────────────── */
-function BackBtn({ onClick }: { onClick: () => void }) {
-  return (
-    <button onClick={onClick} style={{ background: C.glass, border: `1.5px solid ${C.glassBorder}`, borderRadius: 10, cursor: 'pointer', padding: '8px 14px', display: 'inline-flex', alignItems: 'center', gap: 6, color: C.ink, fontSize: 14, fontWeight: 500 }}>
-      <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M11 3l-6 5 6 5"/></svg>
-      Back
-    </button>
-  );
-}
-
-/* ── Circuit SVG hero illustration ─────────────────────────────────────── */
-function CircuitHero() {
-  return (
-    <svg width="200" height="200" viewBox="0 0 200 200" style={{ animation: 'pulse 3s ease-in-out infinite' }}>
-      <defs>
-        <linearGradient id="g1" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stopColor="#6366F1"/>
-          <stop offset="100%" stopColor="#06B6D4"/>
-        </linearGradient>
-        <linearGradient id="g2" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stopColor="#6366F1" stopOpacity="0.2"/>
-          <stop offset="100%" stopColor="#06B6D4" stopOpacity="0.2"/>
-        </linearGradient>
-        <filter id="glow"><feGaussianBlur stdDeviation="2.5" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
-      </defs>
-      {/* grid */}
-      {[40,80,120,160].map(x => <line key={`v${x}`} x1={x} y1="0" x2={x} y2="200" stroke="rgba(99,102,241,0.08)" strokeWidth="1"/>)}
-      {[40,80,120,160].map(y => <line key={`h${y}`} x1="0" y1={y} x2="200" y2={y} stroke="rgba(99,102,241,0.08)" strokeWidth="1"/>)}
-      {/* circuit traces */}
-      <polyline points="40,160 40,120 80,120 80,80 120,80 120,40 160,40" fill="none" stroke="url(#g1)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" filter="url(#glow)"/>
-      <polyline points="40,160 80,160 80,120 120,120 160,120 160,80" fill="none" stroke="rgba(99,102,241,0.3)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-      {/* nodes */}
-      <circle cx="40"  cy="160" r="6" fill="url(#g1)" filter="url(#glow)"/>
-      <circle cx="80"  cy="120" r="4" fill="rgba(99,102,241,0.5)"/>
-      <circle cx="120" cy="80"  r="4" fill="rgba(99,102,241,0.5)"/>
-      <circle cx="160" cy="40"  r="6" fill="url(#g1)" filter="url(#glow)"/>
-      <circle cx="160" cy="80"  r="4" fill="rgba(6,182,212,0.5)"/>
-      {/* halos */}
-      <circle cx="40"  cy="160" r="12" fill="url(#g2)"/>
-      <circle cx="160" cy="40"  r="12" fill="url(#g2)"/>
-    </svg>
-  );
-}
-
-/* ── Wrap ───────────────────────────────────────────────────────────────── */
 const wrapStyle: React.CSSProperties = {
-  minHeight: '100vh', background: C.bg,
+  minHeight: '100vh', background: C.bg, color: C.ink,
   display: 'flex', flexDirection: 'column',
   fontFamily: 'Inter,system-ui,sans-serif',
 };
@@ -227,36 +151,104 @@ export default function AuthFlow() {
   const [privacyConsent, setPrivacyConsent] = useState(false);
   const [forgotEmail, setForgotEmail]     = useState('');
   const [forgotSent, setForgotSent]       = useState(false);
+  const [forgotErr, setForgotErr]         = useState('');
   const [otp, setOtp]                     = useState(['','','','','','']);
+  const [otpErr, setOtpErr]               = useState('');
+  const [otpLoading, setOtpLoading]       = useState(false);
+
+  /* Already signed in? Straight to the app. */
+  useEffect(() => {
+    let active = true;
+    supabaseBrowser.auth.getSession().then(({ data }) => {
+      if (active && data.session) window.location.href = nextUrl();
+    });
+    return () => { active = false; };
+  }, []);
+
+  async function handleLogin() {
+    if (!loginEmail.includes('@')) { setLoginErr('Enter a valid email address'); return; }
+    if (loginPw.length < 6) { setLoginErr('Password must be at least 6 characters'); return; }
+    setLoginLoading(true);
+    const { error } = await supabaseBrowser.auth.signInWithPassword({ email: loginEmail, password: loginPw });
+    setLoginLoading(false);
+    if (error) { setLoginErr(error.message); return; }
+    window.location.href = nextUrl();
+  }
+
+  async function handleSignup() {
+    if (!signupName.trim()) { setSignupErr('Enter your name'); return; }
+    if (!signupEmail.includes('@')) { setSignupErr('Enter a valid email address'); return; }
+    if (signupPw.length < 8) { setSignupErr('Password must be at least 8 characters'); return; }
+    if (!privacyConsent) { setSignupErr('You must accept the Privacy Policy to continue'); return; }
+    setSignupLoading(true);
+    const { data, error } = await supabaseBrowser.auth.signUp({
+      email: signupEmail,
+      password: signupPw,
+      options: { data: { full_name: signupName.trim() } },
+    });
+    setSignupLoading(false);
+    if (error) { setSignupErr(error.message); return; }
+    // Email confirmations off → session issued immediately; on → 6-digit code
+    setScreen(data.session ? 'success' : 'verify');
+  }
+
+  async function handleVerify() {
+    const token = otp.join('');
+    if (token.length < 6) return;
+    setOtpLoading(true);
+    const { error } = await supabaseBrowser.auth.verifyOtp({ type: 'signup', email: signupEmail, token });
+    setOtpLoading(false);
+    if (error) { setOtpErr(error.message); return; }
+    setScreen('success');
+  }
+
+  async function handleForgot() {
+    setForgotErr('');
+    const { error } = await supabaseBrowser.auth.resetPasswordForEmail(forgotEmail, {
+      redirectTo: `${window.location.origin}/auth`,
+    });
+    if (error) { setForgotErr(error.message); return; }
+    setForgotSent(true);
+  }
+
+  async function handleGoogle() {
+    const { error } = await supabaseBrowser.auth.signInWithOAuth({
+      provider: 'google',
+      options: { redirectTo: `${window.location.origin}${nextUrl()}` },
+    });
+    if (error) setLoginErr(`Google sign-in unavailable: ${error.message}`);
+  }
+
+  const backRow = (to: Screen) => (
+    <div style={{ padding: '56px 24px 0' }}>
+      <TextBtn label="← Back" onClick={() => setScreen(to)} />
+    </div>
+  );
 
   /* ── SPLASH ─────────────────────────────────────────────────────────── */
   if (screen === 'splash') return (
     <div style={wrapStyle}>
       <style>{FONT}</style>
-      {/* Hero */}
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '60px 32px 24px', gap: 0 }}>
-        <div style={{ marginBottom: 32, filter: 'drop-shadow(0 0 32px rgba(99,102,241,0.4))' }}>
-          <CircuitHero />
-        </div>
-        <Logo size={36} />
-        <p style={{ fontSize: 15, color: C.muted, marginTop: 10, textAlign: 'center', lineHeight: 1.6, maxWidth: 280 }}>
-          Metro Manila commute intelligence — plan faster, ride smarter.
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: '0 28px' }}>
+        <Logo size={40} />
+        <h1 style={{ margin: '28px 0 0', fontSize: 44, fontWeight: 800, letterSpacing: '-0.04em', lineHeight: 1.05, color: C.ink }}>
+          Know your commute before you leave.
+        </h1>
+        <p style={{ margin: '20px 0 0', fontSize: 16, color: C.body, lineHeight: 1.6, maxWidth: 320 }}>
+          Metro Manila routes, fares, and live trip tracking — MRT, LRT, bus, and jeepney in one plan.
         </p>
-        {/* subtle feature pills */}
-        <div style={{ display: 'flex', gap: 8, marginTop: 24, flexWrap: 'wrap', justifyContent: 'center' }}>
-          {['A* Routing', '2024 Fares', 'MRT · LRT · Bus', 'Jeepney'].map(f => (
-            <span key={f} style={{ fontSize: 11, fontWeight: 600, color: C.accent, background: 'rgba(99,102,241,0.1)', border: '1px solid rgba(99,102,241,0.2)', borderRadius: 20, padding: '4px 10px', letterSpacing: '0.03em' }}>{f}</span>
-          ))}
-        </div>
+        <p style={{ margin: '24px 0 0', fontSize: 12, fontWeight: 600, color: C.muted, letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+          A* routing · 2024 fares · GPS trip companion
+        </p>
       </div>
-
-      {/* CTA sheet */}
-      <div style={{ background: C.surface, borderRadius: '24px 24px 0 0', padding: '28px 24px 44px', display: 'flex', flexDirection: 'column', gap: 12, boxShadow: '0 -1px 0 rgba(255,255,255,0.06)' }}>
-        <PrimaryBtn label="Get started →" onClick={() => setScreen('signup')} />
+      <div style={{ padding: '0 24px 48px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <PrimaryBtn label="Get started" onClick={() => setScreen('signup')} />
         <GhostBtn label="I already have an account" onClick={() => setScreen('login')} />
-        <p style={{ fontSize: 11, color: C.muted, textAlign: 'center', lineHeight: 1.6 }}>
-          By continuing you agree to our{' '}
-          <a href="/privacy" style={{ color: C.accent, textDecoration: 'none', fontWeight: 600 }}>Privacy Policy</a>.
+        <a href="/planner" style={{ textAlign: 'center', fontSize: 14, fontWeight: 600, color: C.muted, textDecoration: 'none', padding: '10px 0' }}>
+          Continue as guest →
+        </a>
+        <p style={{ fontSize: 12, color: C.muted, textAlign: 'center', lineHeight: 1.6 }}>
+          By continuing you agree to our <a href="/privacy" style={{ color: C.ink, fontWeight: 600 }}>Privacy Policy</a>.
         </p>
       </div>
     </div>
@@ -266,38 +258,29 @@ export default function AuthFlow() {
   if (screen === 'login') return (
     <div style={wrapStyle}>
       <style>{FONT}</style>
-      <div style={{ padding: '56px 24px 0' }}><BackBtn onClick={() => setScreen('splash')} /></div>
-      <div style={{ flex: 1, padding: '28px 24px', display: 'flex', flexDirection: 'column', gap: 0 }}>
-        <div className="fade-up" style={{ marginBottom: 32 }}>
-          <Logo size={26} />
-          <p style={{ fontSize: 26, fontWeight: 700, color: C.ink, letterSpacing: '-0.03em', marginTop: 20, marginBottom: 4 }}>Welcome back</p>
-          <p style={{ fontSize: 14, color: C.muted }}>Sign in to continue planning</p>
-        </div>
-        <div className="fade-up" style={{ display: 'flex', flexDirection: 'column', gap: 16, marginBottom: 10, animationDelay: '0.05s' }}>
-          <Input label="Email" type="email" value={loginEmail} onChange={v => { setLoginEmail(v); setLoginErr(''); }} placeholder="you@email.com" error={loginErr && loginErr.includes('email') ? loginErr : ''} />
-          <Input label="Password" type={showPw ? 'text' : 'password'} value={loginPw} onChange={v => { setLoginPw(v); setLoginErr(''); }} placeholder="••••••••"
-            error={loginErr && !loginErr.includes('email') ? loginErr : ''}
-            rightEl={<span onClick={() => setShowPw(!showPw)} style={{ color: C.muted }}><Eye open={showPw}/></span>}
+      {backRow('splash')}
+      <div style={{ flex: 1, padding: '32px 24px', display: 'flex', flexDirection: 'column' }}>
+        <h1 style={{ margin: 0, fontSize: 34, fontWeight: 800, letterSpacing: '-0.04em', color: C.ink }}>Sign in</h1>
+        <p style={{ margin: '8px 0 36px', fontSize: 15, color: C.body }}>Plan faster with saved commutes.</p>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+          <Field label="Email" type="email" autoComplete="email" value={loginEmail} onChange={v => { setLoginEmail(v); setLoginErr(''); }} placeholder="you@email.com" />
+          <Field label="Password" type={showPw ? 'text' : 'password'} autoComplete="current-password" value={loginPw} onChange={v => { setLoginPw(v); setLoginErr(''); }} placeholder="••••••••"
+            error={loginErr}
+            rightEl={<span onClick={() => setShowPw(!showPw)}><Eye open={showPw}/></span>}
           />
         </div>
-        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 24 }}>
-          <button onClick={() => setScreen('forgot')} style={{ background: 'none', border: 'none', fontSize: 13, color: C.accent, cursor: 'pointer', fontFamily: 'inherit', fontWeight: 600 }}>Forgot password?</button>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', margin: '14px 0 28px' }}>
+          <TextBtn label="Forgot password?" onClick={() => setScreen('forgot')} strong />
         </div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 24 }}>
-          <PrimaryBtn label="Sign in" loading={loginLoading} disabled={!loginEmail || !loginPw}
-            onClick={() => {
-              if (!loginEmail.includes('@')) { setLoginErr('Enter a valid email address'); return; }
-              if (loginPw.length < 6) { setLoginErr('Password must be at least 6 characters'); return; }
-              setLoginLoading(true);
-              setTimeout(() => { setLoginLoading(false); window.location.href = '/planner'; }, 1400);
-            }}
-          />
-          <Divider label="or continue with" />
-          <GoogleBtn />
+        <PrimaryBtn label="Sign in" loading={loginLoading} disabled={!loginEmail || !loginPw} onClick={handleLogin} />
+        <div style={{ margin: '18px 0' }}>
+          <GhostBtn label="Continue with Google" onClick={handleGoogle} />
         </div>
-        <p style={{ fontSize: 14, color: C.muted, textAlign: 'center', marginTop: 'auto' }}>
-          Don&apos;t have an account?{' '}
-          <button onClick={() => setScreen('signup')} style={{ background: 'none', border: 'none', color: C.accent, fontWeight: 700, cursor: 'pointer', fontSize: 14, fontFamily: 'inherit' }}>Sign up</button>
+        <p style={{ fontSize: 13, color: C.muted, lineHeight: 1.7 }}>
+          Demo account — email <strong style={{ color: C.body }}>{DEMO_EMAIL}</strong> · password <strong style={{ color: C.body }}>{DEMO_PASSWORD}</strong>
+        </p>
+        <p style={{ fontSize: 14, color: C.body, textAlign: 'center', marginTop: 'auto', paddingTop: 24 }}>
+          No account yet? <TextBtn label="Sign up" onClick={() => setScreen('signup')} strong />
         </p>
       </div>
     </div>
@@ -307,60 +290,34 @@ export default function AuthFlow() {
   if (screen === 'signup') return (
     <div style={wrapStyle}>
       <style>{FONT}</style>
-      <div style={{ padding: '56px 24px 0' }}><BackBtn onClick={() => setScreen('splash')} /></div>
-      <div style={{ flex: 1, padding: '28px 24px', display: 'flex', flexDirection: 'column', overflowY: 'auto' }}>
-        <div className="fade-up" style={{ marginBottom: 28 }}>
-          <Logo size={26} />
-          <p style={{ fontSize: 26, fontWeight: 700, color: C.ink, letterSpacing: '-0.03em', marginTop: 20, marginBottom: 4 }}>Create account</p>
-          <p style={{ fontSize: 14, color: C.muted }}>Plan your commute smarter</p>
-        </div>
-        <div className="fade-up" style={{ display: 'flex', flexDirection: 'column', gap: 14, marginBottom: 20, animationDelay: '0.05s' }}>
-          <Input label="Full name" value={signupName} onChange={v => { setSignupName(v); setSignupErr(''); }} placeholder="Juan dela Cruz" error={signupErr && signupErr.includes('name') ? signupErr : ''} />
-          <Input label="Email" type="email" value={signupEmail} onChange={v => { setSignupEmail(v); setSignupErr(''); }} placeholder="you@email.com" error={signupErr && signupErr.includes('email') ? signupErr : ''} />
-          <div>
-            <Input label="Password" type={showPw2 ? 'text' : 'password'} value={signupPw} onChange={v => { setSignupPw(v); setSignupErr(''); }}
-              placeholder="At least 8 characters"
-              error={signupErr && !signupErr.includes('name') && !signupErr.includes('email') ? signupErr : ''}
-              hint={signupPw.length > 0 && signupPw.length < 8 ? `${8 - signupPw.length} more characters needed` : ''}
-              rightEl={<span onClick={() => setShowPw2(!showPw2)}><Eye open={showPw2}/></span>}
-            />
-            {signupPw.length > 0 && (
-              <div style={{ display: 'flex', gap: 4, marginTop: 8 }}>
-                {[0,1,2,3].map(i => {
-                  const filled = i < Math.min(Math.floor(signupPw.length / 2), 4);
-                  const col = signupPw.length < 6 ? C.error : signupPw.length < 10 ? '#F97316' : C.green;
-                  return <div key={i} style={{ flex: 1, height: 3, borderRadius: 2, transition: 'background 0.25s', background: filled ? col : C.card }} />;
-                })}
-              </div>
-            )}
-          </div>
-        </div>
-        {/* Privacy consent */}
-        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, marginBottom: 20, padding: '12px 14px', borderRadius: 12, background: C.glass, border: `1px solid ${C.glassBorder}` }}>
-          <input type="checkbox" id="consent" checked={privacyConsent} onChange={e => setPrivacyConsent(e.target.checked)} style={{ marginTop: 2, accentColor: 'var(--color-accent)', cursor: 'pointer', flexShrink: 0, width: 16, height: 16 }} />
-          <label htmlFor="consent" style={{ fontSize: 12, color: C.body, lineHeight: 1.6, cursor: 'pointer' }}>
-            I have read and agree to the{' '}
-            <a href="/privacy" target="_blank" rel="noopener noreferrer" style={{ color: C.accent, fontWeight: 600, textDecoration: 'none' }}>Privacy Policy</a>.
-            ParaPo stores anonymised (geohashed) search logs for up to 90 days.
-          </label>
-        </div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 20 }}>
-          <PrimaryBtn label="Create account" loading={signupLoading} disabled={!signupName || !signupEmail || !signupPw || !privacyConsent}
-            onClick={() => {
-              if (!signupName.trim()) { setSignupErr('Enter your name'); return; }
-              if (!signupEmail.includes('@')) { setSignupErr('Enter a valid email address'); return; }
-              if (signupPw.length < 8) { setSignupErr('Password must be at least 8 characters'); return; }
-              if (!privacyConsent) { setSignupErr('You must accept the Privacy Policy to continue'); return; }
-              setSignupLoading(true);
-              setTimeout(() => { setSignupLoading(false); setScreen('verify'); }, 1400);
-            }}
+      {backRow('splash')}
+      <div style={{ flex: 1, padding: '32px 24px', display: 'flex', flexDirection: 'column', overflowY: 'auto' }}>
+        <h1 style={{ margin: 0, fontSize: 34, fontWeight: 800, letterSpacing: '-0.04em', color: C.ink }}>Create account</h1>
+        <p style={{ margin: '8px 0 32px', fontSize: 15, color: C.body }}>Save commutes and trip history.</p>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 22 }}>
+          <Field label="Full name" autoComplete="name" value={signupName} onChange={v => { setSignupName(v); setSignupErr(''); }} placeholder="Juan dela Cruz" />
+          <Field label="Email" type="email" autoComplete="email" value={signupEmail} onChange={v => { setSignupEmail(v); setSignupErr(''); }} placeholder="you@email.com" />
+          <Field label="Password" type={showPw2 ? 'text' : 'password'} autoComplete="new-password" value={signupPw} onChange={v => { setSignupPw(v); setSignupErr(''); }}
+            placeholder="At least 8 characters"
+            error={signupErr}
+            hint={signupPw.length > 0 && signupPw.length < 8 ? `${8 - signupPw.length} more characters needed` : ''}
+            rightEl={<span onClick={() => setShowPw2(!showPw2)}><Eye open={showPw2}/></span>}
           />
-          <Divider label="or sign up with" />
-          <GoogleBtn />
         </div>
-        <p style={{ fontSize: 14, color: C.muted, textAlign: 'center' }}>
-          Already have an account?{' '}
-          <button onClick={() => setScreen('login')} style={{ background: 'none', border: 'none', color: C.accent, fontWeight: 700, cursor: 'pointer', fontSize: 14, fontFamily: 'inherit' }}>Sign in</button>
+        <label htmlFor="consent" style={{ display: 'flex', alignItems: 'flex-start', gap: 10, margin: '26px 0', cursor: 'pointer' }}>
+          <input type="checkbox" id="consent" checked={privacyConsent} onChange={e => setPrivacyConsent(e.target.checked)} style={{ marginTop: 3, accentColor: C.ink, cursor: 'pointer', flexShrink: 0, width: 16, height: 16 }} />
+          <span style={{ fontSize: 13, color: C.body, lineHeight: 1.6 }}>
+            I have read and agree to the{' '}
+            <a href="/privacy" target="_blank" rel="noopener noreferrer" style={{ color: C.ink, fontWeight: 600 }}>Privacy Policy</a>.
+            ParaPo stores anonymised (geohashed) search logs for up to 90 days.
+          </span>
+        </label>
+        <PrimaryBtn label="Create account" loading={signupLoading} disabled={!signupName || !signupEmail || !signupPw || !privacyConsent} onClick={handleSignup} />
+        <div style={{ margin: '14px 0' }}>
+          <GhostBtn label="Sign up with Google" onClick={handleGoogle} />
+        </div>
+        <p style={{ fontSize: 14, color: C.body, textAlign: 'center', paddingTop: 8 }}>
+          Already have an account? <TextBtn label="Sign in" onClick={() => setScreen('login')} strong />
         </p>
       </div>
     </div>
@@ -370,35 +327,27 @@ export default function AuthFlow() {
   if (screen === 'forgot') return (
     <div style={wrapStyle}>
       <style>{FONT}</style>
-      <div style={{ padding: '56px 24px 0' }}><BackBtn onClick={() => setScreen('login')} /></div>
-      <div style={{ flex: 1, padding: '28px 24px', display: 'flex', flexDirection: 'column' }}>
-        <div style={{ width: 56, height: 56, borderRadius: 16, background: 'rgba(99,102,241,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 20, border: '1px solid rgba(99,102,241,0.2)' }}>
-          <svg width="26" height="26" fill="none" stroke={C.accent} strokeWidth="1.8" strokeLinecap="round">
-            <rect x="4" y="11" width="18" height="13" rx="2"/>
-            <path d="M8 11V7a5 5 0 0110 0v4"/>
-            <circle cx="13" cy="17" r="1.5" fill={C.accent} stroke="none"/>
-            <line x1="13" y1="18.5" x2="13" y2="20.5"/>
-          </svg>
-        </div>
-        <p style={{ fontSize: 26, fontWeight: 700, color: C.ink, letterSpacing: '-0.02em', marginBottom: 8 }}>
-          {forgotSent ? 'Check your email' : 'Forgot password?'}
-        </p>
-        <p style={{ fontSize: 14, color: C.muted, marginBottom: 32, lineHeight: 1.7 }}>
+      {backRow('login')}
+      <div style={{ flex: 1, padding: '32px 24px', display: 'flex', flexDirection: 'column' }}>
+        <h1 style={{ margin: 0, fontSize: 34, fontWeight: 800, letterSpacing: '-0.04em', color: C.ink }}>
+          {forgotSent ? 'Check your email' : 'Reset password'}
+        </h1>
+        <p style={{ margin: '10px 0 36px', fontSize: 15, color: C.body, lineHeight: 1.7 }}>
           {forgotSent
             ? `We sent a reset link to ${forgotEmail}. Check your inbox and spam folder.`
             : "Enter your email and we'll send you a reset link."}
         </p>
         {!forgotSent ? (
           <>
-            <div style={{ marginBottom: 20 }}>
-              <Input label="Email" type="email" value={forgotEmail} onChange={setForgotEmail} placeholder="you@email.com" />
+            <div style={{ marginBottom: 28 }}>
+              <Field label="Email" type="email" autoComplete="email" value={forgotEmail} onChange={setForgotEmail} placeholder="you@email.com" error={forgotErr} />
             </div>
-            <PrimaryBtn label="Send reset link" disabled={!forgotEmail.includes('@')} onClick={() => setForgotSent(true)} />
+            <PrimaryBtn label="Send reset link" disabled={!forgotEmail.includes('@')} onClick={handleForgot} />
           </>
         ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
             <PrimaryBtn label="Back to sign in" onClick={() => setScreen('login')} />
-            <button onClick={() => setForgotSent(false)} style={{ background: 'none', border: 'none', fontSize: 14, color: C.muted, cursor: 'pointer', fontFamily: 'inherit', padding: '10px 0', textAlign: 'center' }}>Resend email</button>
+            <TextBtn label="Resend email" onClick={() => setForgotSent(false)} />
           </div>
         )}
       </div>
@@ -410,32 +359,25 @@ export default function AuthFlow() {
     <div style={wrapStyle}>
       <style>{`${FONT}
         .otp-box{
-          width:46px;height:56px;border:1.5px solid var(--color-glass-border);
-          border-radius:12px;text-align:center;font-size:22px;font-weight:700;
-          color:var(--color-ink);background:var(--color-glass);
-          font-family:inherit;transition:border-color 0.15s,box-shadow 0.15s;
-          backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);
+          width:46px;height:58px;border:none;border-bottom:2px solid var(--color-border);
+          text-align:center;font-size:24px;font-weight:700;
+          color:var(--color-ink);background:transparent;
+          font-family:inherit;transition:border-color 0.15s;border-radius:0;
         }
-        .otp-box:focus{outline:none;border-color:var(--color-accent);box-shadow:0 0 0 3px rgba(99,102,241,0.15);}
+        .otp-box:focus{outline:none;border-bottom-color:var(--color-ink);}
       `}</style>
-      <div style={{ padding: '56px 24px 0' }}><BackBtn onClick={() => setScreen('signup')} /></div>
-      <div style={{ flex: 1, padding: '28px 24px', display: 'flex', flexDirection: 'column' }}>
-        <div style={{ width: 56, height: 56, borderRadius: 16, background: 'rgba(16,185,129,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 20, border: '1px solid rgba(16,185,129,0.2)' }}>
-          <svg width="26" height="26" fill="none" stroke={C.green} strokeWidth="1.8" strokeLinecap="round">
-            <rect x="3" y="7" width="20" height="14" rx="2"/>
-            <path d="M3 9l10 7 10-7"/>
-          </svg>
-        </div>
-        <p style={{ fontSize: 26, fontWeight: 700, color: C.ink, letterSpacing: '-0.02em', marginBottom: 8 }}>Verify your email</p>
-        <p style={{ fontSize: 14, color: C.muted, marginBottom: 32, lineHeight: 1.7 }}>
+      {backRow('signup')}
+      <div style={{ flex: 1, padding: '32px 24px', display: 'flex', flexDirection: 'column' }}>
+        <h1 style={{ margin: 0, fontSize: 34, fontWeight: 800, letterSpacing: '-0.04em', color: C.ink }}>Verify your email</h1>
+        <p style={{ margin: '10px 0 36px', fontSize: 15, color: C.body, lineHeight: 1.7 }}>
           We sent a 6-digit code to <strong style={{ color: C.ink }}>{signupEmail || 'your email'}</strong>.
         </p>
-        <div style={{ display: 'flex', gap: 8, justifyContent: 'center', marginBottom: 32 }}>
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'center', marginBottom: 12 }}>
           {otp.map((digit, i) => (
             <input key={i} className="otp-box" type="text" inputMode="numeric" maxLength={1} value={digit}
               onChange={e => {
                 const val = e.target.value.replace(/\D/g,'');
-                const next = [...otp]; next[i] = val; setOtp(next);
+                const next = [...otp]; next[i] = val; setOtp(next); setOtpErr('');
                 if (val && i < 5) { const els = document.querySelectorAll('.otp-box') as NodeListOf<HTMLInputElement>; els[i+1]?.focus(); }
               }}
               onKeyDown={e => {
@@ -444,11 +386,12 @@ export default function AuthFlow() {
             />
           ))}
         </div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          <PrimaryBtn label="Verify account" disabled={otp.join('').length < 6} onClick={() => setScreen('success')} />
-          <button style={{ background: 'none', border: 'none', fontSize: 14, color: C.muted, cursor: 'pointer', fontFamily: 'inherit', padding: '10px 0', textAlign: 'center' }}>
-            Didn&apos;t receive it? <span style={{ color: C.accent, fontWeight: 600 }}>Resend code</span>
-          </button>
+        {otpErr && <p style={{ margin: '0 0 12px', fontSize: 13, fontWeight: 600, color: C.error, textAlign: 'center' }}>{otpErr}</p>}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 14, marginTop: 16 }}>
+          <PrimaryBtn label="Verify account" loading={otpLoading} disabled={otp.join('').length < 6} onClick={handleVerify} />
+          <TextBtn label="Didn't receive it? Resend code" onClick={async () => {
+            await supabaseBrowser.auth.resend({ type: 'signup', email: signupEmail });
+          }} />
         </div>
       </div>
     </div>
@@ -458,36 +401,16 @@ export default function AuthFlow() {
   return (
     <div style={{ ...wrapStyle, alignItems: 'center', justifyContent: 'center' }}>
       <style>{FONT}</style>
-      <div className="fade-up" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 20, padding: '0 32px', textAlign: 'center', maxWidth: 360, width: '100%' }}>
-        {/* Success ring */}
-        <div style={{ position: 'relative', width: 80, height: 80 }}>
-          <div style={{ width: 80, height: 80, borderRadius: '50%', background: 'rgba(16,185,129,0.1)', border: '1.5px solid rgba(16,185,129,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <svg width="38" height="38" fill="none" stroke={C.green} strokeWidth="2.5" strokeLinecap="round"><path d="M9 19l8 8L30 10"/></svg>
-          </div>
-          <div style={{ position: 'absolute', inset: -8, borderRadius: '50%', border: '1px solid rgba(16,185,129,0.15)', animation: 'pulse 2s ease-in-out infinite' }} />
-        </div>
-        <div>
-          <Logo size={24} />
-          <p style={{ fontSize: 24, fontWeight: 700, color: C.ink, letterSpacing: '-0.02em', marginTop: 16, marginBottom: 8 }}>
-            You&apos;re all set{signupName ? `, ${signupName.split(' ')[0]}` : ''}!
-          </p>
-          <p style={{ fontSize: 14, color: C.muted, lineHeight: 1.7 }}>
-            Your account is ready. Start planning your first commute.
-          </p>
-        </div>
-        <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 10, marginTop: 8 }}>
-          <a href="/planner" style={{
-            display: 'block', textDecoration: 'none', borderRadius: 12,
-            padding: '15px', fontSize: 15, fontWeight: 700, textAlign: 'center',
-            background: 'var(--gradient-primary)', color: '#fff',
-            boxShadow: '0 4px 20px rgba(99,102,241,0.35)', letterSpacing: '-0.01em',
-          }}>
-            Start planning →
-          </a>
-          <button onClick={() => { setScreen('splash'); setSignupName(''); setSignupEmail(''); setSignupPw(''); setLoginEmail(''); setLoginPw(''); setOtp(['','','','','','']); }}
-            style={{ background: 'none', border: 'none', fontSize: 13, color: C.muted, cursor: 'pointer', fontFamily: 'inherit', padding: '8px 0' }}>
-            Use a different account
-          </button>
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, padding: '0 32px', textAlign: 'center', maxWidth: 360, width: '100%' }}>
+        <span style={{ fontSize: 15, fontWeight: 800, letterSpacing: '0.1em', textTransform: 'uppercase', color: C.accent }}>✓ Account ready</span>
+        <h1 style={{ margin: '10px 0 0', fontSize: 34, fontWeight: 800, letterSpacing: '-0.04em', color: C.ink }}>
+          You&apos;re all set{signupName ? `, ${signupName.split(' ')[0]}` : ''}.
+        </h1>
+        <p style={{ margin: '10px 0 0', fontSize: 15, color: C.body, lineHeight: 1.7 }}>
+          Start planning your first commute.
+        </p>
+        <div style={{ width: '100%', marginTop: 28 }}>
+          <PrimaryBtn label="Start planning →" onClick={() => { window.location.href = nextUrl(); }} />
         </div>
       </div>
     </div>

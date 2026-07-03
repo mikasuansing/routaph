@@ -16,6 +16,23 @@ export const DEFAULT_FARE_RULES: FareRule[] = [
 ];
 
 /**
+ * Resolve the fare rule that applies to a boarding: line-specific first,
+ * then the mode-wide default.
+ */
+export function findFareRule(
+  mode: Mode,
+  lineId: number,
+  rules: FareRule[],
+): FareRule | null {
+  if (mode === 'walk') return null;
+  return (
+    rules.find(r => r.lineId === lineId && r.mode === mode) ??
+    rules.find(r => r.lineId === null  && r.mode === mode) ??
+    null
+  );
+}
+
+/**
  * Compute the FULL BOARDING fare for a ride leg.
  * Must be called once per boarding (not once per edge/segment).
  */
@@ -25,12 +42,7 @@ export function computeFare(
   lineId: number,
   rules: FareRule[],
 ): number {
-  if (mode === 'walk') return 0;
-
-  const rule =
-    rules.find(r => r.lineId === lineId && r.mode === mode) ??
-    rules.find(r => r.lineId === null  && r.mode === mode);
-
+  const rule = findFareRule(mode, lineId, rules);
   if (!rule) return 0;
 
   const flag = rule.flagDistanceKm ?? 4;

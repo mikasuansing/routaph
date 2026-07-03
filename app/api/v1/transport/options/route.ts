@@ -2,7 +2,6 @@ import { type NextRequest } from 'next/server';
 import { z } from 'zod';
 import { Errors, ok } from '@/lib/api/envelope';
 import { haversineKm } from '@/lib/routing/utils';
-import { requireAuthenticatedUser } from '@/lib/auth/guards';
 
 export const dynamic = 'force-dynamic';
 
@@ -64,10 +63,8 @@ function estimateEta(distKm: number) {
   };
 }
 
+// Guest-accessible — ride options are shown mid-trip without an account.
 export async function GET(req: NextRequest) {
-  const userOrError = await requireAuthenticatedUser(req);
-  if (userOrError instanceof Response) return userOrError;
-
   const { searchParams } = new URL(req.url);
   const parsed = querySchema.safeParse({
     originLat: searchParams.get('originLat'),

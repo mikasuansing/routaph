@@ -1,3 +1,4 @@
+
 # ParaPo — Agent & Contributor Rules
 
 > Canonical spec lives in `BASELINE.md`. When code and `BASELINE.md` disagree, fix one on purpose — never drift silently.

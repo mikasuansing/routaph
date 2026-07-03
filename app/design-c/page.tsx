@@ -36,18 +36,18 @@ export default function DesignC() {
   }
 
   return (
-    <div style={{ minHeight: '100vh', background: '#fafaf8', fontFamily: '"Inter",ui-sans-serif,system-ui,sans-serif' }}>
+    <div style={{ minHeight: '100vh', background: '#050913', color: '#e2e8f0', fontFamily: '"Inter",ui-sans-serif,system-ui,sans-serif' }}>
 
       {/* Top stripe — jeepney colors */}
       <div style={{ height: 4, background: `linear-gradient(90deg, ${JEEPNEY_RED} 0%, ${JEEPNEY_RED} 33%, ${JEEPNEY_YELLOW} 33%, ${JEEPNEY_YELLOW} 66%, #1a56db 66%, #1a56db 100%)` }} />
 
       <header style={{
-        background: '#fff', borderBottom: '1px solid #ebebeb',
+        background: '#0f172a', borderBottom: '1px solid rgba(255,255,255,0.08)',
         padding: '0 32px', height: 54,
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <span style={{ fontSize: 20, fontWeight: 900, letterSpacing: '-0.04em', color: '#0f0f0f' }}>Para</span>
+          <span style={{ fontSize: 20, fontWeight: 900, letterSpacing: '-0.04em', color: '#f8fafc' }}>Para</span>
           <span style={{ fontSize: 20, fontWeight: 900, letterSpacing: '-0.04em', color: JEEPNEY_RED }}>Po</span>
           <div style={{ width: 1, height: 18, background: '#ebebeb', margin: '0 6px' }} />
           <span style={{ fontSize: 12, color: '#888', fontWeight: 500 }}>Metro Manila Routes</span>
@@ -62,7 +62,7 @@ export default function DesignC() {
       {/* Split layout */}
       <div style={{ display: 'grid', gridTemplateColumns: '380px 1fr', minHeight: 'calc(100vh - 62px)' }}>
         {/* Left sidebar - planner */}
-        <aside style={{ background: '#fff', borderRight: '1px solid #ebebeb', padding: 28, display: 'flex', flexDirection: 'column', gap: 20 }}>
+        <aside style={{ background: '#0f172a', borderRight: '1px solid rgba(255,255,255,0.08)', padding: 28, display: 'flex', flexDirection: 'column', gap: 20 }}>
           <div>
             <h2 style={{ fontSize: 22, fontWeight: 800, letterSpacing: '-0.03em', color: '#0f0f0f', marginBottom: 4 }}>Plan your commute</h2>
             <p style={{ fontSize: 13, color: '#888', lineHeight: 1.5 }}>Select two stops on the same corridor.</p>
@@ -74,12 +74,12 @@ export default function DesignC() {
               <div style={{ width: 20, height: 20, borderRadius: '50%', background: '#1a56db', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#fff' }} />
               </div>
-              <label style={{ fontSize: 12, fontWeight: 700, color: '#0f0f0f', letterSpacing: '0.02em', textTransform: 'uppercase' }}>From</label>
+              <label style={{ fontSize: 12, fontWeight: 700, color: '#f8fafc', letterSpacing: '0.02em', textTransform: 'uppercase' }}>From</label>
             </div>
             <select value={from} onChange={e => setFrom(e.target.value)} style={{
-              width: '100%', border: '1.5px solid #ebebeb', borderRadius: 8,
-              padding: '11px 14px', fontSize: 14, color: '#0f0f0f',
-              background: '#fafaf8', outline: 'none', cursor: 'pointer',
+              width: '100%', border: '1.5px solid rgba(255,255,255,0.08)', borderRadius: 8,
+              padding: '11px 14px', fontSize: 14, color: '#f8fafc',
+              background: 'rgba(255,255,255,0.06)', outline: 'none', cursor: 'pointer',
               fontWeight: 500,
             }}>
               <option value="">Pick a stop</option>
@@ -104,12 +104,12 @@ export default function DesignC() {
               <div style={{ width: 20, height: 20, borderRadius: '50%', background: JEEPNEY_RED, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#fff' }} />
               </div>
-              <label style={{ fontSize: 12, fontWeight: 700, color: '#0f0f0f', letterSpacing: '0.02em', textTransform: 'uppercase' }}>To</label>
+              <label style={{ fontSize: 12, fontWeight: 700, color: '#f8fafc', letterSpacing: '0.02em', textTransform: 'uppercase' }}>To</label>
             </div>
             <select value={to} onChange={e => setTo(e.target.value)} style={{
-              width: '100%', border: '1.5px solid #ebebeb', borderRadius: 8,
-              padding: '11px 14px', fontSize: 14, color: '#0f0f0f',
-              background: '#fafaf8', outline: 'none', cursor: 'pointer',
+              width: '100%', border: '1.5px solid rgba(255,255,255,0.08)', borderRadius: 8,
+              padding: '11px 14px', fontSize: 14, color: '#f8fafc',
+              background: 'rgba(255,255,255,0.06)', outline: 'none', cursor: 'pointer',
               fontWeight: 500,
             }}>
               <option value="">Pick a stop</option>

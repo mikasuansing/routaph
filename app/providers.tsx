@@ -19,10 +19,10 @@ export function useTheme() {
 }
 
 function resolveInitialTheme(): Theme {
-  if (typeof window === 'undefined') return 'light';
+  if (typeof window === 'undefined') return 'dark';
   const stored = localStorage.getItem('parapo-theme') as Theme | null;
   if (stored === 'light' || stored === 'dark') return stored;
-  return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  return 'dark';
 }
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {

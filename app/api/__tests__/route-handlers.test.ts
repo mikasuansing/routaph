@@ -68,13 +68,16 @@ describe('POST /api/v1/routes/plan', () => {
     ({ POST } = await import('../v1/routes/plan/route'));
   });
 
-  it('returns 401 when unauthenticated', async () => {
+  it('returns 400 when all four modes are excluded', async () => {
     const req = makeRequest('POST', {
-      origin: { lat: 14.55, lng: 121.0 },
-      destination: { lat: 14.62, lng: 121.05 },
+      origin:       { lat: 14.55, lng: 121.0 },
+      destination:  { lat: 14.62, lng: 121.05 },
+      excludeModes: ['jeepney', 'bus', 'mrt', 'lrt'],
     });
     const res = await POST(req);
-    expect(res.status).toBe(401);
+    expect(res.status).toBe(400);
+    const json = await res.json();
+    expect(json.error.code).toBe('validation_error');
   });
 
   it('returns 400 when body is missing required fields', async () => {
@@ -128,19 +131,27 @@ describe('POST /api/v1/routes/reroute', () => {
     ({ POST } = await import('../v1/routes/reroute/route'));
   });
 
-  it('returns 401 when unauthenticated', async () => {
+  it('returns 400 when body is missing required fields', async () => {
+    const req = makeRequest('POST', { origin: { lat: 14.55, lng: 121.0 } });
+    const res = await POST(req);
+    expect(res.status).toBe(400);
+    const json = await res.json();
+    expect(json.error.code).toBe('validation_error');
+  });
+
+  it('is guest-accessible: returns 404 no_route (not 401) with mocked empty graph', async () => {
     const req = makeRequest('POST', {
-      origin: { lat: 14.55, lng: 121.0 },
+      origin:      { lat: 14.55, lng: 121.0 },
       destination: { lat: 14.62, lng: 121.05 },
     });
     const res = await POST(req);
-    expect(res.status).toBe(401);
+    expect(res.status).toBe(404);
   });
 });
 
-// ── GET /api/v1/transport/options ────────────────────────────────────────────
+// ── GET /api/v1/transport/options (guest access) ─────────────────────────────
 
-describe('GET /api/v1/transport/options', () => {
+describe('GET /api/v1/transport/options (guest access)', () => {
   let GET: (req: NextRequest) => Promise<Response>;
 
   beforeEach(async () => {
@@ -148,11 +159,11 @@ describe('GET /api/v1/transport/options', () => {
     ({ GET } = await import('../v1/transport/options/route'));
   });
 
-  it('returns 401 when unauthenticated', async () => {
-    const url = 'http://localhost:3000/api/v1/transport/options?originLat=14.55&originLng=121.0&destLat=14.62&destLng=121.05';
+  it('returns 400 when coordinates are out of range', async () => {
+    const url = 'http://localhost:3000/api/v1/transport/options?originLat=95&originLng=121.0&destLat=14.62&destLng=121.05';
     const req = new NextRequest(url);
     const res = await GET(req);
-    expect(res.status).toBe(401);
+    expect(res.status).toBe(400);
   });
 });
 
