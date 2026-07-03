@@ -15,6 +15,7 @@ import { distToNextStop, etaToNextStop } from '@/lib/trip/geo';
 
 const C = {
   bg:     'var(--color-bg)',
+  card:   'var(--color-card)',
   cardEl: 'var(--color-card-el)',
   border: 'var(--color-border)',
   muted:  'var(--color-muted)',
@@ -25,13 +26,15 @@ const C = {
 };
 
 const GLOBAL = `
-@import url('https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,400;0,14..32,500;0,14..32,600;0,14..32,700;0,14..32,800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,400;0,14..32,500;0,14..32,600;0,14..32,700;0,14..32,800&family=Baloo+2:wght@600;700;800&display=swap');
 *{box-sizing:border-box;-webkit-font-smoothing:antialiased;}
-body{font-family:'Inter',system-ui,sans-serif;}
+body{font-family:var(--font-sans);}
 button:active{opacity:0.85;}
 .tnum{font-variant-numeric:tabular-nums;}
 @keyframes pulse{0%,100%{opacity:.4}50%{opacity:1}}
 `;
+
+const DISPLAY = 'var(--font-display)';
 
 function Micro({ children, color, style }: { children: React.ReactNode; color?: string; style?: React.CSSProperties }) {
   return (
@@ -98,7 +101,7 @@ function TripScreen() {
       <div style={{ minHeight: '100vh', background: C.bg, color: C.ink, display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: '0 28px', fontFamily: 'Inter,system-ui,sans-serif' }}>
         <style>{GLOBAL}</style>
         <Micro color={C.accent}>✓ Trip complete</Micro>
-        <h1 style={{ margin: '14px 0 0', fontSize: 42, fontWeight: 800, letterSpacing: '-0.04em', lineHeight: 1.05 }}>
+        <h1 style={{ margin: '14px 0 0', fontFamily: DISPLAY, fontSize: 42, fontWeight: 800, letterSpacing: '-0.02em', lineHeight: 1.1 }}>
           You&apos;ve arrived.
         </h1>
         {trip.itinerary && (
@@ -107,7 +110,7 @@ function TripScreen() {
           </p>
         )}
         <button
-          style={{ marginTop: 36, padding: '17px', background: 'var(--gradient-primary)', color: C.onPrimary, border: 'none', borderRadius: 2, fontSize: 15, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', width: '100%' }}
+          style={{ marginTop: 36, padding: '17px', background: 'var(--gradient-primary)', color: C.onPrimary, border: 'none', borderRadius: 999, fontSize: 15, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', width: '100%', boxShadow: '0 6px 18px rgba(41,71,222,0.25)' }}
           onClick={() => { trip.endTrip(); router.replace('/planner'); }}
         >
           Plan another trip
@@ -139,10 +142,10 @@ function TripScreen() {
       {/* Header */}
       <header style={{ padding: '52px 24px 18px', display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between' }}>
         <div>
-          <span style={{ fontSize: 15, fontWeight: 800, letterSpacing: '-0.05em', color: C.ink }}>
-            ParaPo<span style={{ color: C.accent }}>.</span>
+          <span style={{ fontFamily: DISPLAY, fontSize: 16, fontWeight: 800, letterSpacing: '-0.02em', color: C.accent }}>
+            ParaPo<span style={{ color: C.ink }}>.</span>
           </span>
-          <h1 style={{ margin: '4px 0 0', fontSize: 26, fontWeight: 800, letterSpacing: '-0.03em' }}>Trip in progress</h1>
+          <h1 style={{ margin: '4px 0 0', fontFamily: DISPLAY, fontSize: 28, fontWeight: 800, letterSpacing: '-0.02em' }}>Trip in progress</h1>
           {/* Live status — the single accent marks a live GPS fix */}
           <p style={{ margin: '6px 0 0', fontSize: 12, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: position ? C.accent : C.muted }}>
             {position
@@ -185,9 +188,9 @@ function TripScreen() {
 
         {/* Current leg — the glance */}
         {currentLeg && (
-          <section style={{ marginBottom: 28 }}>
-            <Micro>Now · {modeTag(currentLeg)}</Micro>
-            <p style={{ margin: '8px 0 0', fontSize: 24, fontWeight: 800, color: C.ink, letterSpacing: '-0.03em', lineHeight: 1.2 }}>
+          <section style={{ marginBottom: 28, background: C.card, border: `1px solid ${C.border}`, borderRadius: 20, padding: 18 }}>
+            <Micro color={C.accent}>Now · {modeTag(currentLeg)}</Micro>
+            <p style={{ margin: '8px 0 0', fontFamily: DISPLAY, fontSize: 24, fontWeight: 800, color: C.ink, letterSpacing: '-0.02em', lineHeight: 1.25 }}>
               {legLabel(currentLeg)}
             </p>
             {distKm !== null && (
@@ -199,11 +202,12 @@ function TripScreen() {
             {status === 'active' && (
               <button
                 style={{
-                  marginTop: 18, width: '100%', padding: '16px', borderRadius: 2,
+                  marginTop: 18, width: '100%', padding: '16px', borderRadius: 999,
                   fontSize: 15, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit',
-                  background: isLastLeg ? C.accent : 'var(--gradient-primary)',
-                  color: isLastLeg ? '#FFFFFF' : C.onPrimary,
+                  background: 'var(--gradient-primary)',
+                  color: C.onPrimary,
                   border: 'none', letterSpacing: '0.01em',
+                  boxShadow: '0 6px 18px rgba(41,71,222,0.25)',
                 }}
                 onClick={() => trip.advanceLeg()}
               >
@@ -315,11 +319,11 @@ function TripScreen() {
         <div style={{ position: 'sticky', bottom: 0, padding: '14px 24px calc(14px + env(safe-area-inset-bottom))', background: C.bg, borderTop: `1px solid ${C.border}`, display: 'flex', gap: 10 }}>
           <button
             style={{
-              flex: 1, padding: '15px', borderRadius: 2, fontSize: 14, fontWeight: 700,
+              flex: 1, padding: '15px', borderRadius: 999, fontSize: 14, fontWeight: 700,
               fontFamily: 'inherit', border: 'none',
               cursor: position ? 'pointer' : 'default',
-              background: position ? 'var(--gradient-primary)' : C.cardEl,
-              color: position ? C.onPrimary : C.muted,
+              background: position ? C.ink : C.cardEl,
+              color: position ? C.bg : C.muted,
             }}
             disabled={!position}
             title={position ? undefined : 'Needs your location to reroute from where you are'}
@@ -329,7 +333,7 @@ function TripScreen() {
           </button>
           {wazeUrl && (
             <a href={wazeUrl} target="_blank" rel="noopener noreferrer"
-              style={{ padding: '15px 18px', borderRadius: 2, fontSize: 14, fontWeight: 700, fontFamily: 'inherit', border: `1.5px solid ${C.ink}`, color: C.ink, textDecoration: 'none' }}>
+              style={{ padding: '15px 22px', borderRadius: 999, fontSize: 14, fontWeight: 700, fontFamily: 'inherit', border: `1.5px solid ${C.accent}`, color: C.accent, textDecoration: 'none' }}>
               Waze
             </a>
           )}

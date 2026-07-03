@@ -9,13 +9,15 @@ import { supabaseBrowser } from '@/lib/supabase/browser';
  */
 
 const FONT = `
-@import url('https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,400;0,14..32,500;0,14..32,600;0,14..32,700;0,14..32,800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,400;0,14..32,500;0,14..32,600;0,14..32,700;0,14..32,800&family=Baloo+2:wght@600;700;800&display=swap');
 *{box-sizing:border-box;-webkit-font-smoothing:antialiased;}
-body{font-family:'Inter',system-ui,sans-serif;}
+body{font-family:var(--font-sans);}
 input:focus{outline:none;}
 button:active{opacity:0.85;}
 @keyframes spin{to{transform:rotate(360deg)}}
 `;
+
+const DISPLAY = 'var(--font-display)';
 
 const C = {
   bg:     'var(--color-bg)',
@@ -44,8 +46,8 @@ function nextUrl(): string {
 /* ── Wordmark ─────────────────────────────────────────────────────────────── */
 function Logo({ size = 24 }: { size?: number }) {
   return (
-    <span style={{ fontSize: size, fontWeight: 800, letterSpacing: '-0.05em', color: C.ink }}>
-      ParaPo<span style={{ color: C.accent }}>.</span>
+    <span style={{ fontFamily: DISPLAY, fontSize: size, fontWeight: 800, letterSpacing: '-0.02em', color: C.accent }}>
+      ParaPo<span style={{ color: C.ink }}>.</span>
     </span>
   );
 }
@@ -87,11 +89,12 @@ function PrimaryBtn({ label, onClick, loading, disabled }: { label: string; onCl
   const inactive = loading || disabled;
   return (
     <button onClick={onClick} disabled={inactive} style={{
-      width: '100%', border: 'none', borderRadius: 2, padding: '16px',
+      width: '100%', border: 'none', borderRadius: 999, padding: '16px',
       fontSize: 15, fontWeight: 700, cursor: inactive ? 'default' : 'pointer',
       fontFamily: 'inherit', letterSpacing: '0.01em',
       background: inactive ? 'var(--color-card-el)' : 'var(--gradient-primary)',
       color: inactive ? C.muted : C.onPrimary,
+      boxShadow: inactive ? 'none' : '0 6px 18px rgba(41,71,222,0.25)',
     }}>
       {loading ? (
         <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
@@ -106,9 +109,9 @@ function PrimaryBtn({ label, onClick, loading, disabled }: { label: string; onCl
 function GhostBtn({ label, onClick }: { label: string; onClick: () => void }) {
   return (
     <button onClick={onClick} style={{
-      width: '100%', background: 'transparent', border: `1.5px solid ${C.ink}`,
-      borderRadius: 2, padding: '15px', fontSize: 15, fontWeight: 700,
-      color: C.ink, cursor: 'pointer', fontFamily: 'inherit',
+      width: '100%', background: C.ink, border: 'none',
+      borderRadius: 999, padding: '16px', fontSize: 15, fontWeight: 700,
+      color: C.bg, cursor: 'pointer', fontFamily: 'inherit',
     }}>{label}</button>
   );
 }
@@ -231,7 +234,7 @@ export default function AuthFlow() {
       <style>{FONT}</style>
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: '0 28px' }}>
         <Logo size={40} />
-        <h1 style={{ margin: '28px 0 0', fontSize: 44, fontWeight: 800, letterSpacing: '-0.04em', lineHeight: 1.05, color: C.ink }}>
+        <h1 style={{ margin: '28px 0 0', fontFamily: DISPLAY, fontSize: 42, fontWeight: 800, letterSpacing: '-0.02em', lineHeight: 1.1, color: C.ink }}>
           Know your commute before you leave.
         </h1>
         <p style={{ margin: '20px 0 0', fontSize: 16, color: C.body, lineHeight: 1.6, maxWidth: 320 }}>
@@ -260,7 +263,7 @@ export default function AuthFlow() {
       <style>{FONT}</style>
       {backRow('splash')}
       <div style={{ flex: 1, padding: '32px 24px', display: 'flex', flexDirection: 'column' }}>
-        <h1 style={{ margin: 0, fontSize: 34, fontWeight: 800, letterSpacing: '-0.04em', color: C.ink }}>Sign in</h1>
+        <h1 style={{ margin: 0, fontFamily: DISPLAY, fontSize: 34, fontWeight: 800, letterSpacing: '-0.02em', color: C.ink }}>Sign in</h1>
         <p style={{ margin: '8px 0 36px', fontSize: 15, color: C.body }}>Plan faster with saved commutes.</p>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
           <Field label="Email" type="email" autoComplete="email" value={loginEmail} onChange={v => { setLoginEmail(v); setLoginErr(''); }} placeholder="you@email.com" />
@@ -292,7 +295,7 @@ export default function AuthFlow() {
       <style>{FONT}</style>
       {backRow('splash')}
       <div style={{ flex: 1, padding: '32px 24px', display: 'flex', flexDirection: 'column', overflowY: 'auto' }}>
-        <h1 style={{ margin: 0, fontSize: 34, fontWeight: 800, letterSpacing: '-0.04em', color: C.ink }}>Create account</h1>
+        <h1 style={{ margin: 0, fontFamily: DISPLAY, fontSize: 34, fontWeight: 800, letterSpacing: '-0.02em', color: C.ink }}>Create account</h1>
         <p style={{ margin: '8px 0 32px', fontSize: 15, color: C.body }}>Save commutes and trip history.</p>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 22 }}>
           <Field label="Full name" autoComplete="name" value={signupName} onChange={v => { setSignupName(v); setSignupErr(''); }} placeholder="Juan dela Cruz" />
@@ -329,7 +332,7 @@ export default function AuthFlow() {
       <style>{FONT}</style>
       {backRow('login')}
       <div style={{ flex: 1, padding: '32px 24px', display: 'flex', flexDirection: 'column' }}>
-        <h1 style={{ margin: 0, fontSize: 34, fontWeight: 800, letterSpacing: '-0.04em', color: C.ink }}>
+        <h1 style={{ margin: 0, fontFamily: DISPLAY, fontSize: 34, fontWeight: 800, letterSpacing: '-0.02em', color: C.ink }}>
           {forgotSent ? 'Check your email' : 'Reset password'}
         </h1>
         <p style={{ margin: '10px 0 36px', fontSize: 15, color: C.body, lineHeight: 1.7 }}>
@@ -368,7 +371,7 @@ export default function AuthFlow() {
       `}</style>
       {backRow('signup')}
       <div style={{ flex: 1, padding: '32px 24px', display: 'flex', flexDirection: 'column' }}>
-        <h1 style={{ margin: 0, fontSize: 34, fontWeight: 800, letterSpacing: '-0.04em', color: C.ink }}>Verify your email</h1>
+        <h1 style={{ margin: 0, fontFamily: DISPLAY, fontSize: 34, fontWeight: 800, letterSpacing: '-0.02em', color: C.ink }}>Verify your email</h1>
         <p style={{ margin: '10px 0 36px', fontSize: 15, color: C.body, lineHeight: 1.7 }}>
           We sent a 6-digit code to <strong style={{ color: C.ink }}>{signupEmail || 'your email'}</strong>.
         </p>
@@ -403,7 +406,7 @@ export default function AuthFlow() {
       <style>{FONT}</style>
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, padding: '0 32px', textAlign: 'center', maxWidth: 360, width: '100%' }}>
         <span style={{ fontSize: 15, fontWeight: 800, letterSpacing: '0.1em', textTransform: 'uppercase', color: C.accent }}>✓ Account ready</span>
-        <h1 style={{ margin: '10px 0 0', fontSize: 34, fontWeight: 800, letterSpacing: '-0.04em', color: C.ink }}>
+        <h1 style={{ margin: '10px 0 0', fontFamily: DISPLAY, fontSize: 34, fontWeight: 800, letterSpacing: '-0.02em', color: C.ink }}>
           You&apos;re all set{signupName ? `, ${signupName.split(' ')[0]}` : ''}.
         </h1>
         <p style={{ margin: '10px 0 0', fontSize: 15, color: C.body, lineHeight: 1.7 }}>

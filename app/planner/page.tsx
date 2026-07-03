@@ -13,6 +13,7 @@ import { TRIP_STORAGE_KEY } from '@/lib/trip/types';
 const C = {
   bg:     'var(--color-bg)',
   surface:'var(--color-surface)',
+  card:   'var(--color-card)',
   cardEl: 'var(--color-card-el)',
   border: 'var(--color-border)',
   muted:  'var(--color-muted)',
@@ -22,6 +23,8 @@ const C = {
   error:  'var(--color-error)',
   onPrimary: 'var(--color-on-primary)',
 };
+
+const DISPLAY = 'var(--font-display)';
 
 /* Grayscale ramp for route segments — line identity is carried by TEXT */
 const MODE_META: Record<string, { label: string; shade: string }> = {
@@ -151,7 +154,8 @@ function Sheet({ children, height, style }: { children: React.ReactNode; height:
       position: 'absolute', left: 0, right: 0, bottom: 0, zIndex: 20,
       height, background: C.surface,
       borderTop: `1px solid ${C.border}`,
-      borderRadius: '12px 12px 0 0',
+      borderRadius: '28px 28px 0 0',
+      boxShadow: '0 -8px 32px rgba(25,22,16,0.08)',
       display: 'flex', flexDirection: 'column',
       paddingBottom: 'env(safe-area-inset-bottom)',
       ...style,
@@ -255,11 +259,11 @@ export default function Planner() {
       if (cancelled || !mapElRef.current) return;
       const L = mod.default ?? mod;
 
-      const isDark = document.documentElement.getAttribute('data-theme') !== 'light';
-      // Monochrome basemaps — Positron (light) / Dark Matter (dark)
+      const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+      // Warm basemaps — Voyager (light) / Dark Matter (dark)
       const tileUrl = isDark
         ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
-        : 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png';
+        : 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png';
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const map = (L as any).map(mapElRef.current, {
@@ -296,10 +300,10 @@ export default function Planner() {
       group.clearLayers();
       if (!selected) return;
 
-      const isDark = document.documentElement.getAttribute('data-theme') !== 'light';
-      const inkLine = isDark ? '#FAFAFA' : '#0A0A0A';
-      const walkLine = isDark ? '#7A7A7A' : '#8A8A8A';
-      const accent = isDark ? '#2BD576' : '#007A3D';
+      const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+      const inkLine = isDark ? '#7A90FF' : '#2947DE';
+      const walkLine = isDark ? '#A5988A' : '#8D8672';
+      const accent = isDark ? '#7A90FF' : '#2947DE';
 
       const allCoords: [number, number][] = [];
 
@@ -328,7 +332,7 @@ export default function Planner() {
       }
       if (destC) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (L as any).circleMarker(destC, { radius: 7, fillColor: inkLine, fillOpacity: 1, color: isDark ? '#000' : '#fff', weight: 2.5 }).addTo(group);
+        (L as any).circleMarker(destC, { radius: 7, fillColor: isDark ? '#F6F0E3' : '#191610', fillOpacity: 1, color: isDark ? '#000' : '#fff', weight: 2.5 }).addTo(group);
       }
 
       if (allCoords.length >= 2) {
@@ -378,9 +382,9 @@ export default function Planner() {
   }
 
   const GLOBAL = `
-    @import url('https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,400;0,14..32,500;0,14..32,600;0,14..32,700;0,14..32,800&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,400;0,14..32,500;0,14..32,600;0,14..32,700;0,14..32,800&family=Baloo+2:wght@600;700;800&display=swap');
     *{box-sizing:border-box;margin:0;padding:0;-webkit-font-smoothing:antialiased;}
-    body{font-family:'Inter',system-ui,sans-serif;}
+    body{font-family:var(--font-sans);}
     select{-webkit-appearance:none;-moz-appearance:none;appearance:none;}
     @keyframes spin{to{transform:rotate(360deg)}}
     .tnum{font-variant-numeric:tabular-nums;}
@@ -409,10 +413,10 @@ export default function Planner() {
       {screen === 'home' && (
         <>
           <div style={{ position: 'absolute', top: 0, left: 0, right: 0, zIndex: 10, padding: '52px 20px 0', display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-            <span style={{ fontSize: 20, fontWeight: 800, letterSpacing: '-0.05em', color: C.ink }}>
-              ParaPo<span style={{ color: C.accent }}>.</span>
+            <span style={{ fontFamily: DISPLAY, fontSize: 22, fontWeight: 800, letterSpacing: '-0.02em', color: C.accent }}>
+              ParaPo<span style={{ color: C.ink }}>.</span>
             </span>
-            <a href="/auth" style={{ fontSize: 12, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: C.ink, textDecoration: 'none' }}>
+            <a href="/auth" style={{ fontSize: 12, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: C.ink, textDecoration: 'none', background: C.card, border: `1px solid ${C.border}`, borderRadius: 999, padding: '8px 16px' }}>
               Sign in
             </a>
           </div>
@@ -442,18 +446,19 @@ export default function Planner() {
               {/* Transport modes — text toggles */}
               <div style={{ margin: '18px 0 0', flexShrink: 0 }}>
                 <Micro>Transport modes</Micro>
-                <div style={{ display: 'flex', gap: 24, marginTop: 10 }}>
+                <div style={{ display: 'flex', gap: 10, marginTop: 10 }}>
                   {MODE_GROUPS.map(g => {
                     const on = enabledModes[g.key];
                     return (
                       <button key={g.key}
                         onClick={() => setEnabledModes(prev => ({ ...prev, [g.key]: !prev[g.key] }))}
                         style={{
-                          background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontFamily: 'inherit',
-                          fontSize: 15, fontWeight: on ? 800 : 500,
-                          color: on ? C.ink : C.muted,
-                          textDecoration: on ? 'none' : 'line-through',
-                          letterSpacing: '-0.01em',
+                          cursor: 'pointer', fontFamily: 'inherit',
+                          fontSize: 14, fontWeight: 700, padding: '9px 18px',
+                          borderRadius: 999, transition: 'all 0.15s',
+                          background: on ? C.accent : 'transparent',
+                          color: on ? '#FFFFFF' : C.body,
+                          border: `1.5px solid ${on ? C.accent : C.border}`,
                         }}
                       >
                         {g.label}{on ? ' ✓' : ''}
@@ -476,12 +481,13 @@ export default function Planner() {
                 onClick={search}
                 disabled={!canSearch}
                 style={{
-                  width: '100%', border: 'none', borderRadius: 2, padding: '17px', margin: '22px 0 0',
+                  width: '100%', border: 'none', borderRadius: 999, padding: '17px', margin: '22px 0 0',
                   fontSize: 15, fontWeight: 700, letterSpacing: '0.01em', flexShrink: 0,
                   cursor: canSearch ? 'pointer' : 'default',
                   background: canSearch ? 'var(--gradient-primary)' : C.cardEl,
                   color: canSearch ? C.onPrimary : C.muted,
                   fontFamily: 'inherit',
+                  boxShadow: canSearch ? '0 6px 18px rgba(41,71,222,0.25)' : 'none',
                 }}
               >
                 Find routes
@@ -527,10 +533,10 @@ export default function Planner() {
         return (
           <>
             <div style={{ position: 'absolute', top: 0, left: 0, right: 0, zIndex: 10, padding: '52px 20px 0' }}>
-              <button onClick={() => { setScreen('home'); setItineraries([]); setSelected(null); }} style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 2, padding: '8px 14px', cursor: 'pointer', color: C.ink, fontSize: 13, fontWeight: 700, fontFamily: 'inherit' }}>
+              <button onClick={() => { setScreen('home'); setItineraries([]); setSelected(null); }} style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 999, padding: '9px 16px', cursor: 'pointer', color: C.ink, fontSize: 13, fontWeight: 700, fontFamily: 'inherit' }}>
                 ← Back
               </button>
-              <div style={{ marginTop: 12, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 2, padding: '10px 14px' }}>
+              <div style={{ marginTop: 12, background: C.card, border: `1px solid ${C.border}`, borderRadius: 16, padding: '12px 16px' }}>
                 <p style={{ margin: 0, fontSize: 14, fontWeight: 700, color: C.ink, letterSpacing: '-0.01em' }}>
                   {from} <span style={{ color: C.muted, fontWeight: 400 }}>→</span> {to}
                 </p>
@@ -539,16 +545,20 @@ export default function Planner() {
 
             <Sheet height="64vh">
               {/* filter row — text only */}
-              <div style={{ display: 'flex', gap: 22, padding: '12px 24px', flexShrink: 0 }}>
-                {modeFilters.map(f => (
-                  <button key={f.key} onClick={() => setModeFilter(f.key)} style={{
-                    background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontFamily: 'inherit',
-                    fontSize: 13, fontWeight: modeFilter === f.key ? 800 : 500,
-                    color: modeFilter === f.key ? C.ink : C.muted,
-                    borderBottom: modeFilter === f.key ? `2px solid ${C.ink}` : '2px solid transparent',
-                    paddingBottom: 4, letterSpacing: '0.02em', textTransform: 'uppercase',
-                  }}>{f.label}</button>
-                ))}
+              <div style={{ display: 'flex', gap: 8, padding: '12px 24px', flexShrink: 0 }}>
+                {modeFilters.map(f => {
+                  const on = modeFilter === f.key;
+                  return (
+                    <button key={f.key} onClick={() => setModeFilter(f.key)} style={{
+                      cursor: 'pointer', fontFamily: 'inherit',
+                      fontSize: 13, fontWeight: 700, padding: '7px 16px',
+                      borderRadius: 999, transition: 'all 0.15s',
+                      background: on ? C.ink : 'transparent',
+                      color: on ? C.bg : C.body,
+                      border: `1.5px solid ${on ? C.ink : C.border}`,
+                    }}>{f.label}</button>
+                  );
+                })}
               </div>
 
               {/* route list — typography rows, whitespace separation */}
@@ -566,14 +576,14 @@ export default function Planner() {
                     : OBJ_LABEL[itin.objective] ?? itin.objective;
                   return (
                   <button key={idx} onClick={() => { setSelected(itin); setScreen('detail'); }}
-                    style={{ display: 'block', width: '100%', background: 'none', border: 'none', padding: '18px 0', cursor: 'pointer', textAlign: 'left', fontFamily: 'inherit' }}
+                    style={{ display: 'block', width: '100%', background: C.card, border: `1px solid ${C.border}`, borderRadius: 20, padding: '16px 18px', marginBottom: 12, cursor: 'pointer', textAlign: 'left', fontFamily: 'inherit' }}
                   >
-                    <Micro>Route {idx + 1} — {objLabel}</Micro>
+                    <Micro color={C.accent}>Route {idx + 1} — {objLabel}</Micro>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginTop: 6 }}>
-                      <span className="tnum" style={{ fontSize: 36, fontWeight: 800, color: C.ink, letterSpacing: '-0.04em', lineHeight: 1 }}>
-                        {itin.totalDurationMin}<span style={{ fontSize: 15, fontWeight: 500, color: C.muted }}> min</span>
+                      <span className="tnum" style={{ fontFamily: DISPLAY, fontSize: 34, fontWeight: 800, color: C.ink, letterSpacing: '-0.02em', lineHeight: 1 }}>
+                        {itin.totalDurationMin}<span style={{ fontFamily: 'inherit', fontSize: 15, fontWeight: 600, color: C.muted }}> min</span>
                       </span>
-                      <span className="tnum" style={{ fontSize: 24, fontWeight: 800, color: C.ink, letterSpacing: '-0.03em' }}>
+                      <span className="tnum" style={{ fontFamily: DISPLAY, fontSize: 24, fontWeight: 800, color: C.accent, letterSpacing: '-0.02em' }}>
                         ₱{itin.totalFare.toFixed(2)}
                       </span>
                     </div>
@@ -608,10 +618,10 @@ export default function Planner() {
         return (
           <>
             <div style={{ position: 'absolute', top: 0, left: 0, right: 0, zIndex: 10, padding: '52px 20px 0', display: 'flex', justifyContent: 'space-between' }}>
-              <button onClick={() => setScreen('results')} style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 2, padding: '8px 14px', cursor: 'pointer', color: C.ink, fontSize: 13, fontWeight: 700, fontFamily: 'inherit' }}>
+              <button onClick={() => setScreen('results')} style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 999, padding: '9px 16px', cursor: 'pointer', color: C.ink, fontSize: 13, fontWeight: 700, fontFamily: 'inherit' }}>
                 ← Routes
               </button>
-              <span style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 2, padding: '8px 14px', fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: C.ink }}>
+              <span style={{ background: C.accent, borderRadius: 999, padding: '9px 16px', fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#FFFFFF' }}>
                 {OBJ_LABEL[selected.objective] ?? selected.objective}
               </span>
             </div>
@@ -621,15 +631,15 @@ export default function Planner() {
                 {/* Headline numbers */}
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', padding: '10px 0 6px' }}>
                   <div>
-                    <span className="tnum" style={{ fontSize: 52, fontWeight: 800, color: C.ink, letterSpacing: '-0.05em', lineHeight: 1 }}>
-                      {selected.totalDurationMin}<span style={{ fontSize: 17, fontWeight: 500, color: C.muted }}> min</span>
+                    <span className="tnum" style={{ fontFamily: DISPLAY, fontSize: 50, fontWeight: 800, color: C.ink, letterSpacing: '-0.02em', lineHeight: 1 }}>
+                      {selected.totalDurationMin}<span style={{ fontSize: 17, fontWeight: 600, color: C.muted }}> min</span>
                     </span>
                     <p className="tnum" style={{ margin: '6px 0 0', fontSize: 14, color: C.body }}>
                       arrive ~{arriveAt(selected.totalDurationMin)} · {selected.transfers} transfer{selected.transfers !== 1 ? 's' : ''}
                     </p>
                   </div>
                   <div style={{ textAlign: 'right' }}>
-                    <span className="tnum" style={{ fontSize: 30, fontWeight: 800, color: C.ink, letterSpacing: '-0.03em' }}>₱{selected.totalFare.toFixed(2)}</span>
+                    <span className="tnum" style={{ fontFamily: DISPLAY, fontSize: 30, fontWeight: 800, color: C.accent, letterSpacing: '-0.02em' }}>₱{selected.totalFare.toFixed(2)}</span>
                     <p style={{ margin: '4px 0 0', fontSize: 12, color: C.muted }}>per person</p>
                   </div>
                 </div>
@@ -707,15 +717,16 @@ export default function Planner() {
                     try { sessionStorage.setItem(TRIP_STORAGE_KEY, JSON.stringify(selected)); } catch { /* noop */ }
                     router.push('/trip');
                   }} style={{
-                    width: '100%', border: 'none', borderRadius: 2, padding: '17px',
+                    width: '100%', border: 'none', borderRadius: 999, padding: '17px',
                     fontSize: 15, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit',
                     background: 'var(--gradient-primary)', color: C.onPrimary, letterSpacing: '0.01em',
+                    boxShadow: '0 6px 18px rgba(41,71,222,0.25)',
                   }}>
                     Start trip — track live
                   </button>
                   <a href={wazeUrl} target="_blank" rel="noopener noreferrer" style={{
-                    display: 'block', textAlign: 'center', border: `1.5px solid ${C.ink}`, borderRadius: 2,
-                    padding: '15px', fontSize: 15, fontWeight: 700, color: C.ink,
+                    display: 'block', textAlign: 'center', border: `1.5px solid ${C.accent}`, borderRadius: 999,
+                    padding: '15px', fontSize: 15, fontWeight: 700, color: C.accent,
                     textDecoration: 'none', fontFamily: 'inherit',
                   }}>
                     Open in Waze
