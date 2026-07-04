@@ -4,6 +4,13 @@ import { seedStops } from '@/lib/routing/graph';
 
 export const dynamic = 'force-dynamic';
 
+// Catalog data changes rarely — let the CDN serve it (5 min edge cache,
+// 1 h stale-while-revalidate) instead of hitting the function every request.
+function cached(res: ReturnType<typeof ok>) {
+  res.headers.set('Cache-Control', 'public, s-maxage=300, stale-while-revalidate=3600');
+  return res;
+}
+
 export async function GET(req: NextRequest) {
   const { searchParams } = req.nextUrl;
   const bbox = searchParams.get('bbox'); // "minLat,minLng,maxLat,maxLng"
@@ -34,7 +41,7 @@ export async function GET(req: NextRequest) {
       if (!error && data && data.length > 0) {
         let stops = data.filter(s => s.lat != null && s.lng != null);
         if (bboxFilter) stops = stops.filter(s => bboxFilter!(s.lat!, s.lng!));
-        return ok(stops);
+        return cached(ok(stops));
       }
     } catch {
       // fall through to seed
@@ -43,5 +50,5 @@ export async function GET(req: NextRequest) {
 
   let stops = seedStops;
   if (bboxFilter) stops = stops.filter(s => bboxFilter!(s.lat, s.lng));
-  return ok(stops);
+  return cached(ok(stops));
 }

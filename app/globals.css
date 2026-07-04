@@ -1,46 +1,71 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,400;0,14..32,500;0,14..32,600;0,14..32,700;0,14..32,800&family=Baloo+2:wght@600;700;800&display=swap');
+
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 html { scroll-behavior: smooth; }
-body { font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; }
+body {
+  min-height: 100vh;
+  font-family: var(--font-sans);
+  background: var(--color-bg);
+  color: var(--color-ink);
+  -webkit-font-smoothing: antialiased;
+}
+input::placeholder { color: var(--color-muted); }
 
-/* ── Light theme (default / warm brand) ─────────────────────────────────── */
+/*
+ * Cream + cobalt design system.
+ * Warm cream canvas, white cards, one electric-cobalt accent for primary
+ * actions and live states; ink pills for secondary emphasis. Display
+ * headings use a chunky rounded face (--font-display); body stays Inter.
+ * No gradients: --gradient-primary is a FLAT cobalt fill kept only so
+ * legacy `background: var(--gradient-primary)` call sites resolve solid.
+ */
+
 :root,
 [data-theme="light"] {
-  --color-bg:           #F4F0E8;
-  --color-surface:      #FFFFFF;
-  --color-card:         #F9F7F2;
-  --color-card-el:      #F0EBE2;
-  --color-border:       #E2DBD0;
-  --color-muted:        #A89E8E;
-  --color-body:         #3D3530;
-  --color-ink:          #1A1410;
-  --color-accent:       #D05A28;
-  --color-accent-2:     #1A5FA8;
-  --color-green:        #2D7A4F;
-  --color-blue:         #1A5FA8;
-  --color-error:        #B83030;
-  --color-glass:        rgba(255,255,255,0.7);
-  --color-glass-border: rgba(0,0,0,0.08);
-  --gradient-primary:   linear-gradient(135deg, #D05A28, #B8962E);
-  --map-tile: "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png";
+  --color-bg:           #F3EEE2;   /* warm cream */
+  --color-surface:      #FBF8F0;
+  --color-card:         #FFFFFF;
+  --color-card-el:      #E9E2D2;
+  --color-border:       #E1D9C6;
+  --color-muted:        #8D8672;
+  --color-body:         #4A4436;
+  --color-ink:          #191610;
+  --color-accent:       #2947DE;   /* electric cobalt */
+  --color-accent-2:     #2947DE;
+  --color-green:        #2947DE;
+  --color-blue:         #2947DE;
+  --color-error:        #B3261E;
+  --color-glass:        #FFFFFF;
+  --color-glass-border: #E1D9C6;
+  --gradient-primary:   linear-gradient(#2947DE, #2947DE);
+  --color-on-primary:   #FFFFFF;
+  --font-sans:    'Inter', ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-display: 'Baloo 2', 'Inter', system-ui, sans-serif;
+  --map-tile: "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png";
 }
 
-/* ── Dark theme (electric / circuit aesthetic) ───────────────────────────── */
 [data-theme="dark"] {
-  --color-bg:           #070A12;
-  --color-surface:      #0D1222;
-  --color-card:         #111827;
-  --color-card-el:      #1A2236;
-  --color-border:       rgba(255,255,255,0.07);
-  --color-muted:        rgba(249,250,251,0.35);
-  --color-body:         rgba(249,250,251,0.65);
-  --color-ink:          #F9FAFB;
-  --color-accent:       #6366F1;
-  --color-accent-2:     #06B6D4;
-  --color-green:        #10B981;
-  --color-blue:         #06B6D4;
-  --color-error:        #EF4444;
-  --color-glass:        rgba(255,255,255,0.05);
-  --color-glass-border: rgba(255,255,255,0.10);
-  --gradient-primary:   linear-gradient(135deg, #6366F1, #06B6D4);
+  --color-bg:           #2A1F18;   /* dark espresso */
+  --color-surface:      #342820;
+  --color-card:         #3E3128;
+  --color-card-el:      #4A3B30;
+  --color-border:       #514237;
+  --color-muted:        #A5988A;
+  --color-body:         #D8CDBE;
+  --color-ink:          #F6F0E3;
+  --color-accent:       #7A90FF;   /* cobalt lifted for dark */
+  --color-accent-2:     #7A90FF;
+  --color-green:        #7A90FF;
+  --color-blue:         #7A90FF;
+  --color-error:        #FF8A7E;
+  --color-glass:        #3E3128;
+  --color-glass-border: #514237;
+  --gradient-primary:   linear-gradient(#4A63F2, #4A63F2);
+  --color-on-primary:   #FFFFFF;
+  --font-sans:    'Inter', ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-display: 'Baloo 2', 'Inter', system-ui, sans-serif;
   --map-tile: "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png";
 }
+
+/* Numbers a commuter scans at a glance — keep them fixed-width */
+.tnum { font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }

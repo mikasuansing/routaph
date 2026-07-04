@@ -8,7 +8,7 @@
  * to produce fastest, fewest-transfers, and cheapest itineraries.
  */
 
-import { computeFare } from './fares';
+import { computeFare, findFareRule } from './fares';
 import { haversineKm, nearestStops, walkMinutes } from './utils';
 import type {
   GraphEdge,
@@ -282,6 +282,7 @@ function reconstructItinerary(
       }
       // Fare is per boarding (one call for the whole leg, not per segment)
       const totalFare = computeFare(line.mode, totalDist, lineId, graph.fareRules);
+      const fareRule = findFareRule(line.mode, lineId, graph.fareRules);
 
       const fromStop = graph.nodes.get(rideStopIds[0])!.stop;
       const toStop = graph.nodes.get(rideStopIds[rideStopIds.length - 1])!.stop;
@@ -297,6 +298,13 @@ function reconstructItinerary(
         distKm: Math.round(totalDist * 10) / 10,
         durationMin: Math.round(totalTime),
         fare: Math.round(totalFare * 100) / 100,
+        ...(fareRule ? {
+          fareRule: {
+            baseFare:       Math.round(fareRule.baseFare * 100) / 100,
+            perKmRate:      Math.round(fareRule.perKmRate * 100) / 100,
+            flagDistanceKm: fareRule.flagDistanceKm ?? 4,
+          },
+        } : {}),
       } satisfies RideLeg);
     } else {
       // transfer walk — shown inline only if long enough

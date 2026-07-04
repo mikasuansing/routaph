@@ -7,6 +7,7 @@ export type GeoPosition = {
   lng: number;
   accuracyM: number;
   timestamp: number;
+  speedMps?: number; // from GeolocationCoordinates.speed — drives ride-leg ETAs
 };
 
 export type RideOption = {
@@ -33,6 +34,7 @@ export type TripState = {
   originalDest:      { lat: number; lng: number } | null;
   currentLegIndex:   number;
   position:          GeoPosition | null;
+  gpsDenied:         boolean;
   reroutes:          Itinerary[];
   rideOptions:       RideOption[];
   activeDisruption:  Disruption | null;
@@ -42,6 +44,7 @@ export type TripAction =
   | { type: 'START';      itinerary: Itinerary }
   | { type: 'END' }
   | { type: 'SET_POS';    position: GeoPosition }
+  | { type: 'GPS_DENIED' }
   | { type: 'ADVANCE_LEG' }
   | { type: 'REROUTING' }
   | { type: 'REROUTE_DONE'; reroutes: Itinerary[]; rideOptions: RideOption[] }

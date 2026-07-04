@@ -81,6 +81,9 @@ export type RideLeg = {
   distKm: number;
   durationMin: number;
   fare: number;
+  // Rule actually applied to this boarding, so the UI can show the
+  // computation (base + per-km beyond the flag distance) honestly.
+  fareRule?: { baseFare: number; perKmRate: number; flagDistanceKm: number };
 };
 
 export type Leg = WalkLeg | RideLeg;

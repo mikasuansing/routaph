@@ -5,7 +5,9 @@ export const dynamic = 'force-dynamic';
 
 export async function GET(
   _req: Request,
-  ctx: RouteContext<'/api/v1/catalog/lines/[id]'>,
+  // Explicit shape — the RouteContext global only exists after `next build`
+  // generates .next/types, which CI's typecheck step doesn't have.
+  ctx: { params: Promise<{ id: string }> },
 ) {
   const { id } = await ctx.params;
   const lineId = Number(id);

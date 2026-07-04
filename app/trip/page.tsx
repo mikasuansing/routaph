@@ -1,17 +1,83 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { supabaseBrowser } from '@/lib/supabase/browser';
 import { TripProvider, useTripContext } from '@/lib/trip/context';
 import type { Itinerary, RideLeg, WalkLeg } from '@/lib/routing/types';
 import { TRIP_STORAGE_KEY } from '@/lib/trip/types';
 import { distToNextStop, etaToNextStop } from '@/lib/trip/geo';
+
+/*
+ * Trip Companion — live tracking screen.
+ * Monochrome minimal: typography carries the hierarchy; the single accent
+ * (transit green) marks the live GPS state and arrival confirmation.
+ */
+
+const C = {
+  bg:     'var(--color-bg)',
+  card:   'var(--color-card)',
+  cardEl: 'var(--color-card-el)',
+  border: 'var(--color-border)',
+  muted:  'var(--color-muted)',
+  body:   'var(--color-body)',
+  ink:    'var(--color-ink)',
+  accent: 'var(--color-accent)',
+  onPrimary: 'var(--color-on-primary)',
+};
+
+const GLOBAL = `
+@import url('https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,400;0,14..32,500;0,14..32,600;0,14..32,700;0,14..32,800&family=Baloo+2:wght@600;700;800&display=swap');
+*{box-sizing:border-box;-webkit-font-smoothing:antialiased;}
+body{font-family:var(--font-sans);}
+button:active{opacity:0.85;}
+.tnum{font-variant-numeric:tabular-nums;}
+@keyframes pulse{0%,100%{opacity:.4}50%{opacity:1}}
+`;
+
+const DISPLAY = 'var(--font-display)';
+
+function Micro({ children, color, style }: { children: React.ReactNode; color?: string; style?: React.CSSProperties }) {
+  return (
+    <p style={{ margin: 0, fontSize: 11, fontWeight: 700, color: color ?? C.muted, letterSpacing: '0.1em', textTransform: 'uppercase', ...style }}>
+      {children}
+    </p>
+  );
+}
+
+const MODE_TAG: Record<string, string> = { mrt: 'MRT', lrt: 'LRT', bus: 'BUS', jeepney: 'JEEP', walk: 'WALK' };
+
+function modeTag(leg: RideLeg | WalkLeg | undefined): string {
+  if (!leg) return 'WALK';
+  if (leg.type === 'walk') return 'WALK';
+  return MODE_TAG[(leg as RideLeg).line.mode] ?? 'RIDE';
+}
+
+function legLabel(leg: RideLeg | WalkLeg | undefined): string {
+  if (!leg) return '';
+  if (leg.type === 'ride') {
+    const r = leg as RideLeg;
+    return `${r.line.name} → ${r.to.name} (${r.stops.length} stop${r.stops.length !== 1 ? 's' : ''})`;
+  }
+  const w = leg as WalkLeg;
+  return `Walk to ${w.toName} (${Math.round(w.distKm * 1000)} m)`;
+}
 
 // ── Inner component (must be inside TripProvider) ─────────────────────────────
 
 function TripScreen() {
   const router = useRouter();
   const trip = useTripContext();
+  const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'failed'>('idle');
+
+  // Login required: no session → back to /auth
+  useEffect(() => {
+    let active = true;
+    supabaseBrowser.auth.getSession().then(({ data }) => {
+      if (active && !data.session) router.replace('/auth?next=/planner');
+    });
+    return () => { active = false; };
+  }, [router]);
 
   // On mount: restore itinerary from sessionStorage and start trip
   useEffect(() => {
@@ -27,31 +93,60 @@ function TripScreen() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Navigation is a side effect — never call router.replace during render
+  useEffect(() => {
+    if (trip.status === 'ended') router.replace('/planner');
+  }, [trip.status, router]);
+
   if (trip.status === 'idle') {
-    return <div className="flex items-center justify-center h-screen text-gray-400">Loading trip…</div>;
+    return (
+      <div style={{ minHeight: '100vh', background: C.bg, color: C.muted, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Inter,system-ui,sans-serif' }}>
+        <style>{GLOBAL}</style>
+        Loading trip…
+      </div>
+    );
   }
 
   if (trip.status === 'arrived') {
     return (
-      <div className="flex flex-col items-center justify-center h-screen gap-4 p-6 bg-green-50">
-        <div className="text-5xl">🎉</div>
-        <h1 className="text-2xl font-bold text-green-800">You&apos;ve arrived!</h1>
+      <div style={{ minHeight: '100vh', background: C.bg, color: C.ink, display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: '0 28px', fontFamily: 'Inter,system-ui,sans-serif' }}>
+        <style>{GLOBAL}</style>
+        <Micro color={C.accent}>✓ Trip complete</Micro>
+        <h1 style={{ margin: '14px 0 0', fontFamily: DISPLAY, fontSize: 42, fontWeight: 800, letterSpacing: '-0.02em', lineHeight: 1.1 }}>
+          You&apos;ve arrived.
+        </h1>
+        {trip.itinerary && (
+          <p className="tnum" style={{ margin: '16px 0 0', fontSize: 16, color: C.body }}>
+            ₱{trip.itinerary.totalFare.toFixed(2)} total fare · {trip.itinerary.transfers} transfer{trip.itinerary.transfers !== 1 ? 's' : ''}
+          </p>
+        )}
         <button
-          className="mt-4 px-6 py-3 bg-green-700 text-white rounded-full font-semibold"
+          style={{ marginTop: 36, padding: '17px', background: 'var(--gradient-primary)', color: C.onPrimary, border: 'none', borderRadius: 999, fontSize: 15, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', width: '100%', boxShadow: '0 6px 18px rgba(41,71,222,0.25)' }}
           onClick={() => { trip.endTrip(); router.replace('/planner'); }}
         >
           Plan another trip
+        </button>
+        {/* Explicit save only (BASELINE §7.7) — nothing is stored unless tapped */}
+        <button
+          disabled={saveState === 'saving' || saveState === 'saved'}
+          style={{ marginTop: 12, padding: '15px', background: 'transparent', color: saveState === 'saved' ? C.accent : C.ink, border: `1.5px solid ${saveState === 'saved' ? C.accent : C.ink}`, borderRadius: 999, fontSize: 14, fontWeight: 700, cursor: saveState === 'idle' || saveState === 'failed' ? 'pointer' : 'default', fontFamily: 'inherit', width: '100%' }}
+          onClick={async () => {
+            setSaveState('saving');
+            setSaveState(await trip.saveTrip() ? 'saved' : 'failed');
+          }}
+        >
+          {saveState === 'saved' ? '✓ Saved to trip history'
+            : saveState === 'saving' ? 'Saving…'
+            : saveState === 'failed' ? 'Save failed — tap to retry'
+            : 'Save trip to history'}
         </button>
       </div>
     );
   }
 
-  if (trip.status === 'ended') {
-    router.replace('/planner');
-    return null;
-  }
+  if (trip.status === 'ended') return null;
 
-  const { itinerary, currentLegIndex, position, status, reroutes, rideOptions, activeDisruption } = trip;
+  const { itinerary, currentLegIndex, position, gpsDenied, status, reroutes, rideOptions, activeDisruption, originalDest } = trip;
   if (!itinerary) return null;
 
   const currentLeg = itinerary.legs[currentLegIndex];
@@ -59,48 +154,46 @@ function TripScreen() {
   const isLastLeg  = currentLegIndex >= itinerary.legs.length - 1;
 
   const distKm = position ? distToNextStop(position, itinerary, currentLegIndex) : null;
-  const eta    = position ? etaToNextStop(position, itinerary, currentLegIndex) : null;
+  const eta    = position ? etaToNextStop(position, itinerary, currentLegIndex, position.speedMps) : null;
 
-  const legLabel = (leg: typeof currentLeg): string => {
-    if (!leg) return '';
-    if (leg.type === 'ride') {
-      const r = leg as RideLeg;
-      return `${r.line.name} → ${r.to.name} (${r.stops.length} stop${r.stops.length !== 1 ? 's' : ''})`;
-    }
-    const w = leg as WalkLeg;
-    return `Walk to ${w.toName} (${Math.round(w.distKm * 1000)} m)`;
-  };
-
-  const modeIcon = (leg: typeof currentLeg) => {
-    if (!leg) return '🚶';
-    if (leg.type === 'walk') return '🚶';
-    const mode = (leg as RideLeg).line.mode;
-    if (mode === 'mrt' || mode === 'lrt') return '🚆';
-    if (mode === 'bus') return '🚌';
-    return '🚐';
-  };
+  const wazeUrl = originalDest
+    ? `https://waze.com/ul?ll=${originalDest.lat},${originalDest.lng}&navigate=yes&utm_source=parapo`
+    : null;
 
   return (
-    <div className="flex flex-col min-h-screen bg-gray-50">
+    <div style={{ minHeight: '100vh', background: C.bg, color: C.ink, display: 'flex', flexDirection: 'column', fontFamily: 'Inter,system-ui,sans-serif' }}>
+      <style>{GLOBAL}</style>
+
       {/* Header */}
-      <header className="bg-blue-700 text-white p-4 flex items-center justify-between">
-        <h1 className="font-bold text-lg">Trip in progress</h1>
+      <header style={{ padding: '52px 24px 18px', display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between' }}>
+        <div>
+          <span style={{ fontFamily: DISPLAY, fontSize: 16, fontWeight: 800, letterSpacing: '-0.02em', color: C.accent }}>
+            ParaPo<span style={{ color: C.ink }}>.</span>
+          </span>
+          <h1 style={{ margin: '4px 0 0', fontFamily: DISPLAY, fontSize: 28, fontWeight: 800, letterSpacing: '-0.02em' }}>Trip in progress</h1>
+          {/* Live status — the single accent marks a live GPS fix */}
+          <p style={{ margin: '6px 0 0', fontSize: 12, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: position ? C.accent : C.muted }}>
+            {position
+              ? '● Live — GPS tracking'
+              : gpsDenied
+                ? '○ Location off — manual mode'
+                : <span style={{ animation: 'pulse 1.6s ease-in-out infinite' }}>○ Waiting for GPS</span>}
+          </p>
+        </div>
         <button
-          className="text-sm underline opacity-80"
+          style={{ background: 'none', border: 'none', padding: 0, fontSize: 13, fontWeight: 700, color: C.muted, cursor: 'pointer', fontFamily: 'inherit', textDecoration: 'underline' }}
           onClick={() => { trip.endTrip(); router.replace('/planner'); }}
         >
           End trip
         </button>
       </header>
 
-      {/* Active disruption banner */}
+      {/* Active disruption — bold type, no color theatre */}
       {activeDisruption && status !== 'rerouting' && (
-        <div className="bg-yellow-100 border-b border-yellow-400 px-4 py-2 flex items-center justify-between">
-          <span className="text-yellow-800 text-sm">
-            ⚠️ {activeDisruption.description}
-          </span>
+        <div style={{ padding: '14px 24px', borderTop: `1px solid ${C.border}`, borderBottom: `1px solid ${C.border}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+          <p style={{ margin: 0, fontSize: 14, fontWeight: 700, color: C.ink }}>▲ {activeDisruption.description}</p>
           <button
-            className="ml-2 text-sm font-semibold text-yellow-900 underline"
+            style={{ background: 'none', border: 'none', fontSize: 13, fontWeight: 800, color: C.ink, textDecoration: 'underline', cursor: 'pointer', fontFamily: 'inherit', flexShrink: 0 }}
             onClick={() => trip.triggerReroute()}
           >
             Reroute
@@ -108,143 +201,167 @@ function TripScreen() {
         </div>
       )}
 
-      {/* Current leg card */}
-      <main className="flex-1 overflow-y-auto p-4 flex flex-col gap-4">
-        {currentLeg && (
-          <div className="bg-white rounded-2xl shadow p-5">
-            <div className="flex items-start gap-3">
-              <span className="text-3xl">{modeIcon(currentLeg)}</span>
-              <div className="flex-1">
-                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">
-                  Now
-                </p>
-                <p className="font-semibold text-gray-900">{legLabel(currentLeg)}</p>
-                {distKm !== null && (
-                  <p className="text-sm text-gray-500 mt-1">
-                    {distKm < 1 ? `${Math.round(distKm * 1000)} m` : `${distKm.toFixed(1)} km`}
-                    {eta !== null && ` · ~${eta} min`} to next stop
-                  </p>
-                )}
-                {position === null && (
-                  <p className="text-xs text-gray-400 mt-1">Waiting for GPS…</p>
-                )}
-              </div>
-            </div>
-          </div>
+      <main style={{ flex: 1, overflowY: 'auto', padding: '20px 24px 24px' }}>
+        {/* GPS denied notice */}
+        {gpsDenied && (
+          <p style={{ margin: '0 0 22px', fontSize: 13, color: C.body, lineHeight: 1.7 }}>
+            Location access is off, so legs won&apos;t advance automatically.
+            Tap <strong style={{ color: C.ink }}>Mark leg done</strong> as you go — or re-enable
+            location in your browser settings.
+          </p>
         )}
 
-        {/* Next action */}
+        {/* Current leg — the glance */}
+        {currentLeg && (
+          <section style={{ marginBottom: 28, background: C.card, border: `1px solid ${C.border}`, borderRadius: 20, padding: 18 }}>
+            <Micro color={C.accent}>Now · {modeTag(currentLeg)}</Micro>
+            <p style={{ margin: '8px 0 0', fontFamily: DISPLAY, fontSize: 24, fontWeight: 800, color: C.ink, letterSpacing: '-0.02em', lineHeight: 1.25 }}>
+              {legLabel(currentLeg)}
+            </p>
+            {distKm !== null && (
+              <p className="tnum" style={{ margin: '8px 0 0', fontSize: 16, color: C.body }}>
+                {distKm < 1 ? `${Math.round(distKm * 1000)} m` : `${distKm.toFixed(1)} km`}
+                {eta !== null && ` · ~${eta} min`} to next stop
+              </p>
+            )}
+            {status === 'active' && (
+              <button
+                style={{
+                  marginTop: 18, width: '100%', padding: '16px', borderRadius: 999,
+                  fontSize: 15, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit',
+                  background: 'var(--gradient-primary)',
+                  color: C.onPrimary,
+                  border: 'none', letterSpacing: '0.01em',
+                  boxShadow: '0 6px 18px rgba(41,71,222,0.25)',
+                }}
+                onClick={() => trip.advanceLeg()}
+              >
+                {isLastLeg ? '✓ Mark as done — I’ve arrived' : '✓ Mark leg done — I’m here'}
+              </button>
+            )}
+          </section>
+        )}
+
+        {/* Next leg */}
         {nextLeg && !isLastLeg && (
-          <div className="bg-gray-100 rounded-2xl p-4">
-            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">Next</p>
-            <p className="text-gray-700">{modeIcon(nextLeg)} {legLabel(nextLeg)}</p>
-          </div>
+          <section style={{ marginBottom: 28 }}>
+            <Micro>Next · {modeTag(nextLeg)}</Micro>
+            <p style={{ margin: '6px 0 0', fontSize: 15, color: C.body }}>{legLabel(nextLeg)}</p>
+          </section>
         )}
 
         {isLastLeg && (
-          <div className="bg-green-50 rounded-2xl p-4 text-green-800 text-sm font-medium">
-            Almost there — this is the last leg!
-          </div>
+          <p style={{ margin: '0 0 28px', fontSize: 13, fontWeight: 700, color: C.accent, letterSpacing: '0.02em' }}>
+            Almost there — this is the last leg.
+          </p>
         )}
 
-        {/* Leg progress list */}
-        <div className="bg-white rounded-2xl shadow p-4">
-          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">
-            Full itinerary
-          </p>
-          {itinerary.legs.map((leg, i) => (
-            <div
-              key={i}
-              className={`flex items-center gap-2 py-1.5 text-sm ${
-                i < currentLegIndex ? 'text-gray-300 line-through' :
-                i === currentLegIndex ? 'text-blue-700 font-semibold' :
-                'text-gray-500'
-              }`}
-            >
-              <span>{modeIcon(leg)}</span>
-              <span>{legLabel(leg)}</span>
-              {i === currentLegIndex && (
-                <span className="ml-auto text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">
-                  You are here
-                </span>
-              )}
-            </div>
-          ))}
-        </div>
+        {/* Full itinerary */}
+        <section style={{ marginBottom: 28 }}>
+          <Micro>Full itinerary</Micro>
+          <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {itinerary.legs.map((leg, i) => {
+              const done = i < currentLegIndex;
+              const here = i === currentLegIndex;
+              return (
+                <div key={i} style={{ display: 'flex', gap: 12, alignItems: 'baseline' }}>
+                  <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: '0.1em', color: here ? C.ink : C.muted, width: 38, flexShrink: 0 }}>
+                    {modeTag(leg)}
+                  </span>
+                  <span style={{
+                    flex: 1, fontSize: 14,
+                    fontWeight: here ? 700 : 400,
+                    color: done ? C.muted : here ? C.ink : C.body,
+                    textDecoration: done ? 'line-through' : 'none',
+                  }}>
+                    {legLabel(leg)}
+                  </span>
+                  {here && <Micro color={C.accent} style={{ flexShrink: 0 }}>You are here</Micro>}
+                </div>
+              );
+            })}
+          </div>
+        </section>
 
         {/* Rerouting state */}
         {status === 'rerouting' && (
-          <div className="bg-white rounded-2xl shadow p-5 text-center text-gray-500">
+          <p style={{ margin: '0 0 28px', fontSize: 14, color: C.muted, animation: 'pulse 1.6s ease-in-out infinite' }}>
             Finding alternatives…
-          </div>
+          </p>
         )}
 
         {/* Reroute results */}
         {status !== 'rerouting' && reroutes.length > 0 && (
-          <div className="bg-white rounded-2xl shadow p-4">
-            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">
-              Alternative routes
-            </p>
-            {reroutes.map((r, i) => (
-              <div key={i} className="border-b last:border-0 py-3">
-                <p className="font-semibold text-gray-900">
-                  {r.totalDurationMin} min · ₱{r.totalFare} · {r.transfers} transfer{r.transfers !== 1 ? 's' : ''}
-                </p>
-                <p className="text-sm text-gray-500 mt-0.5">
-                  {r.legs.filter(l => l.type === 'ride').map(l => (l as RideLeg).line.name).join(' → ') || 'Walk only'}
-                </p>
-                <p className="text-xs text-gray-400 mt-0.5">{r.objective}</p>
-              </div>
-            ))}
-          </div>
+          <section style={{ marginBottom: 28 }}>
+            <Micro>Alternative routes</Micro>
+            <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 18 }}>
+              {reroutes.map((r, i) => (
+                <div key={i}>
+                  <p className="tnum" style={{ margin: 0, fontSize: 17, fontWeight: 800, color: C.ink, letterSpacing: '-0.02em' }}>
+                    {r.totalDurationMin} min · ₱{r.totalFare.toFixed(2)} · {r.transfers} transfer{r.transfers !== 1 ? 's' : ''}
+                  </p>
+                  <p style={{ margin: '3px 0 0', fontSize: 13, fontWeight: 600, color: C.body }}>
+                    {r.legs.filter(l => l.type === 'ride').map(l => (l as RideLeg).line.name).join(' → ') || 'Walk only'}
+                  </p>
+                  <p style={{ margin: '2px 0 0', fontSize: 11, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.06em' }}>{r.objective}</p>
+                </div>
+              ))}
+            </div>
+          </section>
         )}
 
         {/* Ride-hailing options */}
         {rideOptions.length > 0 && (
-          <div className="bg-white rounded-2xl shadow p-4">
-            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">
-              Ride options
-            </p>
-            {rideOptions.map((opt, i) => (
-              <div key={i} className="border-b last:border-0 py-3">
-                <div className="flex justify-between items-start">
+          <section style={{ marginBottom: 28 }}>
+            <Micro>Ride options</Micro>
+            <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 18 }}>
+              {rideOptions.map((opt, i) => (
+                <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 14 }}>
                   <div>
-                    <p className="font-semibold text-gray-900">{opt.provider}</p>
-                    <p className="text-sm text-gray-500">
+                    <p style={{ margin: 0, fontSize: 15, fontWeight: 700, color: C.ink }}>{opt.provider}</p>
+                    <p className="tnum" style={{ margin: '2px 0 0', fontSize: 14, color: C.body }}>
                       ~₱{opt.fareMin}–₱{opt.fareMax} · {opt.etaMin}–{opt.etaMax} min
                     </p>
-                    <p className="text-xs text-amber-600 mt-0.5">{opt.disclaimer}</p>
+                    <p style={{ margin: '4px 0 0', fontSize: 11, color: C.muted, lineHeight: 1.6 }}>{opt.disclaimer}</p>
                   </div>
                   <a
                     href={opt.deepLink}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="ml-3 px-4 py-2 bg-orange-500 text-white text-sm rounded-full font-semibold whitespace-nowrap"
+                    style={{ padding: '9px 18px', border: `1.5px solid ${C.ink}`, color: C.ink, fontSize: 13, fontWeight: 700, borderRadius: 2, textDecoration: 'none', whiteSpace: 'nowrap', flexShrink: 0 }}
                   >
                     Book
                   </a>
                 </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          </section>
         )}
       </main>
 
-      {/* Sticky stuck button */}
+      {/* Sticky action bar */}
       {status === 'active' && (
-        <div className="sticky bottom-0 p-4 bg-white border-t border-gray-100 flex gap-3">
+        <div style={{ position: 'sticky', bottom: 0, padding: '14px 24px calc(14px + env(safe-area-inset-bottom))', background: C.bg, borderTop: `1px solid ${C.border}`, display: 'flex', gap: 10 }}>
           <button
-            className="flex-1 py-3 bg-red-600 text-white font-semibold rounded-full"
+            style={{
+              flex: 1, padding: '15px', borderRadius: 999, fontSize: 14, fontWeight: 700,
+              fontFamily: 'inherit', border: 'none',
+              cursor: position ? 'pointer' : 'default',
+              background: position ? C.ink : C.cardEl,
+              color: position ? C.bg : C.muted,
+            }}
+            disabled={!position}
+            title={position ? undefined : 'Needs your location to reroute from where you are'}
             onClick={() => trip.triggerReroute()}
           >
             I&apos;m stuck / line down
           </button>
-          <button
-            className="px-5 py-3 bg-gray-100 text-gray-700 font-semibold rounded-full"
-            onClick={() => { trip.endTrip(); router.replace('/planner'); }}
-          >
-            End
-          </button>
+          {wazeUrl && (
+            <a href={wazeUrl} target="_blank" rel="noopener noreferrer"
+              style={{ padding: '15px 22px', borderRadius: 999, fontSize: 14, fontWeight: 700, fontFamily: 'inherit', border: `1.5px solid ${C.accent}`, color: C.accent, textDecoration: 'none' }}>
+              Waze
+            </a>
+          )}
         </div>
       )}
     </div>

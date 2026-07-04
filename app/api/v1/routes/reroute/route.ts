@@ -16,6 +16,7 @@ const schema = z.object({
   excludeModes: z.array(modeEnum).optional().default([]),
 });
 
+// Guest-accessible — mid-trip reroutes must work without an account.
 export async function POST(req: NextRequest) {
   let body: unknown;
   try { body = await req.json(); }

@@ -63,6 +63,7 @@ function estimateEta(distKm: number) {
   };
 }
 
+// Guest-accessible — ride options are shown mid-trip without an account.
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const parsed = querySchema.safeParse({

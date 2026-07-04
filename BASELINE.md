@@ -378,7 +378,8 @@ These are automatic rejects / merge-blockers:
 | Hardcoded Supabase URLs / keys / Redis tokens in source | Secret leak; gitleaks CI blocks |
 | Stretch features (F9–F12) before Core (F1–F5) + 2 differentiators | Scope creep |
 | `npm run verify` failures committed to `main` | Breaks CI contract |
-| Schema changes without a checked-in migration | Migration drift |
+| Schema changes w
+ithout a checked-in migration | Migration drift |
 | `any` type without `// TODO: type this properly` | Type safety erosion |
 | Ride-hailing fares labeled as official or live prices | Consumer protection / legal |
 | Raw GPS traces persisted beyond the request | Privacy |

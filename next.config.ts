@@ -1,7 +1,9 @@
 import type { NextConfig } from "next";
 
+const isProduction = process.env.NODE_ENV === "production";
+
 const securityHeaders = [
-  { key: "X-Frame-Options",              value: "DENY" },
+  ...(isProduction ? [{ key: "X-Frame-Options", value: "DENY" }] : []),
   { key: "X-Content-Type-Options",       value: "nosniff" },
   { key: "Referrer-Policy",              value: "strict-origin-when-cross-origin" },
   { key: "Strict-Transport-Security",    value: "max-age=63072000; includeSubDomains; preload" },
@@ -16,8 +18,8 @@ const securityHeaders = [
       "connect-src 'self' https://*.supabase.co https://*.upstash.io wss://*.supabase.co",
       // Leaflet + CARTO tiles
       "img-src 'self' data: https://*.tile.openstreetmap.org https://*.basemaps.cartocdn.com",
-      // Google Fonts used in auth/planner pages
-      "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+      // Google Fonts + Leaflet CSS (unpkg) used in auth/planner pages
+      "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://unpkg.com",
       "font-src 'self' https://fonts.gstatic.com",
       // Inline scripts required by Next.js
       "script-src 'self' 'unsafe-inline' 'unsafe-eval'",

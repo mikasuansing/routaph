@@ -8,6 +8,7 @@ import {
   useReducer,
   useRef,
 } from 'react';
+import { supabaseBrowser } from '@/lib/supabase/browser';
 import type { Itinerary } from '@/lib/routing/types';
 import type {
   Disruption,
@@ -30,6 +31,7 @@ const INITIAL: TripState = {
   originalDest:     null,
   currentLegIndex:  0,
   position:         null,
+  gpsDenied:        false,
   reroutes:         [],
   rideOptions:      [],
   activeDisruption: null,
@@ -55,7 +57,9 @@ function reducer(state: TripState, action: TripAction): TripState {
     case 'END':
       return { ...INITIAL, status: 'ended' };
     case 'SET_POS':
-      return { ...state, position: action.position };
+      return { ...state, position: action.position, gpsDenied: false };
+    case 'GPS_DENIED':
+      return { ...state, gpsDenied: true };
     case 'ADVANCE_LEG': {
       if (!state.itinerary) return state;
       const next = state.currentLegIndex + 1;
@@ -85,6 +89,8 @@ function reducer(state: TripState, action: TripAction): TripState {
 type TripContextValue = TripState & {
   startTrip:      (itinerary: Itinerary) => void;
   endTrip:        () => void;
+  advanceLeg:     () => void;
+  saveTrip:       () => Promise<boolean>;
   triggerReroute: () => Promise<void>;
 };
 
@@ -96,8 +102,13 @@ const DISRUPTION_POLL_MS = 30_000;
 
 export function TripProvider({ children }: { children: React.ReactNode }) {
   const [state, dispatch] = useReducer(reducer, INITIAL);
+  const latestStateRef = useRef<TripState>(INITIAL);
   const watchIdRef = useRef<number | null>(null);
   const pollRef    = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => {
+    latestStateRef.current = state;
+  }, [state]);
 
   // Stop the GPS watcher and disruption poll
   const cleanup = useCallback(() => {
@@ -129,6 +140,64 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
     try { sessionStorage.removeItem(TRIP_STORAGE_KEY); } catch { /* noop */ }
   }, [cleanup]);
 
+  // Manual advance — "mark this leg done". Works with or without GPS; on the
+  // last leg it transitions the trip to 'arrived'.
+  const advanceLeg = useCallback(() => {
+    dispatch({ type: 'ADVANCE_LEG' });
+  }, []);
+
+  // Explicit save only (BASELINE §7.7) — called from the arrival screen's
+  // "Save trip" action, never automatically.
+  const saveTrip = useCallback(async (): Promise<boolean> => {
+    const itinerary = latestStateRef.current.itinerary;
+    if (!itinerary) return false;
+    const session = (await supabaseBrowser.auth.getSession()).data.session;
+    if (!session) return false;
+    // Access walk legs carry generic "Origin"/"Destination" names — prefer
+    // the boarding/alighting stop of the first/last ride leg when so.
+    const rides = itinerary.legs.filter(l => l.type === 'ride');
+    const destinationLeg = itinerary.legs.at(-1);
+    let destinationName = destinationLeg?.type === 'walk'
+      ? destinationLeg.toName
+      : destinationLeg?.type === 'ride'
+        ? destinationLeg.to.name
+        : 'Destination';
+    if (destinationName === 'Destination' && rides.length > 0) {
+      destinationName = (rides.at(-1) as Extract<typeof rides[number], { type: 'ride' }>).to.name;
+    }
+    const firstLeg = itinerary.legs[0];
+    let originName = firstLeg?.type === 'walk'
+      ? firstLeg.fromName
+      : firstLeg?.type === 'ride'
+        ? firstLeg.from.name
+        : 'Origin';
+    if (originName === 'Origin' && rides.length > 0) {
+      originName = (rides[0] as Extract<typeof rides[number], { type: 'ride' }>).from.name;
+    }
+    const distanceKm = itinerary.legs.reduce((sum, leg) => sum + leg.distKm, 0);
+    const payload = {
+      origin: originName,
+      destination: destinationName,
+      distanceKm: Math.round(distanceKm * 100) / 100,
+      fareEstimate: itinerary.totalFare,
+      modesUsed: itinerary.legs.filter((leg) => leg.type === 'ride').map((leg) => leg.type === 'ride' ? leg.mode : 'walk'),
+    };
+
+    try {
+      const res = await fetch('/api/v1/me/trips', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify(payload),
+      });
+      return res.ok;
+    } catch {
+      return false;
+    }
+  }, []);
+
   // Start GPS watcher whenever status transitions to 'active'
   useEffect(() => {
     if (state.status !== 'active' || !state.itinerary) return;
@@ -141,19 +210,24 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
           lng:       pos.coords.longitude,
           accuracyM: pos.coords.accuracy,
           timestamp: pos.timestamp,
+          speedMps:  pos.coords.speed ?? undefined,
         };
         dispatch({ type: 'SET_POS', position: gp });
 
-        // Auto-advance check
+        const latest = latestStateRef.current;
         if (
-          state.itinerary &&
-          state.currentLegIndex < state.itinerary.legs.length &&
-          shouldAdvanceLeg(gp, state.itinerary, state.currentLegIndex)
+          latest.itinerary &&
+          latest.currentLegIndex < latest.itinerary.legs.length &&
+          shouldAdvanceLeg(gp, latest.itinerary, latest.currentLegIndex)
         ) {
           dispatch({ type: 'ADVANCE_LEG' });
         }
       },
-      () => { /* position error — user may have denied; continue gracefully */ },
+      (err) => {
+        // PERMISSION_DENIED (1) — surface it so the UI offers manual advance.
+        // Transient errors (unavailable/timeout) keep the watcher alive.
+        if (err.code === 1) dispatch({ type: 'GPS_DENIED' });
+      },
       { enableHighAccuracy: true, maximumAge: 5000, timeout: 10000 },
     );
 
@@ -233,7 +307,7 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
   }, [state.itinerary, state.position, state.originalDest, state.currentLegIndex]);
 
   return (
-    <TripContext.Provider value={{ ...state, startTrip, endTrip, triggerReroute }}>
+    <TripContext.Provider value={{ ...state, startTrip, endTrip, advanceLeg, saveTrip, triggerReroute }}>
       {children}
     </TripContext.Provider>
   );
