@@ -15,7 +15,9 @@ async function getUser(req: NextRequest) {
 
 export async function DELETE(
   req: NextRequest,
-  ctx: RouteContext<'/api/v1/me/routes/[id]'>,
+  // Explicit shape — the RouteContext global only exists after `next build`
+  // generates .next/types, which CI's typecheck step doesn't have.
+  ctx: { params: Promise<{ id: string }> },
 ) {
   const user = await getUser(req);
   if (!user) return Errors.unauthorized();
