@@ -2,6 +2,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { TRIP_STORAGE_KEY } from '@/lib/trip/types';
+import { supabaseBrowser } from '@/lib/supabase/browser';
 
 /*
  * Planner — the primary commuter dashboard.
@@ -182,7 +183,19 @@ export default function Planner() {
   const [myLoc, setMyLoc]         = useState<[number, number] | null>(null);
   const [locBusy, setLocBusy]     = useState(false);
   const [disruptions, setDisruptions] = useState<Disruption[] | null>(null);
+  const [authed, setAuthed]       = useState<boolean | null>(null);
   const stopNames = Object.keys(stopCoords).sort();
+
+  /* ── Login required: no session → back to /auth ───────────────────────── */
+  useEffect(() => {
+    let active = true;
+    supabaseBrowser.auth.getSession().then(({ data }) => {
+      if (!active) return;
+      if (!data.session) { router.replace('/auth?next=/planner'); return; }
+      setAuthed(true);
+    });
+    return () => { active = false; };
+  }, [router]);
 
   /* ── Load the stop catalog (F4) so pick lists match the routable network ── */
   useEffect(() => {
@@ -244,6 +257,7 @@ export default function Planner() {
   const routeGroup  = useRef<unknown>(null);
 
   useEffect(() => {
+    if (authed !== true) return; // container renders only after the auth gate
     if (!mapElRef.current || mapRef.current) return;
     let cancelled = false;
 
@@ -288,7 +302,7 @@ export default function Planner() {
     });
 
     return () => { cancelled = true; };
-  }, []);
+  }, [authed]);
 
   /* ── Draw the selected route — single ink line, dashed walks ──────────── */
   const drawRoute = useCallback(() => {
@@ -395,6 +409,15 @@ export default function Planner() {
 
   const canSearch = Boolean(from && to && from !== to && originCoords(from) && stopCoords[to] && Object.values(enabledModes).some(Boolean));
 
+  /* Hold rendering until the session check settles (redirects when absent) */
+  if (authed !== true) {
+    return (
+      <div style={{ position: 'fixed', inset: 0, background: C.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Inter,system-ui,sans-serif', color: C.muted, fontSize: 14 }}>
+        Checking session…
+      </div>
+    );
+  }
+
   /* Service status line — one glance, no chrome */
   const statusLine = disruptions === null
     ? null
@@ -416,9 +439,12 @@ export default function Planner() {
             <span style={{ fontFamily: DISPLAY, fontSize: 22, fontWeight: 800, letterSpacing: '-0.02em', color: C.accent }}>
               ParaPo<span style={{ color: C.ink }}>.</span>
             </span>
-            <a href="/auth" style={{ fontSize: 12, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: C.ink, textDecoration: 'none', background: C.card, border: `1px solid ${C.border}`, borderRadius: 999, padding: '8px 16px' }}>
-              Sign in
-            </a>
+            <button
+              onClick={async () => { await supabaseBrowser.auth.signOut(); window.location.href = '/auth'; }}
+              style={{ fontSize: 12, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: C.ink, cursor: 'pointer', fontFamily: 'inherit', background: C.card, border: `1px solid ${C.border}`, borderRadius: 999, padding: '8px 16px' }}
+            >
+              Sign out
+            </button>
           </div>
 
           <Sheet height="auto" style={{ maxHeight: '62vh' }}>

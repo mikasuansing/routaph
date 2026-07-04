@@ -247,9 +247,6 @@ export default function AuthFlow() {
       <div style={{ padding: '0 24px 48px', display: 'flex', flexDirection: 'column', gap: 12 }}>
         <PrimaryBtn label="Get started" onClick={() => setScreen('signup')} />
         <GhostBtn label="I already have an account" onClick={() => setScreen('login')} />
-        <a href="/planner" style={{ textAlign: 'center', fontSize: 14, fontWeight: 600, color: C.muted, textDecoration: 'none', padding: '10px 0' }}>
-          Continue as guest →
-        </a>
         <p style={{ fontSize: 12, color: C.muted, textAlign: 'center', lineHeight: 1.6 }}>
           By continuing you agree to our <a href="/privacy" style={{ color: C.ink, fontWeight: 600 }}>Privacy Policy</a>.
         </p>

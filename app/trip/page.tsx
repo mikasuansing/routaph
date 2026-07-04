@@ -2,6 +2,7 @@
 
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { supabaseBrowser } from '@/lib/supabase/browser';
 import { TripProvider, useTripContext } from '@/lib/trip/context';
 import type { Itinerary, RideLeg, WalkLeg } from '@/lib/routing/types';
 import { TRIP_STORAGE_KEY } from '@/lib/trip/types';
@@ -67,6 +68,15 @@ function legLabel(leg: RideLeg | WalkLeg | undefined): string {
 function TripScreen() {
   const router = useRouter();
   const trip = useTripContext();
+
+  // Login required: no session → back to /auth
+  useEffect(() => {
+    let active = true;
+    supabaseBrowser.auth.getSession().then(({ data }) => {
+      if (active && !data.session) router.replace('/auth?next=/planner');
+    });
+    return () => { active = false; };
+  }, [router]);
 
   // On mount: restore itinerary from sessionStorage and start trip
   useEffect(() => {
