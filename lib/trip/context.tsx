@@ -90,6 +90,7 @@ type TripContextValue = TripState & {
   startTrip:      (itinerary: Itinerary) => void;
   endTrip:        () => void;
   advanceLeg:     () => void;
+  saveTrip:       () => Promise<boolean>;
   triggerReroute: () => Promise<void>;
 };
 
@@ -145,21 +146,34 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
     dispatch({ type: 'ADVANCE_LEG' });
   }, []);
 
-  const saveTripHistory = useCallback(async (itinerary: Itinerary, status: TripState['status']) => {
-    if (status !== 'arrived') return;
+  // Explicit save only (BASELINE §7.7) — called from the arrival screen's
+  // "Save trip" action, never automatically.
+  const saveTrip = useCallback(async (): Promise<boolean> => {
+    const itinerary = latestStateRef.current.itinerary;
+    if (!itinerary) return false;
     const session = (await supabaseBrowser.auth.getSession()).data.session;
-    if (!session) return;
+    if (!session) return false;
+    // Access walk legs carry generic "Origin"/"Destination" names — prefer
+    // the boarding/alighting stop of the first/last ride leg when so.
+    const rides = itinerary.legs.filter(l => l.type === 'ride');
     const destinationLeg = itinerary.legs.at(-1);
-    const destinationName = destinationLeg?.type === 'walk'
+    let destinationName = destinationLeg?.type === 'walk'
       ? destinationLeg.toName
       : destinationLeg?.type === 'ride'
         ? destinationLeg.to.name
         : 'Destination';
-    const originName = itinerary.legs[0]?.type === 'walk'
-      ? itinerary.legs[0].fromName
-      : itinerary.legs[0]?.type === 'ride'
-        ? itinerary.legs[0].from.name
+    if (destinationName === 'Destination' && rides.length > 0) {
+      destinationName = (rides.at(-1) as Extract<typeof rides[number], { type: 'ride' }>).to.name;
+    }
+    const firstLeg = itinerary.legs[0];
+    let originName = firstLeg?.type === 'walk'
+      ? firstLeg.fromName
+      : firstLeg?.type === 'ride'
+        ? firstLeg.from.name
         : 'Origin';
+    if (originName === 'Origin' && rides.length > 0) {
+      originName = (rides[0] as Extract<typeof rides[number], { type: 'ride' }>).from.name;
+    }
     const distanceKm = itinerary.legs.reduce((sum, leg) => sum + leg.distKm, 0);
     const payload = {
       origin: originName,
@@ -170,7 +184,7 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
     };
 
     try {
-      await fetch('/api/v1/me/trips', {
+      const res = await fetch('/api/v1/me/trips', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -178,8 +192,9 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
         },
         body: JSON.stringify(payload),
       });
+      return res.ok;
     } catch {
-      // non-fatal
+      return false;
     }
   }, []);
 
@@ -219,11 +234,6 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
     return cleanup;
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.status, state.itinerary]);
-
-  useEffect(() => {
-    if (state.status !== 'arrived' || !state.itinerary) return;
-    void saveTripHistory(state.itinerary, state.status);
-  }, [saveTripHistory, state.itinerary, state.status]);
 
   // Disruption poll — runs while a trip is active
   useEffect(() => {
@@ -297,7 +307,7 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
   }, [state.itinerary, state.position, state.originalDest, state.currentLegIndex]);
 
   return (
-    <TripContext.Provider value={{ ...state, startTrip, endTrip, advanceLeg, triggerReroute }}>
+    <TripContext.Provider value={{ ...state, startTrip, endTrip, advanceLeg, saveTrip, triggerReroute }}>
       {children}
     </TripContext.Provider>
   );

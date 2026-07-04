@@ -18,8 +18,8 @@ const securityHeaders = [
       "connect-src 'self' https://*.supabase.co https://*.upstash.io wss://*.supabase.co",
       // Leaflet + CARTO tiles
       "img-src 'self' data: https://*.tile.openstreetmap.org https://*.basemaps.cartocdn.com",
-      // Google Fonts used in auth/planner pages
-      "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+      // Google Fonts + Leaflet CSS (unpkg) used in auth/planner pages
+      "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://unpkg.com",
       "font-src 'self' https://fonts.gstatic.com",
       // Inline scripts required by Next.js
       "script-src 'self' 'unsafe-inline' 'unsafe-eval'",

@@ -46,7 +46,12 @@ export async function GET(req: NextRequest) {
     }
 
     const { data, error } = await query;
-    if (error) return Errors.internal(error.message);
+    if (error) {
+      // Table not deployed yet (migration 003 pending) — disruptions are
+      // optional live data, so an empty feed beats a 500 on every poll.
+      if (error.message.includes('service_disruptions')) return ok([]);
+      return Errors.internal(error.message);
+    }
 
     const disruptions = (data ?? []).map(r => ({
       id:          r.id,

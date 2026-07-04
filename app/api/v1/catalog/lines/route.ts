@@ -4,6 +4,13 @@ import { seedLines, seedLineStops, seedStops } from '@/lib/routing/graph';
 
 export const dynamic = 'force-dynamic';
 
+// Catalog data changes rarely — let the CDN serve it (5 min edge cache,
+// 1 h stale-while-revalidate) instead of hitting the function every request.
+function cached(res: ReturnType<typeof ok>) {
+  res.headers.set('Cache-Control', 'public, s-maxage=300, stale-while-revalidate=3600');
+  return res;
+}
+
 export async function GET(req: NextRequest) {
   // Rate limiting
   try {
@@ -51,7 +58,7 @@ export async function GET(req: NextRequest) {
           };
         });
 
-        return ok(lines);
+        return cached(ok(lines));
       }
     } catch {
       // fall through to seed
@@ -63,5 +70,5 @@ export async function GET(req: NextRequest) {
     const stopIds = (seedLineStops.find(([lid]) => lid === line.id)?.[1]) ?? [];
     return { ...line, stopCount: stopIds.length, stops: stopIds.map(id => stopMap.get(id)).filter(Boolean) };
   });
-  return ok(lines);
+  return cached(ok(lines));
 }

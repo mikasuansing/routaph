@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabaseBrowser } from '@/lib/supabase/browser';
 import { TripProvider, useTripContext } from '@/lib/trip/context';
@@ -68,6 +68,7 @@ function legLabel(leg: RideLeg | WalkLeg | undefined): string {
 function TripScreen() {
   const router = useRouter();
   const trip = useTripContext();
+  const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'failed'>('idle');
 
   // Login required: no session → back to /auth
   useEffect(() => {
@@ -124,6 +125,20 @@ function TripScreen() {
           onClick={() => { trip.endTrip(); router.replace('/planner'); }}
         >
           Plan another trip
+        </button>
+        {/* Explicit save only (BASELINE §7.7) — nothing is stored unless tapped */}
+        <button
+          disabled={saveState === 'saving' || saveState === 'saved'}
+          style={{ marginTop: 12, padding: '15px', background: 'transparent', color: saveState === 'saved' ? C.accent : C.ink, border: `1.5px solid ${saveState === 'saved' ? C.accent : C.ink}`, borderRadius: 999, fontSize: 14, fontWeight: 700, cursor: saveState === 'idle' || saveState === 'failed' ? 'pointer' : 'default', fontFamily: 'inherit', width: '100%' }}
+          onClick={async () => {
+            setSaveState('saving');
+            setSaveState(await trip.saveTrip() ? 'saved' : 'failed');
+          }}
+        >
+          {saveState === 'saved' ? '✓ Saved to trip history'
+            : saveState === 'saving' ? 'Saving…'
+            : saveState === 'failed' ? 'Save failed — tap to retry'
+            : 'Save trip to history'}
         </button>
       </div>
     );
