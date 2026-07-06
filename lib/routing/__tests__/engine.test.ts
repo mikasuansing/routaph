@@ -119,3 +119,66 @@ describe('planRoute', () => {
     }
   });
 });
+
+// ── Regression: fare must be charged per boarding in the search cost ─────────
+// A long many-edge jeepney line is genuinely cheaper (one boarding, ₱24.80)
+// than a single-edge express bus (₱28.25). The old per-edge fare accounting
+// charged the jeepney a base fare on EVERY edge (5 × ₱14 ≈ ₱70 in search
+// cost), so the `cheapest` objective wrongly preferred the pricier bus.
+describe('cheapest objective (per-boarding fare accounting)', () => {
+  const P = [0, 1, 2, 3, 4, 5].map(i => ({
+    id: 100 + i,
+    name: `P${i + 1}`,
+    lat: 14.60 + i * 0.018, // ~2 km spacing, ~10 km end to end
+    lng: 121.00,
+  }));
+
+  const jeepLine = { id: 30, name: 'Long Jeep', mode: 'jeepney' as const, color: '#999' };
+  const expressBus = { id: 40, name: 'Express Bus', mode: 'bus' as const, color: '#666' };
+
+  function makeParallelGraph(): TransitGraph {
+    const nodes = new Map<number, GraphNode>();
+    for (let i = 0; i < 6; i++) {
+      const edges: GraphNode['edges'] = [];
+      if (i > 0)  edges.push({ type: 'ride', toStopId: P[i - 1].id, lineId: 30, distKm: 2, timeMin: 4 });
+      if (i < 5)  edges.push({ type: 'ride', toStopId: P[i + 1].id, lineId: 30, distKm: 2, timeMin: 4 });
+      if (i === 0) edges.push({ type: 'ride', toStopId: P[5].id, lineId: 40, distKm: 10, timeMin: 8 });
+      if (i === 5) edges.push({ type: 'ride', toStopId: P[0].id, lineId: 40, distKm: 10, timeMin: 8 });
+      nodes.set(P[i].id, { stop: P[i], edges });
+    }
+    const lines = new Map<number, LineData>([
+      [30, { line: jeepLine, stops: P }],
+      [40, { line: expressBus, stops: [P[0], P[5]] }],
+    ]);
+    return { nodes, lines, fareRules: DEFAULT_FARE_RULES };
+  }
+
+  it('cheapest itinerary is never more expensive than the fastest one', () => {
+    const results = planRoute(makeParallelGraph(), {
+      originLat: P[0].lat, originLng: P[0].lng,
+      destLat:   P[5].lat, destLng:   P[5].lng,
+    });
+    expect(results.length).toBeGreaterThanOrEqual(2);
+    const fastest  = results.find(r => r.objective === 'fastest');
+    const cheapest = results.find(r => r.objective === 'cheapest');
+    expect(fastest).toBeDefined();
+    expect(cheapest).toBeDefined();
+    // fastest should take the express bus, cheapest the one-boarding jeepney
+    expect(cheapest!.totalFare).toBeLessThanOrEqual(fastest!.totalFare);
+    const minFare = Math.min(...results.map(r => r.totalFare));
+    expect(cheapest!.totalFare).toBe(minFare);
+  });
+});
+
+// ── Rush hour: time-dependent routing must actually change durations ─────────
+describe('rush-hour congestion', () => {
+  it('rush: true yields longer durations than rush: false on road legs', () => {
+    const graph = makeGraph();
+    const base = { originLat: stopA.lat, originLng: stopA.lng, destLat: stopE.lat, destLng: stopE.lng };
+    const offPeak = planRoute(graph, { ...base, rush: false, preference: 'fastest' });
+    const rush    = planRoute(graph, { ...base, rush: true,  preference: 'fastest' });
+    expect(offPeak.length).toBeGreaterThan(0);
+    expect(rush.length).toBeGreaterThan(0);
+    expect(rush[0].totalDurationMin).toBeGreaterThan(offPeak[0].totalDurationMin);
+  });
+});

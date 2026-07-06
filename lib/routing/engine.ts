@@ -40,6 +40,27 @@ const WEIGHTS: Record<Objective, Weights> = {
 };
 
 // ---------------------------------------------------------------------------
+// Rush-hour congestion (time-dependent routing, §7.3)
+// Road modes crawl in EDSA traffic; rail keeps its own right-of-way and only
+// suffers platform/queue delay. Applied to ride times when the departure
+// falls in Metro Manila rush windows (or when the caller forces `rush`).
+// ---------------------------------------------------------------------------
+const RUSH_MULT_ROAD = 1.6;
+const RUSH_MULT_RAIL = 1.15;
+
+export function isRushHour(d: Date): boolean {
+  const manilaHour = (d.getUTCHours() + 8) % 24; // Asia/Manila is UTC+8, no DST
+  return (manilaHour >= 7 && manilaHour < 9) || (manilaHour >= 17 && manilaHour < 19);
+}
+
+type RideMult = (mode: Mode) => number;
+
+function rushRideMult(rush: boolean): RideMult {
+  if (!rush) return () => 1;
+  return (mode) => (mode === 'mrt' || mode === 'lrt' ? RUSH_MULT_RAIL : RUSH_MULT_ROAD);
+}
+
+// ---------------------------------------------------------------------------
 // Priority queue (binary min-heap keyed on f = g + h)
 // g = actual weighted cost; f = priority for the heap.
 // ---------------------------------------------------------------------------
@@ -50,6 +71,7 @@ interface PQItem {
   g: number;           // actual accumulated weighted cost
   actualTimeMin: number;
   actualFare: number;
+  distOnLine: number;  // km ridden since boarding currentLineId (fare is per boarding)
   transfers: number;
   prev: PQItem | null;
   prevEdge: GraphEdge | null;
@@ -110,6 +132,7 @@ function search(
   initialG = 0,
   excludeLineSet?: Set<number>,
   excludeModeSet?: Set<Mode>,
+  rideMult: RideMult = () => 1,
 ): PQItem | null {
   const MAX_SPEED_KMH = 60;
 
@@ -131,6 +154,7 @@ function search(
     g: initialG,
     actualTimeMin: 0,
     actualFare: 0,
+    distOnLine: 0,
     transfers: 0,
     prev: null,
     prevEdge: null,
@@ -165,10 +189,17 @@ function search(
 
         const lineData = graph.lines.get(edge.lineId);
         const mode = lineData?.line.mode ?? 'bus';
-        const fare = computeFare(mode, edge.distKm, edge.lineId, graph.fareRules);
+        // Fare is charged PER BOARDING (§7.4): extending a ride only pays the
+        // marginal fare of the extra distance, not another base fare. Charging
+        // computeFare per edge made long single-line rides look absurdly
+        // expensive and broke the `cheapest` objective.
+        const distOnLine = boarding ? edge.distKm : cur.distOnLine + edge.distKm;
+        const prevBoardingFare = boarding ? 0 : computeFare(mode, cur.distOnLine, edge.lineId, graph.fareRules);
+        const fare = computeFare(mode, distOnLine, edge.lineId, graph.fareRules) - prevBoardingFare;
+        const rideTime = edge.timeMin * rideMult(mode);
 
         const addedCost =
-          edge.timeMin * w.timeFactor +
+          rideTime * w.timeFactor +
           transferPenalty +
           fare * w.fareFactor;
 
@@ -183,8 +214,9 @@ function search(
           currentLineId: edge.lineId,
           f,
           g: ng,
-          actualTimeMin: cur.actualTimeMin + edge.timeMin + transferPenalty,
+          actualTimeMin: cur.actualTimeMin + rideTime + transferPenalty,
           actualFare: cur.actualFare + fare,
+          distOnLine,
           transfers,
           prev: cur,
           prevEdge: edge,
@@ -209,6 +241,7 @@ function search(
           g: ng,
           actualTimeMin: cur.actualTimeMin + edge.timeMin,
           actualFare: cur.actualFare,
+          distOnLine: 0, // walking off ends the boarding
           transfers: cur.transfers,
           prev: cur,
           prevEdge: edge,
@@ -232,6 +265,7 @@ function reconstructItinerary(
   destLat: number, destLng: number, destName: string,
   destStopId: number,
   objective: Objective,
+  rideMult: RideMult = () => 1,
 ): Itinerary {
   // Collect path nodes bottom-up
   const chain: PQItem[] = [];
@@ -277,7 +311,7 @@ function reconstructItinerary(
         const e = chain[i].prevEdge as { distKm: number; timeMin: number };
         rideStopIds.push(chain[i].stopId);
         totalDist += e.distKm;
-        totalTime += e.timeMin;
+        totalTime += e.timeMin * rideMult(line.mode); // congestion-adjusted
         i++;
       }
       // Fare is per boarding (one call for the whole leg, not per segment)
@@ -384,6 +418,10 @@ export function planRoute(graph: TransitGraph, query: PlanQuery): Itinerary[] {
   const results: Itinerary[] = [];
   const seen = new Set<string>(); // deduplicate by (first-stop, last-stop, line-sequence)
 
+  // Time-dependent routing: congestion multiplier from explicit flag or departure hour
+  const rush = query.rush ?? isRushHour(query.departAt ?? new Date());
+  const rideMult = rushRideMult(rush);
+
   for (const obj of objectives) {
     const w = WEIGHTS[obj];
     let best: PQItem | null = null;
@@ -394,7 +432,7 @@ export function planRoute(graph: TransitGraph, query: PlanQuery): Itinerary[] {
       // Seed the search with the access-walk cost so farther origin stops
       // are correctly penalised relative to closer ones.
       const initialG = walkMinutes(accessDist) * w.timeFactor;
-      const result = search(graph, oStop.id, destStopIds, destLat, destLng, w, initialG, excludeLineSet, excludeModeSet);
+      const result = search(graph, oStop.id, destStopIds, destLat, destLng, w, initialG, excludeLineSet, excludeModeSet, rideMult);
       if (!result) continue;
 
       if (!best || result.g < best.g) {
@@ -415,6 +453,7 @@ export function planRoute(graph: TransitGraph, query: PlanQuery): Itinerary[] {
       destLat, destLng, 'Destination',
       bestDestStop.id,
       obj,
+      rideMult,
     );
 
     // Simple dedup key
