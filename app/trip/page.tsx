@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabaseBrowser } from '@/lib/supabase/browser';
 import { TripProvider, useTripContext } from '@/lib/trip/context';
@@ -69,6 +69,26 @@ function TripScreen() {
   const router = useRouter();
   const trip = useTripContext();
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'failed'>('idle');
+  const [geoPerm, setGeoPerm] = useState<'granted' | 'prompt' | 'denied' | 'unknown'>('unknown');
+
+  const mapElRef  = useRef<HTMLDivElement>(null);
+  const mapRef    = useRef<unknown>(null);
+  const posMarker = useRef<unknown>(null);
+
+  // Track browser geolocation permission so the UI can explain itself
+  useEffect(() => {
+    let active = true;
+    let status: PermissionStatus | null = null;
+    try {
+      navigator.permissions?.query({ name: 'geolocation' }).then(s => {
+        if (!active) return;
+        status = s;
+        setGeoPerm(s.state);
+        s.onchange = () => setGeoPerm(s.state);
+      }).catch(() => { /* unsupported — stay unknown */ });
+    } catch { /* unsupported */ }
+    return () => { active = false; if (status) status.onchange = null; };
+  }, []);
 
   // Login required: no session → back to /auth
   useEffect(() => {
@@ -127,6 +147,96 @@ function TripScreen() {
       void lock?.release().catch(() => { /* already released */ });
     };
   }, [trip.status]);
+
+  // Live map: route polyline + stops, initialised once the trip is active
+  useEffect(() => {
+    if ((trip.status !== 'active' && trip.status !== 'rerouting') || !trip.itinerary) return;
+    if (!mapElRef.current || mapRef.current) return;
+    let cancelled = false;
+
+    if (!document.getElementById('leaflet-css')) {
+      const link = document.createElement('link');
+      link.id = 'leaflet-css';
+      link.rel = 'stylesheet';
+      link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
+      document.head.appendChild(link);
+    }
+
+    import('leaflet').then(mod => {
+      if (cancelled || !mapElRef.current || mapRef.current) return;
+      const L = mod.default ?? mod;
+      const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+      const accent = isDark ? '#7A90FF' : '#2947DE';
+      const walkLine = isDark ? '#A5988A' : '#8D8672';
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const map = (L as any).map(mapElRef.current, { zoomControl: false, attributionControl: false });
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (L as any).tileLayer(
+        isDark
+          ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
+          : 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
+        { subdomains: 'abcd', maxZoom: 19 },
+      ).addTo(map);
+
+      const all: [number, number][] = [];
+      for (const leg of trip.itinerary!.legs) {
+        if (leg.type === 'walk') {
+          const a: [number, number] = [leg.fromLat, leg.fromLng];
+          const b: [number, number] = [leg.toLat, leg.toLng];
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (L as any).polyline([a, b], { color: walkLine, weight: 2, dashArray: '4,7', opacity: 0.8 }).addTo(map);
+          all.push(a, b);
+        } else {
+          const coords = (leg as RideLeg).stops.map(s => [s.lat, s.lng] as [number, number]);
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (L as any).polyline(coords, { color: accent, weight: 4, opacity: 0.95, lineCap: 'round', lineJoin: 'round' }).addTo(map);
+          all.push(...coords);
+        }
+      }
+      if (all.length >= 2) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        map.fitBounds((L as any).latLngBounds(all), { padding: [28, 28] });
+      }
+      mapRef.current = map;
+    });
+
+    return () => { cancelled = true; };
+  }, [trip.status, trip.itinerary]);
+
+  // Tear the map down when leaving the active screen
+  useEffect(() => {
+    if (trip.status === 'active' || trip.status === 'rerouting') return;
+    if (mapRef.current) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (mapRef.current as any).remove();
+      mapRef.current = null;
+      posMarker.current = null;
+    }
+  }, [trip.status]);
+
+  // Live position marker follows the GPS fix
+  useEffect(() => {
+    if (!mapRef.current || !trip.position) return;
+    import('leaflet').then(mod => {
+      const L = mod.default ?? mod;
+      if (!mapRef.current || !trip.position) return;
+      const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+      const here: [number, number] = [trip.position.lat, trip.position.lng];
+      if (posMarker.current) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (posMarker.current as any).setLatLng(here);
+      } else {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        posMarker.current = (L as any).circleMarker(here, {
+          radius: 9, fillColor: isDark ? '#7A90FF' : '#2947DE', fillOpacity: 1,
+          color: isDark ? '#000' : '#fff', weight: 3,
+        }).addTo(mapRef.current);
+      }
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (mapRef.current as any).panTo(here, { animate: true });
+    });
+  }, [trip.position]);
 
   if (trip.status === 'idle') {
     return (
@@ -232,13 +342,39 @@ function TripScreen() {
       )}
 
       <main style={{ flex: 1, overflowY: 'auto', padding: '20px 24px 24px' }}>
-        {/* GPS denied notice */}
-        {gpsDenied && (
-          <p style={{ margin: '0 0 22px', fontSize: 13, color: C.body, lineHeight: 1.7 }}>
-            Location access is off, so legs won&apos;t advance automatically.
-            Tap <strong style={{ color: C.ink }}>Mark leg done</strong> as you go — or re-enable
-            location in your browser settings.
-          </p>
+        {/* Live map — the route, and your position once GPS locks */}
+        <div ref={mapElRef} style={{ height: '34vh', minHeight: 200, borderRadius: 20, border: `1px solid ${C.border}`, overflow: 'hidden', marginBottom: 16 }} />
+
+        {/* GPS state — explain, and offer a way in, instead of failing silently */}
+        {!position && (gpsDenied || geoPerm === 'denied') && (
+          <div style={{ marginBottom: 22, background: C.card, border: `1px solid ${C.border}`, borderRadius: 20, padding: 16 }}>
+            <Micro>Location is blocked</Micro>
+            <p style={{ margin: '8px 0 0', fontSize: 13, color: C.body, lineHeight: 1.7 }}>
+              Your browser is blocking location for this site, so the map can&apos;t follow
+              you and legs won&apos;t advance automatically. To enable: tap the
+              <strong style={{ color: C.ink }}> padlock icon</strong> next to the address →
+              <strong style={{ color: C.ink }}> Site settings</strong> →
+              <strong style={{ color: C.ink }}> Location</strong> → Allow, then reload.
+              Meanwhile, use <strong style={{ color: C.ink }}>Mark leg done</strong> as you go.
+            </p>
+          </div>
+        )}
+        {!position && !gpsDenied && geoPerm !== 'denied' && (
+          <div style={{ marginBottom: 22, background: C.card, border: `1px solid ${C.border}`, borderRadius: 20, padding: 16, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+            <p style={{ margin: 0, fontSize: 13, color: C.body, animation: 'pulse 1.6s ease-in-out infinite' }}>
+              Waiting for a GPS fix…
+            </p>
+            <button
+              onClick={() => {
+                try {
+                  navigator.geolocation?.getCurrentPosition(() => { /* watcher picks it up */ }, () => { /* denied → banner above takes over */ });
+                } catch { /* unsupported */ }
+              }}
+              style={{ padding: '9px 16px', borderRadius: 999, border: 'none', background: C.accent, color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', flexShrink: 0 }}
+            >
+              Enable GPS
+            </button>
+          </div>
         )}
 
         {/* Current leg — the glance */}
@@ -264,7 +400,16 @@ function TripScreen() {
                   border: 'none', letterSpacing: '0.01em',
                   boxShadow: '0 6px 18px rgba(41,71,222,0.25)',
                 }}
-                onClick={() => trip.advanceLeg()}
+                onClick={() => {
+                  // Guard accidental taps: without any GPS fix the app can't
+                  // tell where you are, so completing a leg needs intent.
+                  if (!position && !window.confirm(
+                    isLastLeg
+                      ? 'No GPS fix — mark the whole trip as done anyway?'
+                      : 'No GPS fix — mark this leg as done anyway?'
+                  )) return;
+                  trip.advanceLeg();
+                }}
               >
                 {isLastLeg ? '✓ Mark as done — I’ve arrived' : '✓ Mark leg done — I’m here'}
               </button>
