@@ -16,6 +16,7 @@ export const SearchBodySchema = z.object({
   origin:       z.object({ lat, lng }),
   destination:  z.object({ lat, lng }),
   departAt:     z.string().datetime().optional(),
+  rush:         z.boolean().optional(),
   preference:   z.enum(["fastest", "fewest_transfers", "cheapest"]).optional(),
   // At least one mode must remain usable, so at most 3 of the 4 can be excluded
   excludeModes: z.array(z.enum(["jeepney", "bus", "mrt", "lrt"])).max(3).optional(),

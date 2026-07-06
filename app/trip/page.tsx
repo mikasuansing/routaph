@@ -98,6 +98,36 @@ function TripScreen() {
     if (trip.status === 'ended') router.replace('/planner');
   }, [trip.status, router]);
 
+  // Keep the screen awake during an active trip — mobile browsers pause the
+  // GPS watcher when the screen locks. Best-effort: not all browsers support
+  // the Wake Lock API, and it must be re-acquired when the tab regains focus.
+  useEffect(() => {
+    if (trip.status !== 'active') return;
+    let lock: { release: () => Promise<void> } | null = null;
+    let disposed = false;
+
+    const acquire = async () => {
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const wl = (navigator as any).wakeLock;
+        if (!wl) return;
+        const l = await wl.request('screen');
+        if (disposed) { void l.release(); return; }
+        lock = l;
+      } catch { /* low battery or unsupported — non-fatal */ }
+    };
+
+    const onVisible = () => { if (document.visibilityState === 'visible') void acquire(); };
+    void acquire();
+    document.addEventListener('visibilitychange', onVisible);
+
+    return () => {
+      disposed = true;
+      document.removeEventListener('visibilitychange', onVisible);
+      void lock?.release().catch(() => { /* already released */ });
+    };
+  }, [trip.status]);
+
   if (trip.status === 'idle') {
     return (
       <div style={{ minHeight: '100vh', background: C.bg, color: C.muted, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Inter,system-ui,sans-serif' }}>

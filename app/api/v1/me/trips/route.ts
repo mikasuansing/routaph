@@ -13,6 +13,35 @@ const schema = z.object({
   modesUsed: z.array(z.string()).default([]),
 });
 
+export async function GET(req: NextRequest) {
+  const userOrError = await requireAuthenticatedUser(req);
+  if (userOrError instanceof Response) return userOrError;
+  const user = userOrError;
+
+  try {
+    const { supabaseServer } = await import('@/lib/supabase/server');
+    const { data, error } = await supabaseServer
+      .from('trip_history')
+      .select('id, origin, destination, distance_km, fare_estimate, modes_used, created_at')
+      .eq('user_id', user.id)
+      .order('created_at', { ascending: false })
+      .limit(50);
+
+    if (error) return Errors.internal(error.message);
+    return ok((data ?? []).map(r => ({
+      id:           r.id,
+      origin:       r.origin,
+      destination:  r.destination,
+      distanceKm:   Number(r.distance_km),
+      fareEstimate: Number(r.fare_estimate),
+      modesUsed:    r.modes_used ?? [],
+      createdAt:    r.created_at,
+    })));
+  } catch {
+    return Errors.internal('Unable to load trip history');
+  }
+}
+
 export async function POST(req: NextRequest) {
   const userOrError = await requireAuthenticatedUser(req);
   if (userOrError instanceof Response) return userOrError;

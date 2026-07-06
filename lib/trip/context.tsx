@@ -214,6 +214,12 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
         };
         dispatch({ type: 'SET_POS', position: gp });
 
+        // Auto-advance guard: never advance a leg off a low-quality fix.
+        // A 500 m-accuracy reading can put you "at" a stop you haven't
+        // reached; manual "Mark leg done" always remains available.
+        const MAX_ADVANCE_ACCURACY_M = 100;
+        if (gp.accuracyM > MAX_ADVANCE_ACCURACY_M) return;
+
         const latest = latestStateRef.current;
         if (
           latest.itinerary &&

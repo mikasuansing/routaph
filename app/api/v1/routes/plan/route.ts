@@ -20,7 +20,7 @@ export async function POST(req: NextRequest) {
     });
   }
 
-  const { origin, destination, departAt, preference, excludeModes } = parsed.data;
+  const { origin, destination, departAt, rush, preference, excludeModes } = parsed.data;
 
   // Rate limiting (graceful degradation if Redis unconfigured)
   try {
@@ -37,7 +37,8 @@ export async function POST(req: NextRequest) {
   const bucket = timeBucket(departAt ? new Date(departAt) : undefined);
   const pref = preference ?? 'all';
   const modesKey = excludeModes?.length ? [...excludeModes].sort().join(',') : 'none';
-  const cacheKey = `route:v1:${ohash}:${dhash}:${bucket}:${pref}:${modesKey}`;
+  const rushKey = rush === undefined ? 'auto' : rush ? 'r1' : 'r0';
+  const cacheKey = `route:v1:${ohash}:${dhash}:${bucket}:${pref}:${modesKey}:${rushKey}`;
 
   try {
     const { redis } = await import('@/lib/redis/client');
@@ -58,6 +59,7 @@ export async function POST(req: NextRequest) {
     destLat: destination.lat,
     destLng: destination.lng,
     departAt: departAt ? new Date(departAt) : undefined,
+    rush,
     preference,
     excludeModes,
   });

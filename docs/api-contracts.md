@@ -1,6 +1,6 @@
 # ParaPo — API Contracts
 
-> Last verified from code: 2026-07-02
+> Last verified from code: 2026-07-04
 
 All responses use the standard envelope:
 
@@ -31,6 +31,7 @@ Auth: `Authorization: Bearer <supabase-access-token>` where required.
   "origin":      { "lat": number, "lng": number },
   "destination": { "lat": number, "lng": number },
   "departAt":     "ISO8601 datetime (optional)",
+  "rush":         "boolean (optional) — force rush-hour congestion; defaults from departAt hour (Manila 7-9am / 5-7pm)",
   "preference":   "fastest | fewest_transfers | cheapest (optional, default: all three)",
   "excludeModes": ["jeepney" | "bus" | "mrt" | "lrt"]  // optional, max 3 of 4 — at least one mode must remain
 }
@@ -123,6 +124,25 @@ WalkLeg {
 **Auth:** Bearer token (required)  
 **Returns:** `{ "data": { "ok": true } }`  
 **Status codes:** 200, 401, 404, 500
+
+---
+
+## GET /api/v1/me/trips
+
+**Auth:** Bearer token (required)  
+**Returns:** `{ "data": TripHistory[] }` newest-first, max 50
+
+```typescript
+TripHistory {
+  id: number;
+  origin: string; destination: string;
+  distanceKm: number; fareEstimate: number;
+  modesUsed: string[];
+  createdAt: string; // ISO8601
+}
+```
+**Status codes:** 200, 401, 500  
+*(POST /api/v1/me/trips already documented below — saves one trip, called only from the explicit "Save trip" action.)*
 
 ---
 

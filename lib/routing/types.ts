@@ -102,6 +102,7 @@ export type PlanQuery = {
   destLat: number;
   destLng: number;
   departAt?: Date;
+  rush?: boolean;           // force rush-hour congestion; defaults from departAt hour
   preference?: Objective;
   excludeLines?: number[];  // line IDs whose ride edges are skipped (F13/F15 reroute)
   excludeModes?: Mode[];    // modes to exclude entirely (e.g. 'bus' during bus strike)
