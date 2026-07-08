@@ -139,7 +139,8 @@ const wrapStyle: React.CSSProperties = {
 };
 
 export default function AuthFlow() {
-  const [screen, setScreen]               = useState<Screen>('splash');
+  // Land on the sign-in form directly — the splash stays reachable via Back
+  const [screen, setScreen]               = useState<Screen>('login');
   const [loginEmail, setLoginEmail]       = useState('');
   const [loginPw, setLoginPw]             = useState('');
   const [showPw, setShowPw]               = useState(false);
