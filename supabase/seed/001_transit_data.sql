@@ -87,9 +87,10 @@ ON CONFLICT (line_id, stop_id) DO NOTHING;
 
 -- ─── Fare rules ──────────────────────────────────────────────────────────────
 
+-- 2026 LTFRB/DOTr rates (Mar 19 2026 hike + Mar 23 2026 MRT-3/LRT-2 50% discount) — see lib/routing/fares.ts
 INSERT INTO fare_rules (line_id, mode, base_fare, per_km_rate) VALUES
-  (NULL, 'jeepney', 13.00, 1.80),
-  (NULL, 'bus',     13.00, 2.20),
-  (NULL, 'mrt',     13.00, 2.50),
-  (NULL, 'lrt',     12.00, 2.40)
+  (NULL, 'jeepney', 14.00, 2.00),
+  (NULL, 'bus',     18.00, 2.98),
+  (NULL, 'mrt',      6.00, 0.48),
+  (NULL, 'lrt',      8.00, 0.46)
 ON CONFLICT DO NOTHING;

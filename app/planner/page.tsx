@@ -37,10 +37,11 @@ const MODE_META: Record<string, { label: string; shade: string }> = {
 };
 
 const FARE_REF: [string, string][] = [
-  ['MRT-3',   '₱13 min · ₱0.94/km'],
-  ['LRT',     '₱12 min · ₱0.89/km'],
-  ['Bus',     '₱15 first 5 km · ₱2.65/km'],
-  ['Jeepney', '₱14 first 4 km · ₱1.80/km'],
+  ['MRT-3',   '₱6 min · ₱0.48/km ½-price'],
+  ['LRT-2',   '₱8 min · ₱0.46/km ½-price'],
+  ['LRT-1',   '₱16.25 min · ₱1.47/km'],
+  ['Bus',     '₱18 first 5 km · ₱2.98/km'],
+  ['Jeepney', '₱14 first 4 km · ₱2.00/km'],
 ];
 
 // Stop catalog comes from /api/v1/catalog/stops so pick lists always match
@@ -125,7 +126,10 @@ function Micro({ children, color, style }: { children: React.ReactNode; color?: 
   );
 }
 
-/* ── Searchable stop input — underline, native datalist autocomplete ──────── */
+/* ── Searchable stop input — underline, custom-rendered dropdown ──────────── */
+/* Native <datalist> suggestion UI never renders on iOS Safari and is
+ * inconsistent elsewhere, so matches are rendered as a real absolutely-
+ * positioned list instead of relying on the browser's own popup. */
 function StopRow({ label, value, onChange, placeholder, stops, extraOption }: {
   label: string; value: string; onChange: (v: string) => void; placeholder: string;
   stops: string[]; extraOption?: string;
@@ -138,23 +142,47 @@ function StopRow({ label, value, onChange, placeholder, stops, extraOption }: {
     setPrevValue(value);
     setText(value);
   }
-  const listId = `stops-${label.replace(/\W/g, '').toLowerCase()}`;
+  const [open, setOpen] = useState(false);
+  const [highlight, setHighlight] = useState(0);
   const options = extraOption ? [extraOption, ...stops] : stops;
+  const matches = text === ''
+    ? options
+    : options.filter(s => s.toLowerCase().includes(text.toLowerCase()));
+
+  function commit(v: string) {
+    setText(v);
+    onChange(v);
+    setOpen(false);
+  }
+
   return (
-    <div>
+    <div style={{ position: 'relative' }}>
       <Micro>{label}</Micro>
       <input
-        list={listId}
         value={text}
         placeholder={placeholder}
         autoComplete="off"
         onChange={e => {
           const v = e.target.value;
           setText(v);
+          setOpen(true);
+          setHighlight(0);
           if (v === '') onChange('');
           else if (options.includes(v)) onChange(v); // committed on exact match
         }}
-        onBlur={() => { if (!options.includes(text)) setText(value); }}
+        onFocus={() => setOpen(true)}
+        onBlur={() => {
+          // Deferred so a click on a suggestion (onMouseDown) fires first.
+          setTimeout(() => { if (!options.includes(text)) setText(value); }, 0);
+          setOpen(false);
+        }}
+        onKeyDown={e => {
+          if (!open || matches.length === 0) return;
+          if (e.key === 'ArrowDown') { e.preventDefault(); setHighlight(h => Math.min(h + 1, matches.length - 1)); }
+          else if (e.key === 'ArrowUp') { e.preventDefault(); setHighlight(h => Math.max(h - 1, 0)); }
+          else if (e.key === 'Enter') { e.preventDefault(); commit(matches[highlight]); }
+          else if (e.key === 'Escape') { setOpen(false); }
+        }}
         style={{
           width: '100%', background: 'transparent', border: 'none', outline: 'none',
           borderBottom: `2px solid ${C.border}`, borderRadius: 0,
@@ -163,9 +191,27 @@ function StopRow({ label, value, onChange, placeholder, stops, extraOption }: {
           letterSpacing: '-0.02em',
         }}
       />
-      <datalist id={listId}>
-        {options.map(s => <option key={s} value={s} />)}
-      </datalist>
+      {open && matches.length > 0 && (
+        <div style={{
+          position: 'absolute', left: 0, right: 0, top: '100%', marginTop: 4, zIndex: 30,
+          background: C.card, border: `1px solid ${C.border}`, borderRadius: 12,
+          boxShadow: '0 8px 24px rgba(0,0,0,0.12)', maxHeight: 220, overflowY: 'auto',
+        }}>
+          {matches.map((s, i) => (
+            <div
+              key={s}
+              onMouseDown={e => { e.preventDefault(); commit(s); }}
+              style={{
+                padding: '10px 14px', fontSize: 15, cursor: 'pointer',
+                color: C.ink, background: i === highlight ? C.cardEl : 'transparent',
+                fontFamily: 'inherit',
+              }}
+            >
+              {s}
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -580,7 +626,7 @@ export default function Planner() {
 
               {/* Fare reference — plain text */}
               <div style={{ margin: '28px 0 0', flexShrink: 0 }}>
-                <Micro>2024 fare rates</Micro>
+                <Micro>2026 fare rates</Micro>
                 <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
                   {FARE_REF.map(([mode, ref]) => (
                     <div key={mode} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14 }}>
@@ -589,7 +635,10 @@ export default function Planner() {
                     </div>
                   ))}
                 </div>
-                <p style={{ margin: '12px 0 0', fontSize: 11, color: C.muted }}>LTFRB-approved · per boarding, not per segment</p>
+                <p style={{ margin: '12px 0 0', fontSize: 11, color: C.muted, lineHeight: 1.6 }}>
+                  LTFRB/DOTr-approved · per boarding, not per segment ·
+                  MRT-3 &amp; LRT-2 include the 50% DOTr discount (since Mar 23, 2026; LRT-1 not covered)
+                </p>
               </div>
             </div>
           </Sheet>
@@ -683,7 +732,7 @@ export default function Planner() {
                   );
                 })}
                 <p style={{ fontSize: 11, color: C.muted, textAlign: 'center', lineHeight: 1.6, marginTop: 16 }}>
-                  Fares per person per boarding · LTFRB 2024 · Walk legs free
+                  Fares per person per boarding · LTFRB/DOTr 2026 · Walk legs free
                 </p>
               </div>
             </Sheet>
@@ -747,15 +796,27 @@ export default function Planner() {
                     );
                     const ride = leg as RideLeg;
                     const meta = MODE_META[ride.mode] ?? { label: ride.mode.toUpperCase(), shade: C.muted };
+                    // Jeepneys have no fixed schedule, so a per-leg minute figure
+                    // is misleading — show board/alight stops instead. The leg's
+                    // travel time still rolls into the overall trip ETA above.
+                    const noSchedule = ride.mode === 'jeepney';
                     return (
                       <div key={i} style={{ display: 'flex', gap: 14 }}>
                         <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: '0.1em', color: C.ink, width: 38, flexShrink: 0, paddingTop: 3 }}>{meta.label}</span>
                         <div style={{ flex: 1 }}>
                           <p style={{ margin: 0, fontSize: 15, fontWeight: 700, color: C.ink, letterSpacing: '-0.01em' }}>{ride.line.name}</p>
-                          <p style={{ margin: '2px 0 0', fontSize: 13, color: C.body }}>{ride.from.name} → {ride.to.name}</p>
-                          <p className="tnum" style={{ margin: '2px 0 0', fontSize: 12, color: C.muted }}>
-                            {ride.stops.length} stop{ride.stops.length !== 1 ? 's' : ''} · {ride.durationMin} min · {ride.distKm.toFixed(1)} km
+                          <p style={{ margin: '2px 0 0', fontSize: 13, color: C.body }}>
+                            {noSchedule ? 'Board' : ''} {ride.from.name} → {ride.to.name}
                           </p>
+                          <p className="tnum" style={{ margin: '2px 0 0', fontSize: 12, color: C.muted }}>
+                            {ride.stops.length} stop{ride.stops.length !== 1 ? 's' : ''} · {ride.distKm.toFixed(1)} km
+                            {!noSchedule && ` · ${ride.durationMin} min`}
+                          </p>
+                          {noSchedule && (
+                            <p style={{ margin: '2px 0 0', fontSize: 12, color: C.muted, fontStyle: 'italic' }}>
+                              No fixed schedule — ride until your stop
+                            </p>
+                          )}
                           {ride.stops.length > 2 && (
                             <p style={{ margin: '6px 0 0', fontSize: 12, color: C.muted, lineHeight: 1.7 }}>
                               {ride.stops.map(s => s.name).join(' → ')}

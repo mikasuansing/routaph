@@ -15,7 +15,7 @@ const STATIC_PROVIDERS = [
     name: 'Grab Car',
     deepLinkTemplate:
       'https://grab.com/ride/?origin={originLat},{originLng}&destination={destLat},{destLng}',
-    baseFare: 105,
+    baseFare: 125,
     perKm: 15,
   },
   {
@@ -112,7 +112,7 @@ export async function GET(req: NextRequest) {
             id: p.id,
             name: p.name,
             deepLinkTemplate: p.deep_link_template,
-            baseFare: rule ? Number(rule.base_fare) : 105,
+            baseFare: rule ? Number(rule.base_fare) : 125,
             perKm:    rule ? Number(rule.per_km)    : 15,
           };
         });

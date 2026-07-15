@@ -194,11 +194,24 @@ function TripScreen() {
           all.push(...coords);
         }
       }
-      if (all.length >= 2) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        map.fitBounds((L as any).latLngBounds(all), { padding: [28, 28] });
-      }
       mapRef.current = map;
+
+      // The container often has no measured size on first paint (flex/scroll
+      // layout hasn't settled), so an immediate fitBounds anchors to a 0×0
+      // viewport and zooms to max over one point. Recompute size, then fit —
+      // and once more on the next frame to catch the settled layout.
+      const fit = () => {
+        if (cancelled) return;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (map as any).invalidateSize(false);
+        if (all.length >= 2) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          map.fitBounds((L as any).latLngBounds(all), { padding: [28, 28], maxZoom: 16 });
+        }
+      };
+      fit();
+      requestAnimationFrame(fit);
+      setTimeout(fit, 250);
     });
 
     return () => { cancelled = true; };
@@ -294,7 +307,9 @@ function TripScreen() {
   const isLastLeg  = currentLegIndex >= itinerary.legs.length - 1;
 
   const distKm = position ? distToNextStop(position, itinerary, currentLegIndex) : null;
-  const eta    = position ? etaToNextStop(position, itinerary, currentLegIndex, position.speedMps) : null;
+  // Jeepneys have no fixed schedule — show distance only, never a minute ETA.
+  const currentIsJeepney = currentLeg?.type === 'ride' && (currentLeg as RideLeg).line.mode === 'jeepney';
+  const eta    = position && !currentIsJeepney ? etaToNextStop(position, itinerary, currentLegIndex, position.speedMps) : null;
 
   const wazeUrl = originalDest
     ? `https://waze.com/ul?ll=${originalDest.lat},${originalDest.lng}&navigate=yes&utm_source=parapo`

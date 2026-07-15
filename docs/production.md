@@ -1,6 +1,6 @@
 # ParaPo — Production Runbook
 
-> Last updated 2026-07-04. Status legend: ✅ in place · 🔧 prepared, one action needed · 📋 recommended next.
+> Last updated 2026-07-08. Status legend: ✅ in place · 🔧 prepared, one action needed · 📋 recommended next.
 
 ## Frontend
 
@@ -13,13 +13,13 @@
 ## APIs & backend logic
 
 - ✅ Single boundary: browser → `/api/v1/*` → Supabase; envelope + status codes per `docs/api-contracts.md`.
-- ✅ Pure routing engine (`lib/routing/`, zero framework imports), 68 unit/contract tests.
+- ✅ Pure routing engine (`lib/routing/`, zero framework imports), 75+ unit/contract tests.
 - ✅ Input validation (zod, Metro-Manila bbox), per-endpoint failure tests.
-- 📋 Known engine issue: "cheapest" objective can exceed "fastest" fare (inadmissible A* heuristic; UI relabels honestly). Tracked as a follow-up task.
+- ✅ Fares are per-boarding in the A* cost (cheapest ≤ fastest regression-tested) and per-line (LRT-1 vs discounted LRT-2), 2026 LTFRB/DOTr rates verified against news sources.
 
 ## Database & storage
 
-- ✅ Live Supabase Postgres + PostGIS, seeded (4 corridors / 30 stops); seeds + schema all in `supabase/{migrations,seed}/`.
+- ✅ Live Supabase Postgres + PostGIS, seeded (5 corridors / 50 stops, dated fare history); seeds + schema all in `supabase/{migrations,seed}/`.
 - ✅ No raw GPS traces stored anywhere; search logs are geohashed and anonymous.
 - 📋 Enable Point-in-Time Recovery (Supabase dashboard → Database → Backups). Free tier keeps daily backups 7 days; PITR needs Pro.
 
@@ -28,13 +28,13 @@
 - ✅ Supabase Auth (password + email OTP; Google ready once the provider is enabled in the dashboard).
 - ✅ RLS enabled on every app table; user-scoped policies on `saved_routes` / `user_trips`; `search_logs` deny-all by design (service-role writes only).
 - ✅ `/api/v1/me/*` double-gated: `proxy.ts` edge check + per-handler Bearer validation. Service-role key exists only in `lib/supabase/server.ts`.
-- 🔧 `supabase/migrations/005_security_hardening.sql` (revoke PostGIS `st_estimatedextent` + `spatial_ref_sys` client grants) is checked in but **not applied** — run it in the SQL editor when ready.
-- 📋 Enable leaked-password protection: dashboard → Auth → Passwords (advisor warning).
+- ✅ Advisor items on PostGIS (`st_estimatedextent`, `spatial_ref_sys`) — **accepted risk, documented**: the grants belong to `supabase_admin` and cannot be revoked from the SQL editor (silent no-op). Exposure is bbox statistics only, and the only geometry stored is the public stop catalog.
+- 📋 Leaked-password protection: requires the Pro plan — enable if/when upgrading.
 - 📋 Demo account (`demo@parapo.app`) — delete or rotate before real launch.
 
 ## Hosting & deployment
 
-- 📋 Deploy target: **Vercel** (import the GitHub repo, add the 5 env vars from `.env.example`, done). Next.js 16 needs no extra config; `proxy.ts` runs at the edge.
+- ✅ Live on Vercel: https://parapo-chi.vercel.app (auto-deploys from main; env vars set; health endpoint green).
 - ✅ Builds succeed with zero env vars (CI-proven), so preview deployments work before secrets are set.
 
 ## CI/CD & version control

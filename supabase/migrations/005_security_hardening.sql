@@ -1,7 +1,11 @@
 -- 005: Security hardening (Supabase advisor findings, 2026-07-04)
 --
--- STATUS: prepared but NOT yet applied to the live project — owner deferred.
--- Apply via the Supabase SQL editor or `supabase db push` when ready.
+-- STATUS (2026-07-08): ran against the live project, but the REVOKEs are
+-- silent no-ops — the PostGIS objects are owned by `supabase_admin`, and
+-- Postgres ignores revokes of grants the current role (postgres) didn't make.
+-- Not fixable from the SQL editor. Risk ACCEPTED: st_estimatedextent only
+-- leaks bounding-box statistics, and the sole geometry in this DB is the
+-- public stops catalog. See docs/production.md.
 --
 -- 1. PostGIS ships st_estimatedextent as SECURITY DEFINER and Supabase
 --    exposes it via PostgREST RPC to anon/authenticated. The app never
