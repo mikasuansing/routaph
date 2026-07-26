@@ -42,6 +42,7 @@ export type TripState = {
 
 export type TripAction =
   | { type: 'START';      itinerary: Itinerary }
+  | { type: 'RESUME';     itinerary: Itinerary; legIndex: number }
   | { type: 'END' }
   | { type: 'SET_POS';    position: GeoPosition }
   | { type: 'GPS_DENIED' }
@@ -51,6 +52,13 @@ export type TripAction =
   | { type: 'SET_DISRUPTION'; disruption: Disruption | null };
 
 export const TRIP_STORAGE_KEY = 'parapo:active_trip';
+
+// Separate from TRIP_STORAGE_KEY (which holds the Itinerary handoff shape
+// documented in BASELINE §3.2) so a tab kill/reload mid-trip — the exact
+// moment MRT tunnels tend to cause, between signal loss and a background
+// tab getting evicted — resumes at the leg the rider was actually on
+// instead of silently restarting the trip from leg 0.
+export const TRIP_PROGRESS_KEY = 'parapo:trip_progress';
 
 // Helpers to identify the "arrival stop" of a leg for auto-advance checks
 export function getLegArrivalStop(itinerary: Itinerary, legIndex: number) {

@@ -19,13 +19,16 @@ import type {
 } from './types';
 import {
   getCurrentLineId,
+  getLegArrivalStop,
+  TRIP_PROGRESS_KEY,
   TRIP_STORAGE_KEY,
 } from './types';
-import { shouldAdvanceLeg } from './geo';
+import { distToNextStop, shouldAdvanceLeg } from './geo';
+import { notifyApproachingStop } from './notify';
 
 // ── Reducer ───────────────────────────────────────────────────────────────────
 
-const INITIAL: TripState = {
+export const INITIAL: TripState = {
   status:           'idle',
   itinerary:        null,
   originalDest:     null,
@@ -37,7 +40,10 @@ const INITIAL: TripState = {
   activeDisruption: null,
 };
 
-function reducer(state: TripState, action: TripAction): TripState {
+// Exported for unit testing — a pure function is easiest tested directly,
+// consistent with this project's lib/** pure-function test convention,
+// rather than mounting the provider through React Testing Library.
+export function reducer(state: TripState, action: TripAction): TripState {
   switch (action.type) {
     case 'START': {
       const dest = action.itinerary.legs.at(-1);
@@ -52,6 +58,22 @@ function reducer(state: TripState, action: TripAction): TripState {
         itinerary:     action.itinerary,
         originalDest,
         currentLegIndex: 0,
+      };
+    }
+    case 'RESUME': {
+      const dest = action.itinerary.legs.at(-1);
+      const originalDest = dest
+        ? dest.type === 'walk'
+          ? { lat: dest.toLat, lng: dest.toLng }
+          : { lat: dest.to.lat, lng: dest.to.lng }
+        : null;
+      const legIndex = Math.min(Math.max(action.legIndex, 0), action.itinerary.legs.length - 1);
+      return {
+        ...INITIAL,
+        status:        'active',
+        itinerary:     action.itinerary,
+        originalDest,
+        currentLegIndex: legIndex,
       };
     }
     case 'END':
@@ -88,6 +110,7 @@ function reducer(state: TripState, action: TripAction): TripState {
 
 type TripContextValue = TripState & {
   startTrip:      (itinerary: Itinerary) => void;
+  resumeTrip:     (itinerary: Itinerary, legIndex: number) => void;
   endTrip:        () => void;
   advanceLeg:     () => void;
   saveTrip:       () => Promise<boolean>;
@@ -99,12 +122,17 @@ const TripContext = createContext<TripContextValue | null>(null);
 // ── Provider ──────────────────────────────────────────────────────────────────
 
 const DISRUPTION_POLL_MS = 30_000;
+// "Next stop approaching" fires once per leg, inside this distance.
+const NEXT_STOP_NOTIFY_KM = 0.3;
 
 export function TripProvider({ children }: { children: React.ReactNode }) {
   const [state, dispatch] = useReducer(reducer, INITIAL);
   const latestStateRef = useRef<TripState>(INITIAL);
   const watchIdRef = useRef<number | null>(null);
   const pollRef    = useRef<ReturnType<typeof setInterval> | null>(null);
+  // Tracks which leg index the "approaching" alert already fired for, so it
+  // doesn't re-fire on every GPS tick while still inside the notify radius.
+  const notifiedLegRef = useRef<number>(-1);
 
   useEffect(() => {
     latestStateRef.current = state;
@@ -124,20 +152,35 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
 
   const startTrip = useCallback((itinerary: Itinerary) => {
     cleanup();
+    notifiedLegRef.current = -1;
     dispatch({ type: 'START', itinerary });
     // Persist itinerary in sessionStorage for page reload resilience.
-    // GPS is NEVER persisted — only the itinerary shape.
+    // GPS is NEVER persisted — only the itinerary shape (+ leg progress).
     try {
       sessionStorage.setItem(TRIP_STORAGE_KEY, JSON.stringify(itinerary));
+      sessionStorage.removeItem(TRIP_PROGRESS_KEY); // fresh trip starts at leg 0
     } catch {
       // sessionStorage unavailable (SSR guard / private mode) — non-fatal
     }
   }, [cleanup]);
 
+  // Resumes a trip already in sessionStorage at its last-confirmed leg,
+  // instead of restarting from leg 0 — for when the tab was reloaded or
+  // killed mid-trip (a background tab losing signal in an MRT tunnel is
+  // exactly when mobile browsers are most likely to evict it).
+  const resumeTrip = useCallback((itinerary: Itinerary, legIndex: number) => {
+    cleanup();
+    notifiedLegRef.current = legIndex; // already past this leg's "approaching" alert
+    dispatch({ type: 'RESUME', itinerary, legIndex });
+  }, [cleanup]);
+
   const endTrip = useCallback(() => {
     cleanup();
     dispatch({ type: 'END' });
-    try { sessionStorage.removeItem(TRIP_STORAGE_KEY); } catch { /* noop */ }
+    try {
+      sessionStorage.removeItem(TRIP_STORAGE_KEY);
+      sessionStorage.removeItem(TRIP_PROGRESS_KEY);
+    } catch { /* noop */ }
   }, [cleanup]);
 
   // Manual advance — "mark this leg done". Works with or without GPS; on the
@@ -227,6 +270,24 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
           shouldAdvanceLeg(gp, latest.itinerary, latest.currentLegIndex)
         ) {
           dispatch({ type: 'ADVANCE_LEG' });
+          return;
+        }
+
+        // "Next stop approaching" — once per leg, well before the 150 m
+        // auto-advance threshold so there's time to get up / move to the door.
+        if (
+          latest.itinerary &&
+          latest.currentLegIndex < latest.itinerary.legs.length &&
+          notifiedLegRef.current !== latest.currentLegIndex
+        ) {
+          const dist = distToNextStop(gp, latest.itinerary, latest.currentLegIndex);
+          if (dist !== null && dist <= NEXT_STOP_NOTIFY_KM) {
+            notifiedLegRef.current = latest.currentLegIndex;
+            const leg = latest.itinerary.legs[latest.currentLegIndex];
+            const arrival = getLegArrivalStop(latest.itinerary, latest.currentLegIndex);
+            const modeLabel = leg?.type === 'ride' ? leg.line.mode.toUpperCase() : 'WALK';
+            if (arrival) notifyApproachingStop(arrival.name, modeLabel);
+          }
         }
       },
       (err) => {
@@ -240,6 +301,15 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
     return cleanup;
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.status, state.itinerary]);
+
+  // Persist leg progress on every advance so a reload/tab-kill mid-trip
+  // resumes at the right leg instead of restarting (see resumeTrip above).
+  useEffect(() => {
+    if (state.status !== 'active') return;
+    try {
+      sessionStorage.setItem(TRIP_PROGRESS_KEY, JSON.stringify({ legIndex: state.currentLegIndex }));
+    } catch { /* non-fatal */ }
+  }, [state.status, state.currentLegIndex]);
 
   // Disruption poll — runs while a trip is active
   useEffect(() => {
@@ -313,7 +383,7 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
   }, [state.itinerary, state.position, state.originalDest, state.currentLegIndex]);
 
   return (
-    <TripContext.Provider value={{ ...state, startTrip, endTrip, advanceLeg, saveTrip, triggerReroute }}>
+    <TripContext.Provider value={{ ...state, startTrip, resumeTrip, endTrip, advanceLeg, saveTrip, triggerReroute }}>
       {children}
     </TripContext.Provider>
   );

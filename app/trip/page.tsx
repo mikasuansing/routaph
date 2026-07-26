@@ -5,9 +5,10 @@ import { useRouter } from 'next/navigation';
 import { supabaseBrowser } from '@/lib/supabase/browser';
 import { TripProvider, useTripContext } from '@/lib/trip/context';
 import type { Itinerary, RideLeg, WalkLeg } from '@/lib/routing/types';
-import { TRIP_STORAGE_KEY } from '@/lib/trip/types';
+import { TRIP_PROGRESS_KEY, TRIP_STORAGE_KEY } from '@/lib/trip/types';
 import { distToNextStop, etaToNextStop } from '@/lib/trip/geo';
 import { ReportIssueButton } from '@/app/components/ReportIssueSheet';
+import { notificationPermission, requestNotificationPermission } from '@/lib/trip/notify';
 
 /*
  * Trip Companion — live tracking screen.
@@ -71,6 +72,17 @@ function TripScreen() {
   const trip = useTripContext();
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'failed'>('idle');
   const [geoPerm, setGeoPerm] = useState<'granted' | 'prompt' | 'denied' | 'unknown'>('unknown');
+  const [notifPerm, setNotifPerm] = useState<NotificationPermission | 'unsupported'>(notificationPermission);
+  const [nowTick, setNowTick] = useState(() => Date.now());
+
+  // Ticks while a trip is active so the "last known position" staleness
+  // check below re-evaluates even when no new GPS fix is coming in
+  // (exactly the MRT-tunnel case: GPS goes quiet but the clock doesn't).
+  useEffect(() => {
+    if (trip.status !== 'active') return;
+    const id = setInterval(() => setNowTick(Date.now()), 5000);
+    return () => clearInterval(id);
+  }, [trip.status]);
 
   const mapElRef  = useRef<HTMLDivElement>(null);
   const mapRef    = useRef<unknown>(null);
@@ -100,14 +112,24 @@ function TripScreen() {
     return () => { active = false; };
   }, [router]);
 
-  // On mount: restore itinerary from sessionStorage and start trip
+  // On mount: restore itinerary from sessionStorage. If leg progress was
+  // also saved (a prior tab session got this far before reload/eviction —
+  // the exact failure mode a signal-loss tunnel causes), resume there
+  // instead of silently restarting the trip from leg 0.
   useEffect(() => {
     if (trip.status !== 'idle') return;
     try {
       const raw = sessionStorage.getItem(TRIP_STORAGE_KEY);
       if (!raw) { router.replace('/planner'); return; }
       const itinerary = JSON.parse(raw) as Itinerary;
-      trip.startTrip(itinerary);
+
+      const progressRaw = sessionStorage.getItem(TRIP_PROGRESS_KEY);
+      const legIndex = progressRaw ? (JSON.parse(progressRaw) as { legIndex: number }).legIndex : 0;
+      if (typeof legIndex === 'number' && legIndex > 0 && legIndex < itinerary.legs.length) {
+        trip.resumeTrip(itinerary, legIndex);
+      } else {
+        trip.startTrip(itinerary);
+      }
     } catch {
       router.replace('/planner');
     }
@@ -307,6 +329,12 @@ function TripScreen() {
   const nextLeg    = itinerary.legs[currentLegIndex + 1];
   const isLastLeg  = currentLegIndex >= itinerary.legs.length - 1;
 
+  // A GPS fix that's gone quiet for a while (MRT tunnel, no signal) still
+  // shows the LAST KNOWN position/ETA below rather than blanking — but
+  // labeled as last-known so it's not mistaken for a live reading.
+  const SIGNAL_STALE_MS = 20_000;
+  const signalStale = position !== null && nowTick - position.timestamp > SIGNAL_STALE_MS;
+
   const distKm = position ? distToNextStop(position, itinerary, currentLegIndex) : null;
   // Jeepneys have no fixed schedule — show distance only, never a minute ETA.
   const currentIsJeepney = currentLeg?.type === 'ride' && (currentLeg as RideLeg).line.mode === 'jeepney';
@@ -393,6 +421,20 @@ function TripScreen() {
           </div>
         )}
 
+        {notifPerm === 'default' && status === 'active' && (
+          <div style={{ marginBottom: 22, background: C.card, border: `1px solid ${C.border}`, borderRadius: 20, padding: 16, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+            <p style={{ margin: 0, fontSize: 13, color: C.body }}>
+              Get an alert + buzz when your stop is close.
+            </p>
+            <button
+              onClick={() => { requestNotificationPermission().then(setNotifPerm); }}
+              style={{ padding: '9px 16px', borderRadius: 999, border: 'none', background: C.accent, color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', flexShrink: 0, whiteSpace: 'nowrap' }}
+            >
+              Enable stop alerts
+            </button>
+          </div>
+        )}
+
         {/* Current leg — the glance */}
         {currentLeg && (
           <section style={{ marginBottom: 28, background: C.card, border: `1px solid ${C.border}`, borderRadius: 20, padding: 18 }}>
@@ -404,6 +446,11 @@ function TripScreen() {
               <p className="tnum" style={{ margin: '8px 0 0', fontSize: 16, color: C.body }}>
                 {distKm < 1 ? `${Math.round(distKm * 1000)} m` : `${distKm.toFixed(1)} km`}
                 {eta !== null && ` · ~${eta} min`} to next stop
+              </p>
+            )}
+            {signalStale && (
+              <p style={{ margin: '6px 0 0', fontSize: 12, fontWeight: 700, color: C.muted }}>
+                Signal lost — showing last known position ({Math.round((nowTick - position!.timestamp) / 1000)}s ago)
               </p>
             )}
             {status === 'active' && (
