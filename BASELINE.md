@@ -185,14 +185,20 @@ DB `'train'` → check corridor name for `'LRT'` → engine `'lrt'` else `'mrt'`
 - **Dedup**: itineraries deduped by ride-leg signature (line + from + to) before returning.
 - **Short-circuit**: if origin and destination are `< 0.05 km` apart, return `[]` immediately.
 
-### §7.4 Fare Model (2024 LTFRB / DOTr rates)
+### §7.4 Fare Model (2026 LTFRB / DOTr rates; verified 2026-07-08)
 
-| Mode | Base fare | Flag km (free) | Per-km after |
+| Mode / line | Base fare | Flag km (free) | Per-km after |
 |---|---|---|---|
-| Jeepney | ₱14 | 4 km | ₱1.80/km |
-| Bus (A/C ordinary) | ₱15 | 5 km | ₱2.65/km |
-| MRT-3 | ₱13 | 0 km | ₱0.94/km |
-| LRT-1/2 | ₱12 | 0 km | ₱0.89/km |
+| Jeepney (traditional) | ₱14 | 4 km | ₱2.00/km |
+| Bus (A/C city) | ₱18 | 5 km | ₱2.98/km |
+| MRT-3 (50% DOTr discount) | ₱6 | 0 km | ₱0.48/km |
+| LRT-2 (50% DOTr discount) | ₱8 | 0 km | ₱0.46/km |
+| LRT-1 (LRMC — **not** discounted) | ₱16.25 | 0 km | ₱1.47/km |
+
+The Mar 23 2026 DOTr 50% discount covers MRT-3 and LRT-2 only. Because both
+LRT-1 and LRT-2 map to engine mode `'lrt'`, fare rules are **per line** (one
+`fares` row per route; the loader emits `lineId`-scoped `FareRule`s). Mode-level
+averaging is forbidden.
 
 **Critical rule**: `computeFare()` must be called **once per boarding** (full leg distance), never once per edge or segment.
 

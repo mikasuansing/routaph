@@ -78,34 +78,34 @@ export async function loadTransitGraph(): Promise<TransitGraph> {
       })
       .filter(([, ids]) => ids.length > 0);
 
-    // Aggregate DB fares to per-mode FareRule[]
-    const modeAccum = new Map<string, { baseSum: number; perKmSum: number; n: number }>();
+    // Flag distances: rail charges per-km from 0; road modes have a free-km window
+    const FLAG_KM: Partial<Record<string, number>> = { mrt: 0, lrt: 0, bus: 5, jeepney: 4 };
+
+    // Per-LINE fare rules (lineId = route id, which is the engine's line id).
+    // Never average across a mode: LRT-1 (LRMC, undiscounted) and LRT-2
+    // (DOTr 50% discount since 2026-03-23) are both mode 'lrt' but priced
+    // very differently. faresData is ordered newest-effective first; keep the
+    // first row seen per route so new fare rows supersede old ones.
+    const fareRules: FareRule[] = [];
+    const seenRoute = new Set<number>();
     for (const fare of faresData) {
+      if (seenRoute.has(fare.route_id)) continue;
       const route = routes.find(r => r.id === fare.route_id);
       if (!route) continue;
       const corridor = corridors.find(c => c.id === route.corridor_id);
       if (!corridor) continue;
+      seenRoute.add(fare.route_id);
       const mode = mapMode(corridor.mode, corridor.name);
-      const acc = modeAccum.get(mode) ?? { baseSum: 0, perKmSum: 0, n: 0 };
-      acc.baseSum   += Number(fare.base_fare);
-      acc.perKmSum  += Number(fare.per_km);
-      acc.n++;
-      modeAccum.set(mode, acc);
+      fareRules.push({
+        lineId:         route.id,
+        mode:           mode as Line['mode'],
+        baseFare:       Number(fare.base_fare),
+        perKmRate:      Number(fare.per_km),
+        flagDistanceKm: FLAG_KM[mode] ?? 4,
+      });
     }
-
-    // Flag distances: rail charges per-km from 0; road modes have a free-km window
-    const FLAG_KM: Partial<Record<string, number>> = { mrt: 0, lrt: 0, bus: 5, jeepney: 4 };
-
-    const fareRules: FareRule[] = [...modeAccum.entries()].map(([mode, acc]) => ({
-      lineId:          null,
-      mode:            mode as Line['mode'],
-      baseFare:        acc.baseSum  / acc.n,
-      perKmRate:       acc.perKmSum / acc.n,
-      flagDistanceKm:  FLAG_KM[mode] ?? 4,
-    }));
-    for (const def of DEFAULT_FARE_RULES) {
-      if (!modeAccum.has(def.mode)) fareRules.push(def);
-    }
+    // Mode-level fallbacks for any line without a DB fare row
+    fareRules.push(...DEFAULT_FARE_RULES);
 
     const graph = buildGraphFromData(lines, stops, lineStops, fareRules);
     _cache = { graph, at: Date.now() };
