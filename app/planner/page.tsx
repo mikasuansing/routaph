@@ -3,6 +3,10 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { TRIP_STORAGE_KEY } from '@/lib/trip/types';
 import { supabaseBrowser } from '@/lib/supabase/browser';
+import { checkLastTrain, formatClockTime, type LastTrainCheck } from '@/lib/routing/lastTrain';
+import { beepAdjustedFare, beepAdjustedTotalFare } from '@/lib/routing/beepFare';
+
+const BEEP_STORAGE_KEY = 'parapo:has_beep';
 
 /*
  * Planner — the primary commuter dashboard.
@@ -82,6 +86,12 @@ function matchesFilter(itin: Itinerary, f: ModeFilter): boolean {
 function arriveAt(durationMin: number): string {
   return new Date(Date.now() + durationMin * 60_000)
     .toLocaleTimeString('en-PH', { hour: 'numeric', minute: '2-digit' });
+}
+
+/* Worst-first: a "closed" line always outranks a "final call" for display */
+function worstLastTrainCheck(checks: LastTrainCheck[]): LastTrainCheck | null {
+  if (checks.length === 0) return null;
+  return checks.find(c => c.status === 'closed') ?? checks[0];
 }
 
 /* Transport combination, e.g. "MRT-3 → EDSA Carousel" */
@@ -242,6 +252,13 @@ export default function Planner() {
   const [from, setFrom]           = useState('');
   const [to, setTo]               = useState('');
   const [rush, setRush]           = useState(() => { const h = new Date().getHours(); return (h >= 7 && h <= 9) || (h >= 17 && h <= 19); });
+  const [hasBeep, setHasBeep]     = useState(() => {
+    if (typeof window === 'undefined') return true;
+    try {
+      const saved = localStorage.getItem(BEEP_STORAGE_KEY);
+      return saved === null ? true : saved === 'true';
+    } catch { return true; }
+  });
   const [modeFilter, setModeFilter] = useState<ModeFilter>('all');
   const [enabledModes, setEnabledModes] = useState<Record<ModeGroup, boolean>>({ train: true, bus: true, jeepney: true });
   const [itineraries, setItineraries] = useState<Itinerary[]>([]);
@@ -254,6 +271,15 @@ export default function Planner() {
   const [authed, setAuthed]       = useState<boolean | null>(null);
   const [commuteSave, setCommuteSave] = useState<'idle' | 'saving' | 'saved' | 'failed'>('idle');
   const stopNames = Object.keys(stopCoords).sort();
+
+  /* ── Beep card preference — persisted locally, not tied to the account ──── */
+  function toggleHasBeep() {
+    setHasBeep(prev => {
+      const next = !prev;
+      try { localStorage.setItem(BEEP_STORAGE_KEY, String(next)); } catch { /* noop */ }
+      return next;
+    });
+  }
 
   /* ── Login required: no session → back to /auth ───────────────────────── */
   useEffect(() => {
@@ -607,6 +633,13 @@ export default function Planner() {
                 <Micro color={rush ? C.ink : C.muted}>Rush hour {rush ? 'on' : 'off'} · 7–9 am · 5–7 pm</Micro>
               </button>
 
+              {/* Beep card — adjusts fare display, doesn't change routing */}
+              <button onClick={toggleHasBeep} style={{ background: 'none', border: 'none', padding: 0, margin: '10px 0 0', cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left', flexShrink: 0 }}>
+                <Micro color={hasBeep ? C.ink : C.muted}>
+                  {hasBeep ? '✓ I have a Beep card' : 'Paying cash / no Beep card'}
+                </Micro>
+              </button>
+
               {/* CTA */}
               <button
                 onClick={search}
@@ -703,11 +736,13 @@ export default function Planner() {
                     <p style={{ fontSize: 13, color: C.muted }}>Try a different filter or stops farther apart.</p>
                   </div>
                 ) : filtered.map((itin, idx) => {
+                  const displayFare = beepAdjustedTotalFare(itin.legs.filter(l => l.type === 'ride') as RideLeg[], hasBeep);
                   // Don't claim "cheapest" when another shown route is cheaper
-                  const minFare = Math.min(...filtered.map(x => x.totalFare));
-                  const objLabel = itin.objective === 'cheapest' && itin.totalFare > minFare
+                  const minFare = Math.min(...filtered.map(x => beepAdjustedTotalFare(x.legs.filter(l => l.type === 'ride') as RideLeg[], hasBeep)));
+                  const objLabel = itin.objective === 'cheapest' && displayFare > minFare
                     ? 'Alternative'
                     : OBJ_LABEL[itin.objective] ?? itin.objective;
+                  const worstRail = worstLastTrainCheck(checkLastTrain(itin.legs));
                   return (
                   <button key={idx} onClick={() => { setSelected(itin); setScreen('detail'); }}
                     style={{ display: 'block', width: '100%', background: C.card, border: `1px solid ${C.border}`, borderRadius: 20, padding: '16px 18px', marginBottom: 12, cursor: 'pointer', textAlign: 'left', fontFamily: 'inherit' }}
@@ -718,7 +753,7 @@ export default function Planner() {
                         {itin.totalDurationMin}<span style={{ fontFamily: 'inherit', fontSize: 15, fontWeight: 600, color: C.muted }}> min</span>
                       </span>
                       <span className="tnum" style={{ fontFamily: DISPLAY, fontSize: 24, fontWeight: 800, color: C.accent, letterSpacing: '-0.02em' }}>
-                        ₱{itin.totalFare.toFixed(2)}
+                        ₱{displayFare.toFixed(2)}
                       </span>
                     </div>
                     <p className="tnum" style={{ margin: '6px 0 0', fontSize: 14, color: C.body }}>
@@ -728,6 +763,16 @@ export default function Planner() {
                       {comboLabel(itin)}
                     </p>
                     <JourneyBar itin={itin} />
+                    {worstRail && (
+                      <p style={{
+                        margin: '10px 0 0', fontSize: 12, fontWeight: 700,
+                        color: worstRail.status === 'closed' ? C.error : C.accent,
+                      }}>
+                        {worstRail.status === 'closed'
+                          ? `⚠ Last train has left — ${worstRail.lineName} closed at ${formatClockTime(worstRail.closesAt)}`
+                          : `⏰ You'll just make the last train — ${worstRail.lineName} boards ~${formatClockTime(worstRail.boardsAt)}`}
+                      </p>
+                    )}
                   </button>
                   );
                 })}
@@ -748,6 +793,9 @@ export default function Planner() {
         const wazeUrl = destCoords
           ? `https://waze.com/ul?ll=${destCoords[0]},${destCoords[1]}&navigate=yes&utm_source=parapo`
           : `https://waze.com/ul?q=${encodeURIComponent(destName + ' Metro Manila')}&navigate=yes&utm_source=parapo`;
+        const worstRailCheck = worstLastTrainCheck(checkLastTrain(selected.legs));
+        const selectedRideLegs = selected.legs.filter(l => l.type === 'ride') as RideLeg[];
+        const selectedDisplayFare = beepAdjustedTotalFare(selectedRideLegs, hasBeep);
 
         return (
           <>
@@ -773,12 +821,26 @@ export default function Planner() {
                     </p>
                   </div>
                   <div style={{ textAlign: 'right' }}>
-                    <span className="tnum" style={{ fontFamily: DISPLAY, fontSize: 30, fontWeight: 800, color: C.accent, letterSpacing: '-0.02em' }}>₱{selected.totalFare.toFixed(2)}</span>
-                    <p style={{ margin: '4px 0 0', fontSize: 12, color: C.muted }}>per person</p>
+                    <span className="tnum" style={{ fontFamily: DISPLAY, fontSize: 30, fontWeight: 800, color: C.accent, letterSpacing: '-0.02em' }}>₱{selectedDisplayFare.toFixed(2)}</span>
+                    <p style={{ margin: '4px 0 0', fontSize: 12, color: C.muted }}>per person{hasBeep ? ' · Beep' : ' · cash'}</p>
                   </div>
                 </div>
 
                 <div style={{ margin: '10px 0 26px' }}><JourneyBar itin={selected} /></div>
+
+                {worstRailCheck && (
+                  <div style={{
+                    margin: '0 0 20px', padding: '12px 14px', borderRadius: 14,
+                    background: worstRailCheck.status === 'closed' ? C.error : C.accent,
+                    color: '#FFFFFF',
+                  }}>
+                    <p style={{ margin: 0, fontSize: 13, fontWeight: 700, lineHeight: 1.5 }}>
+                      {worstRailCheck.status === 'closed'
+                        ? `⚠ Last train has left — ${worstRailCheck.lineName} closed at ${formatClockTime(worstRailCheck.closesAt)}. This route won't work right now.`
+                        : `⏰ You'll just make the last train — ${worstRailCheck.lineName} boards ~${formatClockTime(worstRailCheck.boardsAt)} (closes ${formatClockTime(worstRailCheck.closesAt)}).`}
+                    </p>
+                  </div>
+                )}
 
                 {/* Step by step */}
                 <Micro>Step by step</Micro>
@@ -800,6 +862,7 @@ export default function Planner() {
                     // is misleading — show board/alight stops instead. The leg's
                     // travel time still rolls into the overall trip ETA above.
                     const noSchedule = ride.mode === 'jeepney';
+                    const beepFare = beepAdjustedFare(ride, hasBeep);
                     return (
                       <div key={i} style={{ display: 'flex', gap: 14 }}>
                         <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: '0.1em', color: C.ink, width: 38, flexShrink: 0, paddingTop: 3 }}>{meta.label}</span>
@@ -822,15 +885,18 @@ export default function Planner() {
                               {ride.stops.map(s => s.name).join(' → ')}
                             </p>
                           )}
+                          {beepFare.note && (
+                            <p style={{ margin: '6px 0 0', fontSize: 11, color: C.accent, fontWeight: 600 }}>{beepFare.note}</p>
+                          )}
                         </div>
-                        <span className="tnum" style={{ fontSize: 15, fontWeight: 700, color: C.ink }}>₱{ride.fare.toFixed(2)}</span>
+                        <span className="tnum" style={{ fontSize: 15, fontWeight: 700, color: C.ink }}>₱{beepFare.displayFare.toFixed(2)}</span>
                       </div>
                     );
                   })}
                 </div>
 
                 {/* Fare breakdown — receipt typography */}
-                <Micro>Fare breakdown</Micro>
+                <Micro>Fare breakdown{!hasBeep ? ' (cash / no Beep card)' : ''}</Micro>
                 <div style={{ margin: '14px 0 0', display: 'flex', flexDirection: 'column', gap: 12 }}>
                   {selected.legs.map((leg, i) => {
                     if (leg.type === 'walk') return (
@@ -841,19 +907,21 @@ export default function Planner() {
                     );
                     const ride = leg as RideLeg;
                     const formula = fareFormula(ride);
+                    const beepFare = beepAdjustedFare(ride, hasBeep);
                     return (
                       <div key={i}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14 }}>
                           <span style={{ fontWeight: 700, color: C.ink }}>{ride.line.name} <span className="tnum" style={{ fontWeight: 400, color: C.muted }}>{ride.distKm.toFixed(1)} km</span></span>
-                          <span className="tnum" style={{ fontWeight: 700, color: C.ink }}>₱{ride.fare.toFixed(2)}</span>
+                          <span className="tnum" style={{ fontWeight: 700, color: C.ink }}>₱{beepFare.displayFare.toFixed(2)}</span>
                         </div>
                         {formula && <p className="tnum" style={{ margin: '2px 0 0', fontSize: 12, color: C.muted }}>{formula}</p>}
+                        {beepFare.note && <p style={{ margin: '2px 0 0', fontSize: 11, color: C.accent, fontWeight: 600 }}>{beepFare.note}</p>}
                       </div>
                     );
                   })}
                   <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: 12, borderTop: `1px solid ${C.border}` }}>
                     <span style={{ fontSize: 15, fontWeight: 800, color: C.ink }}>Total per person</span>
-                    <span className="tnum" style={{ fontSize: 18, fontWeight: 800, color: C.ink }}>₱{selected.totalFare.toFixed(2)}</span>
+                    <span className="tnum" style={{ fontSize: 18, fontWeight: 800, color: C.ink }}>₱{selectedDisplayFare.toFixed(2)}</span>
                   </div>
                 </div>
 

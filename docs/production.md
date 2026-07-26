@@ -1,6 +1,6 @@
 # ParaPo — Production Runbook
 
-> Last updated 2026-07-08. Status legend: ✅ in place · 🔧 prepared, one action needed · 📋 recommended next.
+> Last updated 2026-07-26. Status legend: ✅ in place · 🔧 prepared, one action needed · 📋 recommended next.
 
 ## Frontend
 
@@ -9,6 +9,8 @@
 - ✅ Dead code removed: legacy `/api/trips/plan`, design-a–d explorations, `lib/demoNetwork.ts`, `lib/nav.ts`, cookie-session code.
 - ✅ GPS is opt-in, foreground-only, never persisted (BASELINE §7.7); manual leg-advance fallback when denied.
 - ✅ Trip history saves **only** on the explicit "Save trip to history" action.
+- ✅ Last-train awareness (`lib/routing/lastTrain.ts`): warns on route cards and the detail screen when a rail leg would board after that line's last train, or is a "final call" within 20 minutes of closing. Closing times are conservative estimates — see the module's doc comment for sources.
+- ✅ Beep card fare toggle (`lib/routing/beepFare.ts`): "I have a Beep card" preference in the planner, persisted in `localStorage`. Adjusts displayed fare for LRT-1 (~20% cash/SJT surcharge) and notes MRT-3 (cash discontinued) / LRT-2 (same discounted fare either way) — no fabricated numbers where no real difference exists.
 
 ## APIs & backend logic
 
@@ -19,7 +21,7 @@
 
 ## Database & storage
 
-- ✅ Live Supabase Postgres + PostGIS, seeded (5 corridors / 50 stops, dated fare history); seeds + schema all in `supabase/{migrations,seed}/`.
+- ✅ Live Supabase Postgres + PostGIS, seeded (5 corridors / 66 stops, dated fare history); seeds + schema all in `supabase/{migrations,seed}/`. EDSA Carousel is the full real 24-station Monumento↔PITX route (`supabase/seed/004_edsa_carousel_full.sql`), not the earlier 8-stop demo subset.
 - ✅ No raw GPS traces stored anywhere; search logs are geohashed and anonymous.
 - 📋 Enable Point-in-Time Recovery (Supabase dashboard → Database → Backups). Free tier keeps daily backups 7 days; PITR needs Pro.
 
