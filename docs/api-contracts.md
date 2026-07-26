@@ -279,6 +279,52 @@ CrowdReport {
 
 ---
 
+## GET /api/v1/station-accessibility
+
+**Auth:** None
+**Query params:** `?stopId=<number>` (optional — filter to one station)
+**Returns:** `{ "data": StationAccessibility[] }`
+
+```typescript
+StationAccessibility {
+  stopId:    number;
+  feature:   "elevator" | "escalator";
+  status:    "unknown" | "operational" | "out_of_service";
+  note:      string | null;
+  updatedAt: string; // ISO8601
+}
+```
+**Status codes:** 200, 400 (invalid stopId), 500
+**Notes:**
+- Scoped to MRT-3 stations only (see `supabase/migrations/008_station_accessibility.sql`)
+  — infrastructure for future real data; seed values are `'unknown'`, never
+  a fabricated "operational".
+- Falls back to `[]` if the table doesn't exist yet (not-yet-applied
+  migration) or the DB is unconfigured — never a 500 for that case.
+
+---
+
+## PATCH /api/v1/admin/station-accessibility
+
+**Auth:** Bearer token (required) **+** caller's email must be in the
+`ADMIN_EMAILS` server env allowlist (comma-separated); everyone else gets
+403. There's no roles table in this schema — this is deliberately the
+simplest gate that isn't "anyone logged in."
+
+**Body:**
+```json
+{
+  "stopId":  number,
+  "feature": "elevator" | "escalator",
+  "status":  "unknown" | "operational" | "out_of_service",
+  "note":    "string, max 200 chars (optional)"
+}
+```
+**Returns:** `{ "data": StationAccessibility }`
+**Status codes:** 200, 400, 401, 403, 500
+
+---
+
 ## Planned (not yet implemented)
 
 | Method | Path | Auth | Description |

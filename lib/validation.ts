@@ -52,6 +52,13 @@ export const LogSearchSchema = z.object({
   resultCount: z.number().int().min(0).optional(),
 });
 
+export const StationAccessibilityUpdateSchema = z.object({
+  stopId:  z.number().int().positive(),
+  feature: z.enum(["elevator", "escalator"]),
+  status:  z.enum(["unknown", "operational", "out_of_service"]),
+  note:    z.string().max(200).optional(),
+});
+
 export const SavedRouteSchema = z.object({
   name:        z.string().min(1).max(120),
   originLat:   lat,

@@ -56,10 +56,11 @@ const FARE_REF: [string, string][] = [
 type CatalogStop = { id: number; name: string; lat: number; lng: number };
 
 type WalkLeg = { type: 'walk'; fromName: string; toName: string; fromLat: number; fromLng: number; toLat: number; toLng: number; distKm: number; durationMin: number };
-type RideLeg = { type: 'ride'; mode: string; line: { id: number; name: string; color: string }; from: { name: string; lat: number; lng: number }; to: { name: string; lat: number; lng: number }; stops: { name: string; lat: number; lng: number }[]; distKm: number; durationMin: number; fare: number; fareRule?: { baseFare: number; perKmRate: number; flagDistanceKm: number } };
+type RideLeg = { type: 'ride'; mode: string; line: { id: number; name: string; color: string }; from: { id: number; name: string; lat: number; lng: number }; to: { id: number; name: string; lat: number; lng: number }; stops: { id: number; name: string; lat: number; lng: number }[]; distKm: number; durationMin: number; fare: number; fareRule?: { baseFare: number; perKmRate: number; flagDistanceKm: number } };
 type Leg = WalkLeg | RideLeg;
 type Itinerary = { legs: Leg[]; totalDurationMin: number; totalFare: number; transfers: number; objective: string };
 type Disruption = { id: number; corridorId: number; description: string };
+type StationAccessibility = { stopId: number; feature: 'elevator' | 'escalator'; status: 'unknown' | 'operational' | 'out_of_service'; note: string | null };
 type Screen = 'home' | 'loading' | 'results' | 'detail';
 type ModeFilter = 'all' | 'train' | 'bus' | 'jeepney';
 type ModeGroup = 'train' | 'bus' | 'jeepney';
@@ -271,6 +272,7 @@ export default function Planner() {
   const [myLoc, setMyLoc]         = useState<[number, number] | null>(null);
   const [locBusy, setLocBusy]     = useState(false);
   const [disruptions, setDisruptions] = useState<Disruption[] | null>(null);
+  const [accessibilityByStop, setAccessibilityByStop] = useState<Record<number, StationAccessibility[]>>({});
   const [authed, setAuthed]       = useState<boolean | null>(null);
   const [commuteSave, setCommuteSave] = useState<'idle' | 'saving' | 'saved' | 'failed'>('idle');
   const stopNames = Object.keys(stopCoords).sort();
@@ -324,6 +326,23 @@ export default function Planner() {
       .then(res => res.json())
       .then((json: { data?: Disruption[] }) => { if (active) setDisruptions(json.data ?? []); })
       .catch(() => { if (active) setDisruptions(null); });
+    return () => { active = false; };
+  }, []);
+
+  /* ── Station accessibility (MRT-3 elevator/escalator) — manual, best-effort */
+  useEffect(() => {
+    let active = true;
+    fetch('/api/v1/station-accessibility')
+      .then(res => res.json())
+      .then((json: { data?: StationAccessibility[] }) => {
+        if (!active) return;
+        const map: Record<number, StationAccessibility[]> = {};
+        for (const row of json.data ?? []) {
+          (map[row.stopId] ??= []).push(row);
+        }
+        setAccessibilityByStop(map);
+      })
+      .catch(() => { /* non-fatal — absence of this data doesn't block planning */ });
     return () => { active = false; };
   }, []);
 
@@ -891,6 +910,10 @@ export default function Planner() {
                     // travel time still rolls into the overall trip ETA above.
                     const noSchedule = ride.mode === 'jeepney';
                     const beepFare = beepAdjustedFare(ride, hasBeep);
+                    const outages = ride.mode === 'mrt'
+                      ? [...(accessibilityByStop[ride.from.id] ?? []), ...(accessibilityByStop[ride.to.id] ?? [])]
+                          .filter(a => a.status === 'out_of_service')
+                      : [];
                     return (
                       <div key={i} style={{ display: 'flex', gap: 14 }}>
                         <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: '0.1em', color: C.ink, width: 38, flexShrink: 0, paddingTop: 3 }}>{meta.label}</span>
@@ -916,6 +939,12 @@ export default function Planner() {
                           {beepFare.note && (
                             <p style={{ margin: '6px 0 0', fontSize: 11, color: C.accent, fontWeight: 600 }}>{beepFare.note}</p>
                           )}
+                          {outages.map((a, oi) => (
+                            <p key={oi} style={{ margin: '4px 0 0', fontSize: 11, color: C.error, fontWeight: 600 }}>
+                              ⚠ {a.feature === 'elevator' ? 'Elevator' : 'Escalator'} reported out of service
+                              {a.note ? ` — ${a.note}` : ''}
+                            </p>
+                          ))}
                         </div>
                         <span className="tnum" style={{ fontSize: 15, fontWeight: 700, color: C.ink }}>₱{beepFare.displayFare.toFixed(2)}</span>
                       </div>

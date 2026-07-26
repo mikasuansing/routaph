@@ -416,6 +416,118 @@ describe('GET /api/v1/disruptions', () => {
   });
 });
 
+// ── GET /api/v1/station-accessibility ────────────────────────────────────────
+
+describe('GET /api/v1/station-accessibility', () => {
+  let GET: (req: NextRequest) => Promise<Response>;
+
+  beforeEach(async () => {
+    vi.resetModules();
+    ({ GET } = await import('../v1/station-accessibility/route'));
+  });
+
+  it('returns 400 on invalid stopId', async () => {
+    const req = new NextRequest('http://localhost:3000/api/v1/station-accessibility?stopId=abc');
+    const res = await GET(req);
+    expect(res.status).toBe(400);
+  });
+
+  it('returns 200 with data array on valid request (Supabase unconfigured → empty)', async () => {
+    const req = new NextRequest('http://localhost:3000/api/v1/station-accessibility');
+    const res = await GET(req);
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(Array.isArray(json.data)).toBe(true);
+  });
+
+  it('returns 400 on a non-positive stopId', async () => {
+    const req = new NextRequest('http://localhost:3000/api/v1/station-accessibility?stopId=0');
+    const res = await GET(req);
+    expect(res.status).toBe(400);
+  });
+});
+
+// ── PATCH /api/v1/admin/station-accessibility ────────────────────────────────
+
+describe('PATCH /api/v1/admin/station-accessibility', () => {
+  let PATCH: (req: NextRequest) => Promise<Response>;
+
+  beforeEach(async () => {
+    vi.resetModules();
+    delete process.env.ADMIN_EMAILS;
+    ({ PATCH } = await import('../v1/admin/station-accessibility/route'));
+  });
+
+  function makePatchRequest(body?: unknown, headers?: Record<string, string>): NextRequest {
+    return new NextRequest('http://localhost:3000/api/test', {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json', ...headers },
+      body: body !== undefined ? JSON.stringify(body) : undefined,
+    });
+  }
+
+  it('returns 401 with no auth', async () => {
+    const req = makePatchRequest({ stopId: 1, feature: 'elevator', status: 'operational' });
+    const res = await PATCH(req);
+    expect(res.status).toBe(401);
+  });
+
+  it('returns 403 when the authenticated email is not in ADMIN_EMAILS', async () => {
+    process.env.ADMIN_EMAILS = 'someone-else@parapo.app';
+    const { supabaseServer } = await import('@/lib/supabase/server');
+    vi.mocked(supabaseServer.auth.getUser).mockResolvedValueOnce({
+      data: { user: { id: 'user-1', email: 'not-admin@parapo.app' } as never },
+      error: null,
+    });
+    const req = makePatchRequest(
+      { stopId: 1, feature: 'elevator', status: 'operational' },
+      { authorization: 'Bearer valid' },
+    );
+    const res = await PATCH(req);
+    expect(res.status).toBe(403);
+  });
+
+  it('returns 400 for an invalid status value, even for an allowlisted admin', async () => {
+    process.env.ADMIN_EMAILS = 'admin@parapo.app';
+    const { supabaseServer } = await import('@/lib/supabase/server');
+    vi.mocked(supabaseServer.auth.getUser).mockResolvedValueOnce({
+      data: { user: { id: 'user-1', email: 'admin@parapo.app' } as never },
+      error: null,
+    });
+    const req = makePatchRequest(
+      { stopId: 1, feature: 'elevator', status: 'definitely_broken' },
+      { authorization: 'Bearer valid' },
+    );
+    const res = await PATCH(req);
+    expect(res.status).toBe(400);
+  });
+
+  it('returns 200 with the updated row for an allowlisted admin', async () => {
+    process.env.ADMIN_EMAILS = 'admin@parapo.app';
+    const { supabaseServer } = await import('@/lib/supabase/server');
+    vi.mocked(supabaseServer.auth.getUser).mockResolvedValueOnce({
+      data: { user: { id: 'user-1', email: 'admin@parapo.app' } as never },
+      error: null,
+    });
+    vi.mocked(supabaseServer.from).mockReturnValueOnce({
+      upsert: vi.fn().mockReturnThis(),
+      select: vi.fn().mockReturnThis(),
+      single: vi.fn().mockResolvedValue({
+        data: { stop_id: 201, feature: 'elevator', status: 'out_of_service', note: 'Reported by rider', updated_at: '2026-07-26T00:00:00Z' },
+        error: null,
+      }),
+    } as never);
+    const req = makePatchRequest(
+      { stopId: 201, feature: 'elevator', status: 'out_of_service', note: 'Reported by rider' },
+      { authorization: 'Bearer valid' },
+    );
+    const res = await PATCH(req);
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.data).toMatchObject({ stopId: 201, feature: 'elevator', status: 'out_of_service' });
+  });
+});
+
 // ── GET /api/v1/transport/options ────────────────────────────────────────────
 
 describe('GET /api/v1/transport/options', () => {
