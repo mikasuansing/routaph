@@ -6,6 +6,7 @@ import { supabaseBrowser } from '@/lib/supabase/browser';
 import { checkLastTrain, formatClockTime, type LastTrainCheck } from '@/lib/routing/lastTrain';
 import { beepAdjustedFare, beepAdjustedTotalFare } from '@/lib/routing/beepFare';
 import { suggestJeepneyCorridor } from '@/lib/routing/jeepneySuggest';
+import { nearestStationEntrance } from '@/lib/routing/stationEntrances';
 import { ReportIssueButton } from '@/app/components/ReportIssueSheet';
 
 const BEEP_STORAGE_KEY = 'parapo:has_beep';
@@ -850,6 +851,8 @@ export default function Planner() {
                   {selected.legs.map((leg, i) => {
                     if (leg.type === 'walk') {
                       const jeep = suggestJeepneyCorridor(leg.fromLat, leg.fromLng, leg.toLat, leg.toLng);
+                      const isFinalLeg = i === selected.legs.length - 1;
+                      const entrance = isFinalLeg ? nearestStationEntrance(leg.fromName, leg.toLat, leg.toLng) : null;
                       return (
                       <div key={i}>
                         <div style={{ display: 'flex', gap: 14 }}>
@@ -857,6 +860,11 @@ export default function Planner() {
                           <div style={{ flex: 1 }}>
                             <p style={{ margin: 0, fontSize: 15, fontWeight: 600, color: C.ink }}>Walk to {leg.toName}</p>
                             <p className="tnum" style={{ margin: '2px 0 0', fontSize: 12, color: C.muted }}>{leg.durationMin} min · {leg.distKm.toFixed(2)} km</p>
+                            {entrance && (
+                              <p style={{ margin: '4px 0 0', fontSize: 12, color: C.accent, fontWeight: 600 }}>
+                                Exit via the {entrance.label} — closer to your destination
+                              </p>
+                            )}
                           </div>
                           <span style={{ fontSize: 13, fontWeight: 600, color: C.muted }}>Free</span>
                         </div>

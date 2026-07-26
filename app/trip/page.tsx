@@ -9,6 +9,7 @@ import { TRIP_PROGRESS_KEY, TRIP_STORAGE_KEY } from '@/lib/trip/types';
 import { distToNextStop, etaToNextStop } from '@/lib/trip/geo';
 import { ReportIssueButton } from '@/app/components/ReportIssueSheet';
 import { notificationPermission, requestNotificationPermission } from '@/lib/trip/notify';
+import { nearestStationEntrance } from '@/lib/routing/stationEntrances';
 
 /*
  * Trip Companion — live tracking screen.
@@ -335,6 +336,10 @@ function TripScreen() {
   const SIGNAL_STALE_MS = 20_000;
   const signalStale = position !== null && nowTick - position.timestamp > SIGNAL_STALE_MS;
 
+  const finalEntrance = isLastLeg && currentLeg?.type === 'walk'
+    ? nearestStationEntrance(currentLeg.fromName, currentLeg.toLat, currentLeg.toLng)
+    : null;
+
   const distKm = position ? distToNextStop(position, itinerary, currentLegIndex) : null;
   // Jeepneys have no fixed schedule — show distance only, never a minute ETA.
   const currentIsJeepney = currentLeg?.type === 'ride' && (currentLeg as RideLeg).line.mode === 'jeepney';
@@ -451,6 +456,11 @@ function TripScreen() {
             {signalStale && (
               <p style={{ margin: '6px 0 0', fontSize: 12, fontWeight: 700, color: C.muted }}>
                 Signal lost — showing last known position ({Math.round((nowTick - position!.timestamp) / 1000)}s ago)
+              </p>
+            )}
+            {isLastLeg && currentLeg.type === 'walk' && finalEntrance && (
+              <p style={{ margin: '6px 0 0', fontSize: 13, fontWeight: 700, color: C.accent }}>
+                Exit via the {finalEntrance.label} — closer to your destination
               </p>
             )}
             {status === 'active' && (
