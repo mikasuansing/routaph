@@ -7,6 +7,7 @@ import { TripProvider, useTripContext } from '@/lib/trip/context';
 import type { Itinerary, RideLeg, WalkLeg } from '@/lib/routing/types';
 import { TRIP_STORAGE_KEY } from '@/lib/trip/types';
 import { distToNextStop, etaToNextStop } from '@/lib/trip/geo';
+import { ReportIssueButton } from '@/app/components/ReportIssueSheet';
 
 /*
  * Trip Companion — live tracking screen.
@@ -429,6 +430,13 @@ function TripScreen() {
                 {isLastLeg ? '✓ Mark as done — I’ve arrived' : '✓ Mark leg done — I’m here'}
               </button>
             )}
+            <div style={{ marginTop: 14, textAlign: 'center' }}>
+              <ReportIssueButton
+                routeId={currentLeg.type === 'ride' ? (currentLeg as RideLeg).line.id : undefined}
+                stopId={currentLeg.type === 'ride' ? (currentLeg as RideLeg).to.id : undefined}
+                contextLabel={legLabel(currentLeg)}
+              />
+            </div>
           </section>
         )}
 

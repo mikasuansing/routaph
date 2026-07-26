@@ -5,6 +5,8 @@ import { TRIP_STORAGE_KEY } from '@/lib/trip/types';
 import { supabaseBrowser } from '@/lib/supabase/browser';
 import { checkLastTrain, formatClockTime, type LastTrainCheck } from '@/lib/routing/lastTrain';
 import { beepAdjustedFare, beepAdjustedTotalFare } from '@/lib/routing/beepFare';
+import { suggestJeepneyCorridor } from '@/lib/routing/jeepneySuggest';
+import { ReportIssueButton } from '@/app/components/ReportIssueSheet';
 
 const BEEP_STORAGE_KEY = 'parapo:has_beep';
 
@@ -846,16 +848,34 @@ export default function Planner() {
                 <Micro>Step by step</Micro>
                 <div style={{ margin: '14px 0 28px', display: 'flex', flexDirection: 'column', gap: 20 }}>
                   {selected.legs.map((leg, i) => {
-                    if (leg.type === 'walk') return (
-                      <div key={i} style={{ display: 'flex', gap: 14 }}>
-                        <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: '0.1em', color: C.muted, width: 38, flexShrink: 0, paddingTop: 3 }}>WALK</span>
-                        <div style={{ flex: 1 }}>
-                          <p style={{ margin: 0, fontSize: 15, fontWeight: 600, color: C.ink }}>Walk to {leg.toName}</p>
-                          <p className="tnum" style={{ margin: '2px 0 0', fontSize: 12, color: C.muted }}>{leg.durationMin} min · {leg.distKm.toFixed(2)} km</p>
+                    if (leg.type === 'walk') {
+                      const jeep = suggestJeepneyCorridor(leg.fromLat, leg.fromLng, leg.toLat, leg.toLng);
+                      return (
+                      <div key={i}>
+                        <div style={{ display: 'flex', gap: 14 }}>
+                          <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: '0.1em', color: C.muted, width: 38, flexShrink: 0, paddingTop: 3 }}>WALK</span>
+                          <div style={{ flex: 1 }}>
+                            <p style={{ margin: 0, fontSize: 15, fontWeight: 600, color: C.ink }}>Walk to {leg.toName}</p>
+                            <p className="tnum" style={{ margin: '2px 0 0', fontSize: 12, color: C.muted }}>{leg.durationMin} min · {leg.distKm.toFixed(2)} km</p>
+                          </div>
+                          <span style={{ fontSize: 13, fontWeight: 600, color: C.muted }}>Free</span>
                         </div>
-                        <span style={{ fontSize: 13, fontWeight: 600, color: C.muted }}>Free</span>
+                        {jeep && (
+                          <div style={{
+                            marginLeft: 52, marginTop: 8, padding: '10px 12px', borderRadius: 12,
+                            border: `1.5px dashed ${C.border}`, background: C.surface,
+                          }}>
+                            <p style={{ margin: 0, fontSize: 12, fontWeight: 700, color: C.body }}>
+                              Suggested — ask a jeepney toward {jeep.towardLabel}
+                            </p>
+                            <p className="tnum" style={{ margin: '3px 0 0', fontSize: 11, color: C.muted }}>
+                              {jeep.corridorName} · ~₱{jeep.fareLow.toFixed(0)}–{jeep.fareHigh.toFixed(0)} · not a tracked route, no schedule
+                            </p>
+                          </div>
+                        )}
                       </div>
-                    );
+                      );
+                    }
                     const ride = leg as RideLeg;
                     const meta = MODE_META[ride.mode] ?? { label: ride.mode.toUpperCase(), shade: C.muted };
                     // Jeepneys have no fixed schedule, so a per-leg minute figure
@@ -966,6 +986,9 @@ export default function Planner() {
                   }}>
                     Plan another trip
                   </button>
+                  <div style={{ textAlign: 'center', padding: '4px 0 0' }}>
+                    <ReportIssueButton routeId={selectedRideLegs[0]?.line.id} contextLabel={comboLabel(selected)} />
+                  </div>
                 </div>
               </div>
             </Sheet>

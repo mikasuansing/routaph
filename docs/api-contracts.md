@@ -225,12 +225,63 @@ RideOption {
 
 ---
 
+## POST /api/v1/crowd-reports
+
+**Auth:** Bearer token (required)
+**Body:**
+```json
+{
+  "stopId":   "number (optional)",
+  "routeId":  "number (optional)",
+  "category": "wrong_fare | wrong_stop | route_missing | other",
+  "note":     "string, max 200 chars (optional)"
+}
+```
+**Returns:** `{ "data": CrowdReport }`
+**Status codes:** 201, 400, 401, 429, 500
+
+**Notes:**
+- The `crowd_reports` table predates this feature and only has `stop_id` /
+  `route_id` / `crowding` / `note` columns — no dedicated issue-type column.
+  Worse, the live `crowding` column has a DB CHECK constraint limited to
+  `empty` / `moderate` / `packed` (confirmed by probing it directly; not
+  captured in any migration — see `supabase/migrations/007_crowd_reports_own_only.sql`),
+  so issue categories can't be stored there without schema-changing DDL this
+  session couldn't run (PostgREST-only access, no SQL connection). The API
+  therefore stores `category` as a `"[category] "` prefix on `note` server-side
+  (`crowding` is always written as the inert filler `'moderate'`) and parses
+  it back out on read — both directions handled in `app/api/v1/crowd-reports/route.ts`,
+  entirely inside the API boundary. Clients only ever see `category` / `note`
+  as separate fields. See `lib/validation.ts` (`IssueReportSchema`).
+- `user_id` is set server-side from the authenticated session — never
+  trusted from the request body.
+- Rate limited (`crowdLimiter`, 5/min/user) per BASELINE §-referenced crowd
+  endpoint budget.
+
+---
+
+## GET /api/v1/crowd-reports
+
+**Auth:** Bearer token (required)
+**Returns:** `{ "data": CrowdReport[] }` — the caller's own reports only, newest-first, max 50
+
+```typescript
+CrowdReport {
+  id:        number;
+  stopId:    number | null;
+  routeId:   number | null;
+  category:  string | null;
+  note:      string | null;
+  createdAt: string; // ISO8601
+}
+```
+**Status codes:** 200, 401, 500
+
+---
+
 ## Planned (not yet implemented)
 
 | Method | Path | Auth | Description |
 |---|---|---|---|
-| POST | /api/v1/geo/isochrone | None | Reachability polygon (F6) |
-| GET  | /api/v1/accessibility/score | None | 0–100 commute score (F7) |
 | GET  | /api/v1/analytics/od-pairs | None | Top origin-destination pairs (F8) |
 | GET  | /api/v1/analytics/peak-demand | None | Hour-by-hour demand (F8) |
-| POST | /api/v1/reports | Bearer | Crowd report (F9 stretch) |

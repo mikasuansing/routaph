@@ -282,6 +282,115 @@ describe('POST /api/v1/me/routes', () => {
   });
 });
 
+// ── POST /api/v1/crowd-reports ───────────────────────────────────────────────
+
+describe('POST /api/v1/crowd-reports', () => {
+  let POST: (req: NextRequest) => Promise<Response>;
+
+  beforeEach(async () => {
+    vi.resetModules();
+    ({ POST } = await import('../v1/crowd-reports/route'));
+  });
+
+  it('returns 401 with no auth', async () => {
+    const req = makeRequest('POST', { stopId: 1, category: 'wrong_fare' });
+    const res = await POST(req);
+    expect(res.status).toBe(401);
+    const json = await res.json();
+    expect(json.error.code).toBe('unauthorized');
+  });
+
+  it('returns 400 when category is not recognized', async () => {
+    const { supabaseServer } = await import('@/lib/supabase/server');
+    vi.mocked(supabaseServer.auth.getUser).mockResolvedValueOnce({
+      data: { user: { id: 'user-1', email: 'test@test.com' } as never },
+      error: null,
+    });
+    const req = makeRequest('POST', { stopId: 1, category: 'not_a_real_category' }, { authorization: 'Bearer valid' });
+    const res = await POST(req);
+    expect(res.status).toBe(400);
+  });
+
+  it('returns 400 when body is not valid JSON', async () => {
+    const { supabaseServer } = await import('@/lib/supabase/server');
+    vi.mocked(supabaseServer.auth.getUser).mockResolvedValueOnce({
+      data: { user: { id: 'user-1', email: 'test@test.com' } as never },
+      error: null,
+    });
+    const req = new NextRequest('http://localhost:3000/api/test', {
+      method: 'POST', body: 'not-json',
+      headers: { 'content-type': 'application/json', authorization: 'Bearer valid' },
+    });
+    const res = await POST(req);
+    expect(res.status).toBe(400);
+  });
+
+  it('returns 201 with the created report on a valid authenticated request', async () => {
+    const { supabaseServer } = await import('@/lib/supabase/server');
+    vi.mocked(supabaseServer.auth.getUser).mockResolvedValueOnce({
+      data: { user: { id: 'user-1', email: 'test@test.com' } as never },
+      error: null,
+    });
+    vi.mocked(supabaseServer.from).mockReturnValueOnce({
+      insert: vi.fn().mockReturnThis(),
+      select: vi.fn().mockReturnThis(),
+      single: vi.fn().mockResolvedValue({
+        data: { id: 1, stop_id: 5, route_id: null, note: '[wrong_stop] Pin is off', created_at: '2026-07-26T00:00:00Z' },
+        error: null,
+      }),
+    } as never);
+    const req = makeRequest('POST', { stopId: 5, category: 'wrong_stop', note: 'Pin is off' }, { authorization: 'Bearer valid' });
+    const res = await POST(req);
+    expect(res.status).toBe(201);
+    const json = await res.json();
+    // The DB's crowding CHECK constraint means category is encoded into
+    // `note` (see route.ts) — the API still returns it decoded as `category`.
+    expect(json.data).toMatchObject({ id: 1, stopId: 5, category: 'wrong_stop', note: 'Pin is off' });
+  });
+});
+
+// ── GET /api/v1/crowd-reports ────────────────────────────────────────────────
+
+describe('GET /api/v1/crowd-reports', () => {
+  let GET: (req: NextRequest) => Promise<Response>;
+
+  beforeEach(async () => {
+    vi.resetModules();
+    ({ GET } = await import('../v1/crowd-reports/route'));
+  });
+
+  it('returns 401 when no Authorization header is provided', async () => {
+    const req = makeRequest('GET');
+    const res = await GET(req);
+    expect(res.status).toBe(401);
+  });
+
+  it('returns 401 when token is invalid', async () => {
+    const req = makeRequest('GET', undefined, { authorization: 'Bearer invalid-token' });
+    const res = await GET(req);
+    expect(res.status).toBe(401);
+  });
+
+  it('returns 200 with an array (own reports only) for an authenticated user', async () => {
+    const { supabaseServer } = await import('@/lib/supabase/server');
+    vi.mocked(supabaseServer.auth.getUser).mockResolvedValueOnce({
+      data: { user: { id: 'user-1', email: 'test@test.com' } as never },
+      error: null,
+    });
+    vi.mocked(supabaseServer.from).mockReturnValueOnce({
+      select: vi.fn().mockReturnThis(),
+      eq:     vi.fn().mockReturnThis(),
+      order:  vi.fn().mockReturnThis(),
+      limit:  vi.fn().mockResolvedValue({ data: [], error: null }),
+    } as never);
+    const req = makeRequest('GET', undefined, { authorization: 'Bearer valid' });
+    const res = await GET(req);
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(Array.isArray(json.data)).toBe(true);
+  });
+});
+
 // ── GET /api/v1/disruptions ──────────────────────────────────────────────────
 
 describe('GET /api/v1/disruptions', () => {

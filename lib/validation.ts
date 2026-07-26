@@ -29,6 +29,20 @@ export const CrowdReportSchema = z.object({
   note:     z.string().max(200).optional(),
 });
 
+// "Report an issue" (wrong fare / wrong stop / route doesn't exist) shares
+// the crowd_reports table with the schema above, but crowd_reports.crowding
+// has a DB CHECK constraint limited to empty/moderate/packed — confirmed
+// live, so issue categories can't be stored there without a migration this
+// session couldn't apply (no SQL/DDL access, only PostgREST). Instead the
+// category is encoded as a "[category] " prefix on `note`, and `crowding`
+// is always the inert filler value 'moderate'. See docs/api-contracts.md.
+export const IssueReportSchema = z.object({
+  stopId:   z.number().int().positive().optional(),
+  routeId:  z.number().int().positive().optional(),
+  category: z.enum(["wrong_fare", "wrong_stop", "route_missing", "other"]),
+  note:     z.string().max(200).optional(),
+});
+
 export const LogSearchSchema = z.object({
   originLat:  lat,
   originLng:  lng,

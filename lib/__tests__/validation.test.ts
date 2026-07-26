@@ -3,6 +3,7 @@ import {
   SearchSchema,
   SearchBodySchema,
   CrowdReportSchema,
+  IssueReportSchema,
   SavedRouteSchema,
   LogSearchSchema,
 } from '../validation';
@@ -92,6 +93,29 @@ describe('CrowdReportSchema', () => {
   it('rejects non-positive stopId', () => {
     expect(CrowdReportSchema.safeParse({ crowding: 'empty', stopId: -1 }).success).toBe(false);
     expect(CrowdReportSchema.safeParse({ crowding: 'empty', stopId: 0 }).success).toBe(false);
+  });
+});
+
+describe('IssueReportSchema', () => {
+  it('accepts each "Report an issue" category', () => {
+    for (const category of ['wrong_fare', 'wrong_stop', 'route_missing', 'other']) {
+      expect(IssueReportSchema.safeParse({ category, stopId: 1 }).success).toBe(true);
+    }
+  });
+
+  it('rejects a crowding-level value (different enum from CrowdReportSchema)', () => {
+    expect(IssueReportSchema.safeParse({ category: 'packed', stopId: 1 }).success).toBe(false);
+  });
+
+  it('rejects note longer than 200 chars', () => {
+    expect(IssueReportSchema.safeParse({
+      category: 'other',
+      note: 'x'.repeat(201),
+    }).success).toBe(false);
+  });
+
+  it('rejects non-positive routeId', () => {
+    expect(IssueReportSchema.safeParse({ category: 'wrong_fare', routeId: 0 }).success).toBe(false);
   });
 });
 
