@@ -10,6 +10,7 @@ import { distToNextStop, etaToNextStop } from '@/lib/trip/geo';
 import { ReportIssueButton } from '@/app/components/ReportIssueSheet';
 import { notificationPermission, requestNotificationPermission } from '@/lib/trip/notify';
 import { nearestStationEntrance } from '@/lib/routing/stationEntrances';
+import { t, loadLang } from '@/lib/i18n';
 
 /*
  * Trip Companion — live tracking screen.
@@ -74,6 +75,7 @@ function TripScreen() {
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'failed'>('idle');
   const [geoPerm, setGeoPerm] = useState<'granted' | 'prompt' | 'denied' | 'unknown'>('unknown');
   const [notifPerm, setNotifPerm] = useState<NotificationPermission | 'unsupported'>(notificationPermission);
+  const [lang] = useState(loadLang);
   const [nowTick, setNowTick] = useState(() => Date.now());
 
   // Ticks while a trip is active so the "last known position" staleness
@@ -443,7 +445,7 @@ function TripScreen() {
         {/* Current leg — the glance */}
         {currentLeg && (
           <section style={{ marginBottom: 28, background: C.card, border: `1px solid ${C.border}`, borderRadius: 20, padding: 18 }}>
-            <Micro color={C.accent}>Now · {modeTag(currentLeg)}</Micro>
+            <Micro color={C.accent}>{t(lang, 'now')} · {modeTag(currentLeg)}</Micro>
             <p style={{ margin: '8px 0 0', fontFamily: DISPLAY, fontSize: 24, fontWeight: 800, color: C.ink, letterSpacing: '-0.02em', lineHeight: 1.25 }}>
               {legLabel(currentLeg)}
             </p>
@@ -451,6 +453,11 @@ function TripScreen() {
               <p className="tnum" style={{ margin: '8px 0 0', fontSize: 16, color: C.body }}>
                 {distKm < 1 ? `${Math.round(distKm * 1000)} m` : `${distKm.toFixed(1)} km`}
                 {eta !== null && ` · ~${eta} min`} to next stop
+              </p>
+            )}
+            {currentLeg.type === 'ride' && (
+              <p style={{ margin: '4px 0 0', fontSize: 13, color: C.muted }}>
+                {t(lang, 'get_off_at', { stop: (currentLeg as RideLeg).to.name })}
               </p>
             )}
             {signalStale && (
@@ -484,7 +491,7 @@ function TripScreen() {
                   trip.advanceLeg();
                 }}
               >
-                {isLastLeg ? '✓ Mark as done — I’ve arrived' : '✓ Mark leg done — I’m here'}
+                {isLastLeg ? `✓ ${t(lang, 'mark_arrived')}` : `✓ ${t(lang, 'mark_leg_done')}`}
               </button>
             )}
             <div style={{ marginTop: 14, textAlign: 'center' }}>
@@ -500,14 +507,14 @@ function TripScreen() {
         {/* Next leg */}
         {nextLeg && !isLastLeg && (
           <section style={{ marginBottom: 28 }}>
-            <Micro>Next · {modeTag(nextLeg)}</Micro>
+            <Micro>{t(lang, 'next')} · {modeTag(nextLeg)}</Micro>
             <p style={{ margin: '6px 0 0', fontSize: 15, color: C.body }}>{legLabel(nextLeg)}</p>
           </section>
         )}
 
         {isLastLeg && (
           <p style={{ margin: '0 0 28px', fontSize: 13, fontWeight: 700, color: C.accent, letterSpacing: '0.02em' }}>
-            Almost there — this is the last leg.
+            {t(lang, 'almost_there')}
           </p>
         )}
 

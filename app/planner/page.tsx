@@ -8,6 +8,7 @@ import { beepAdjustedFare, beepAdjustedTotalFare } from '@/lib/routing/beepFare'
 import { suggestJeepneyCorridor } from '@/lib/routing/jeepneySuggest';
 import { nearestStationEntrance } from '@/lib/routing/stationEntrances';
 import { ReportIssueButton } from '@/app/components/ReportIssueSheet';
+import { t, loadLang, LANG_STORAGE_KEY, type Lang } from '@/lib/i18n';
 
 const BEEP_STORAGE_KEY = 'parapo:has_beep';
 
@@ -281,6 +282,14 @@ export default function Planner() {
   const [nextStop, setNextStop] = useState('');
   const [chainBusy, setChainBusy] = useState(false);
   const [chainError, setChainError] = useState<string | null>(null);
+  const [lang, setLang] = useState<Lang>(loadLang);
+  function toggleLang() {
+    setLang(prev => {
+      const next: Lang = prev === 'en' ? 'tl' : 'en';
+      try { localStorage.setItem(LANG_STORAGE_KEY, next); } catch { /* noop */ }
+      return next;
+    });
+  }
   const stopNames = Object.keys(stopCoords).sort();
 
   /* ── Beep card preference — persisted locally, not tied to the account ──── */
@@ -678,12 +687,12 @@ export default function Planner() {
               {/* From / To — typography only */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: 18, flexShrink: 0 }}>
                 <div>
-                  <StopRow label="From" value={from} onChange={setFrom} placeholder="Choose a stop" stops={stopNames} extraOption={myLoc ? MY_LOCATION : undefined} />
+                  <StopRow label="From" value={from} onChange={setFrom} placeholder={t(lang, 'choose_a_stop')} stops={stopNames} extraOption={myLoc ? MY_LOCATION : undefined} />
                   <button onClick={useMyLocation} disabled={locBusy} style={{ background: 'none', border: 'none', padding: '8px 0 0', fontSize: 13, fontWeight: 700, color: C.accent, cursor: 'pointer', fontFamily: 'inherit', letterSpacing: '0.02em' }}>
-                    {locBusy ? 'Locating…' : from === MY_LOCATION ? '● Using current location' : '◉ Use current location'}
+                    {locBusy ? 'Locating…' : from === MY_LOCATION ? `● ${t(lang, 'use_current_location')}` : `◉ ${t(lang, 'use_current_location')}`}
                   </button>
                 </div>
-                <StopRow label="To" value={to} onChange={setTo} placeholder="Choose a stop" stops={stopNames} />
+                <StopRow label="To" value={to} onChange={setTo} placeholder={t(lang, 'choose_a_stop')} stops={stopNames} />
                 <button onClick={() => { if (from !== MY_LOCATION) { const t = from; setFrom(to); setTo(t); } }} style={{ alignSelf: 'flex-end', background: 'none', border: 'none', fontSize: 13, fontWeight: 700, color: from === MY_LOCATION ? C.border : C.muted, cursor: 'pointer', fontFamily: 'inherit', marginTop: -8 }}>
                   ⇅ Swap
                 </button>
@@ -691,7 +700,7 @@ export default function Planner() {
 
               {/* Transport modes — text toggles */}
               <div style={{ margin: '18px 0 0', flexShrink: 0 }}>
-                <Micro>Transport modes</Micro>
+                <Micro>{t(lang, 'transport_modes')}</Micro>
                 <div style={{ display: 'flex', gap: 10, marginTop: 10 }}>
                   {MODE_GROUPS.map(g => {
                     const on = enabledModes[g.key];
@@ -729,6 +738,11 @@ export default function Planner() {
                 </Micro>
               </button>
 
+              {/* Language — English / Taglish, key strings only */}
+              <button onClick={toggleLang} style={{ background: 'none', border: 'none', padding: 0, margin: '10px 0 0', cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left', flexShrink: 0 }}>
+                <Micro color={C.muted}>{lang === 'tl' ? 'Wika: Taglish' : 'Language: English'} · {lang === 'tl' ? 'Switch to English' : 'Switch sa Taglish'}</Micro>
+              </button>
+
               {/* CTA */}
               <button
                 onClick={search}
@@ -743,7 +757,7 @@ export default function Planner() {
                   boxShadow: canSearch ? '0 6px 18px rgba(41,71,222,0.25)' : 'none',
                 }}
               >
-                Find routes
+                {t(lang, 'find_routes')}
               </button>
 
               {/* Fare reference — plain text */}
@@ -932,7 +946,7 @@ export default function Planner() {
                 )}
 
                 {/* Step by step */}
-                <Micro>Step by step</Micro>
+                <Micro>{t(lang, 'step_by_step')}</Micro>
                 <div style={{ margin: '14px 0 28px', display: 'flex', flexDirection: 'column', gap: 20 }}>
                   {selected.legs.map((leg, i) => {
                     if (leg.type === 'walk') {
@@ -944,7 +958,7 @@ export default function Planner() {
                         <div style={{ display: 'flex', gap: 14 }}>
                           <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: '0.1em', color: C.muted, width: 38, flexShrink: 0, paddingTop: 3 }}>WALK</span>
                           <div style={{ flex: 1 }}>
-                            <p style={{ margin: 0, fontSize: 15, fontWeight: 600, color: C.ink }}>Walk to {leg.toName}</p>
+                            <p style={{ margin: 0, fontSize: 15, fontWeight: 600, color: C.ink }}>{t(lang, 'walk_to', { stop: leg.toName })}</p>
                             <p className="tnum" style={{ margin: '2px 0 0', fontSize: 12, color: C.muted }}>{leg.durationMin} min · {leg.distKm.toFixed(2)} km</p>
                             {entrance && (
                               <p style={{ margin: '4px 0 0', fontSize: 12, color: C.accent, fontWeight: 600 }}>
@@ -987,7 +1001,7 @@ export default function Planner() {
                         <div style={{ flex: 1 }}>
                           <p style={{ margin: 0, fontSize: 15, fontWeight: 700, color: C.ink, letterSpacing: '-0.01em' }}>{ride.line.name}</p>
                           <p style={{ margin: '2px 0 0', fontSize: 13, color: C.body }}>
-                            {noSchedule ? 'Board' : ''} {ride.from.name} → {ride.to.name}
+                            {noSchedule ? t(lang, 'board_here') : ''} {ride.from.name} → {ride.to.name}
                           </p>
                           <p className="tnum" style={{ margin: '2px 0 0', fontSize: 12, color: C.muted }}>
                             {ride.stops.length} stop{ride.stops.length !== 1 ? 's' : ''} · {ride.distKm.toFixed(1)} km
@@ -995,7 +1009,7 @@ export default function Planner() {
                           </p>
                           {noSchedule && (
                             <p style={{ margin: '2px 0 0', fontSize: 12, color: C.muted, fontStyle: 'italic' }}>
-                              No fixed schedule — ride until your stop
+                              {t(lang, 'no_fixed_schedule')}
                             </p>
                           )}
                           {ride.stops.length > 2 && (
@@ -1020,7 +1034,7 @@ export default function Planner() {
                 </div>
 
                 {/* Fare breakdown — receipt typography */}
-                <Micro>Fare breakdown{!hasBeep ? ' (cash / no Beep card)' : ''}</Micro>
+                <Micro>{t(lang, 'fare_breakdown')}{!hasBeep ? ' (cash / no Beep card)' : ''}</Micro>
                 <div style={{ margin: '14px 0 0', display: 'flex', flexDirection: 'column', gap: 12 }}>
                   {selected.legs.map((leg, i) => {
                     if (leg.type === 'walk') return (
@@ -1044,7 +1058,7 @@ export default function Planner() {
                     );
                   })}
                   <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: 12, borderTop: `1px solid ${C.border}` }}>
-                    <span style={{ fontSize: 15, fontWeight: 800, color: C.ink }}>Total per person</span>
+                    <span style={{ fontSize: 15, fontWeight: 800, color: C.ink }}>{t(lang, 'total_per_person')}</span>
                     <span className="tnum" style={{ fontSize: 18, fontWeight: 800, color: C.ink }}>₱{selectedDisplayFare.toFixed(2)}</span>
                   </div>
                 </div>
@@ -1060,7 +1074,7 @@ export default function Planner() {
                     background: 'var(--gradient-primary)', color: C.onPrimary, letterSpacing: '0.01em',
                     boxShadow: '0 6px 18px rgba(41,71,222,0.25)',
                   }}>
-                    Start trip — track live
+                    {t(lang, 'start_trip')}
                   </button>
                   <a href={wazeUrl} target="_blank" rel="noopener noreferrer" style={{
                     display: 'block', textAlign: 'center', border: `1.5px solid ${C.accent}`, borderRadius: 999,
@@ -1072,7 +1086,7 @@ export default function Planner() {
 
                   {addingStop ? (
                     <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 16, padding: 14 }}>
-                      <StopRow label="Add another stop" value={nextStop} onChange={setNextStop} placeholder="Choose a stop" stops={stopNames} />
+                      <StopRow label="Add another stop" value={nextStop} onChange={setNextStop} placeholder={t(lang, 'choose_a_stop')} stops={stopNames} />
                       {chainError && <p style={{ margin: '8px 0 0', fontSize: 12, color: C.error }}>{chainError}</p>}
                       <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
                         <button
@@ -1118,13 +1132,13 @@ export default function Planner() {
                     {commuteSave === 'saved' ? '✓ Commute saved — see My trips'
                       : commuteSave === 'saving' ? 'Saving…'
                       : commuteSave === 'failed' ? 'Save failed — tap to retry'
-                      : '☆ Save commute'}
+                      : `☆ ${t(lang, 'save_commute')}`}
                   </button>
                   <button onClick={() => { setFrom(''); setTo(''); setSelected(null); setItineraries([]); setScreen('home'); }} style={{
                     width: '100%', background: 'none', border: 'none', padding: '12px',
                     fontSize: 14, fontWeight: 600, color: C.muted, cursor: 'pointer', fontFamily: 'inherit',
                   }}>
-                    Plan another trip
+                    {t(lang, 'plan_another_trip')}
                   </button>
                   <div style={{ textAlign: 'center', padding: '4px 0 0' }}>
                     <ReportIssueButton routeId={selectedRideLegs[0]?.line.id} contextLabel={comboLabel(selected)} />
