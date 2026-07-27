@@ -61,6 +61,7 @@ type Leg = WalkLeg | RideLeg;
 type Itinerary = { legs: Leg[]; totalDurationMin: number; totalFare: number; transfers: number; objective: string };
 type Disruption = { id: number; corridorId: number; description: string };
 type StationAccessibility = { stopId: number; feature: 'elevator' | 'escalator'; status: 'unknown' | 'operational' | 'out_of_service'; note: string | null };
+type RainAdvisory = { heavyRainExpected: boolean; message: string };
 type Screen = 'home' | 'loading' | 'results' | 'detail';
 type ModeFilter = 'all' | 'train' | 'bus' | 'jeepney';
 type ModeGroup = 'train' | 'bus' | 'jeepney';
@@ -273,6 +274,7 @@ export default function Planner() {
   const [locBusy, setLocBusy]     = useState(false);
   const [disruptions, setDisruptions] = useState<Disruption[] | null>(null);
   const [accessibilityByStop, setAccessibilityByStop] = useState<Record<number, StationAccessibility[]>>({});
+  const [rainAdvisory, setRainAdvisory] = useState<RainAdvisory | null>(null);
   const [authed, setAuthed]       = useState<boolean | null>(null);
   const [commuteSave, setCommuteSave] = useState<'idle' | 'saving' | 'saved' | 'failed'>('idle');
   const stopNames = Object.keys(stopCoords).sort();
@@ -326,6 +328,16 @@ export default function Planner() {
       .then(res => res.json())
       .then((json: { data?: Disruption[] }) => { if (active) setDisruptions(json.data ?? []); })
       .catch(() => { if (active) setDisruptions(null); });
+    return () => { active = false; };
+  }, []);
+
+  /* ── Rain/flood advisory (planner home nudge) ──────────────────────────── */
+  useEffect(() => {
+    let active = true;
+    fetch('/api/v1/weather/advisory')
+      .then(res => res.json())
+      .then((json: { data?: RainAdvisory }) => { if (active && json.data?.heavyRainExpected) setRainAdvisory(json.data); })
+      .catch(() => { /* non-fatal — a missed nudge is not worth surfacing as an error */ });
     return () => { active = false; };
   }, []);
 
@@ -603,6 +615,12 @@ export default function Planner() {
           <Sheet height="auto" style={{ maxHeight: '62vh' }}>
             <div style={{ overflowY: 'auto', padding: '14px 24px 28px', display: 'flex', flexDirection: 'column' }}>
               {statusLine && <div style={{ marginBottom: 18 }}>{statusLine}</div>}
+
+              {rainAdvisory && (
+                <div style={{ marginBottom: 18, padding: '12px 14px', borderRadius: 14, background: C.error, color: '#FFFFFF' }}>
+                  <p style={{ margin: 0, fontSize: 13, fontWeight: 700, lineHeight: 1.5 }}>{rainAdvisory.message}</p>
+                </div>
+              )}
 
               {error && (
                 <p style={{ margin: '0 0 16px', fontSize: 13, fontWeight: 600, color: C.error }}>{error}</p>

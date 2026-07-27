@@ -325,6 +325,30 @@ simplest gate that isn't "anyone logged in."
 
 ---
 
+## GET /api/v1/weather/advisory
+
+**Auth:** None
+**Returns:** `{ "data": RainAdvisory }`
+
+```typescript
+RainAdvisory {
+  heavyRainExpected:      boolean;
+  currentPrecipitationMm: number;
+  maxProbabilityPercent:  number; // over the next 6 hours
+  message:                string;
+}
+```
+**Status codes:** 200, 429, (never 500 — see notes)
+**Notes:**
+- Backed by Open-Meteo (no API key), fixed to a single Metro-Manila-wide
+  point — one citywide advisory, not per-station. See `lib/weather.ts`.
+- Cached in Redis 10 min (`weather:v1:metro-manila-advisory`); degrades to
+  an uncached direct fetch when Redis is unset.
+- If Open-Meteo is unreachable, returns `heavyRainExpected: false` rather
+  than an error — this is a planner-screen nudge, not a critical path.
+
+---
+
 ## Planned (not yet implemented)
 
 | Method | Path | Auth | Description |

@@ -28,6 +28,17 @@ vi.mock('@/lib/ratelimit', () => ({
   clientKey:     vi.fn().mockReturnValue('ip:127.0.0.1'),
 }));
 
+// Never hit the real Open-Meteo API in tests
+vi.mock('@/lib/weather', () => ({
+  fetchOpenMeteoForecast: vi.fn().mockResolvedValue({
+    current: { precipitation: 0, rain: 0 },
+    hourly: { precipitation_probability: [10, 10], rain: [0, 0] },
+  }),
+  interpretForecast: vi.fn().mockReturnValue({
+    heavyRainExpected: false, currentPrecipitationMm: 0, maxProbabilityPercent: 10, message: 'No heavy rain expected',
+  }),
+}));
+
 // Silence the graph loader so routing tests don't hit Supabase
 vi.mock('@/lib/supabase/graph-loader', () => ({
   loadTransitGraph: vi.fn().mockResolvedValue({ nodes: new Map(), edges: new Map() }),
@@ -525,6 +536,44 @@ describe('PATCH /api/v1/admin/station-accessibility', () => {
     expect(res.status).toBe(200);
     const json = await res.json();
     expect(json.data).toMatchObject({ stopId: 201, feature: 'elevator', status: 'out_of_service' });
+  });
+});
+
+// ── GET /api/v1/weather/advisory ─────────────────────────────────────────────
+
+describe('GET /api/v1/weather/advisory', () => {
+  let GET: (req: NextRequest) => Promise<Response>;
+
+  beforeEach(async () => {
+    vi.resetModules();
+    ({ GET } = await import('../v1/weather/advisory/route'));
+  });
+
+  it('returns 200 with the advisory shape', async () => {
+    const req = new NextRequest('http://localhost:3000/api/v1/weather/advisory');
+    const res = await GET(req);
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(typeof json.data.heavyRainExpected).toBe('boolean');
+    expect(typeof json.data.message).toBe('string');
+  });
+
+  it('returns 429 when rate limited', async () => {
+    const { searchLimiter } = await import('@/lib/ratelimit');
+    vi.mocked(searchLimiter.limit).mockResolvedValueOnce({ success: false } as never);
+    const req = new NextRequest('http://localhost:3000/api/v1/weather/advisory');
+    const res = await GET(req);
+    expect(res.status).toBe(429);
+  });
+
+  it('never returns 500, even if the forecast fetch throws', async () => {
+    const { fetchOpenMeteoForecast } = await import('@/lib/weather');
+    vi.mocked(fetchOpenMeteoForecast).mockRejectedValueOnce(new Error('network down'));
+    const req = new NextRequest('http://localhost:3000/api/v1/weather/advisory');
+    const res = await GET(req);
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.data.heavyRainExpected).toBe(false);
   });
 });
 
