@@ -277,6 +277,10 @@ export default function Planner() {
   const [rainAdvisory, setRainAdvisory] = useState<RainAdvisory | null>(null);
   const [authed, setAuthed]       = useState<boolean | null>(null);
   const [commuteSave, setCommuteSave] = useState<'idle' | 'saving' | 'saved' | 'failed'>('idle');
+  const [addingStop, setAddingStop] = useState(false);
+  const [nextStop, setNextStop] = useState('');
+  const [chainBusy, setChainBusy] = useState(false);
+  const [chainError, setChainError] = useState<string | null>(null);
   const stopNames = Object.keys(stopCoords).sort();
 
   /* ── Beep card preference — persisted locally, not tied to the account ──── */
@@ -552,6 +556,51 @@ export default function Planner() {
       setScreen('results');
     } catch {
       setError('Network error — check your connection.'); setScreen('home');
+    }
+  }
+
+  /* ── Multi-stop chaining: plan a second leg from the current itinerary's
+     destination, then splice both into one combined Itinerary. Reuses the
+     same planning endpoint twice — no routing-engine changes. ────────────── */
+  async function addAnotherStop() {
+    if (!selected) return;
+    const dest = stopCoords[nextStop];
+    if (!dest) return;
+    const lastLeg = selected.legs.at(-1);
+    if (!lastLeg) return;
+    const chainOrigin = lastLeg.type === 'walk'
+      ? { lat: lastLeg.toLat, lng: lastLeg.toLng }
+      : { lat: lastLeg.to.lat, lng: lastLeg.to.lng };
+
+    setChainBusy(true); setChainError(null);
+    try {
+      const res = await fetch('/api/v1/routes/plan', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ origin: chainOrigin, destination: { lat: dest[0], lng: dest[1] }, rush }),
+      });
+      const json = await res.json() as { data?: Itinerary[]; error?: { message: string } };
+      if (!res.ok || json.error || !json.data || json.data.length === 0) {
+        setChainError(json.error?.message ?? 'No route found to that stop.');
+        return;
+      }
+      const nextLeg = json.data.find(it => it.objective === selected.objective) ?? json.data[0];
+
+      const combined: Itinerary = {
+        legs: [...selected.legs, ...nextLeg.legs],
+        totalDurationMin: selected.totalDurationMin + nextLeg.totalDurationMin,
+        totalFare: selected.totalFare + nextLeg.totalFare,
+        transfers: selected.transfers + nextLeg.transfers,
+        objective: selected.objective,
+      };
+      setSelected(combined);
+      setTo(nextStop);
+      setAddingStop(false);
+      setNextStop('');
+    } catch {
+      setChainError('Network error — check your connection.');
+    } finally {
+      setChainBusy(false);
     }
   }
 
@@ -1020,6 +1069,42 @@ export default function Planner() {
                   }}>
                     Open in Waze
                   </a>
+
+                  {addingStop ? (
+                    <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 16, padding: 14 }}>
+                      <StopRow label="Add another stop" value={nextStop} onChange={setNextStop} placeholder="Choose a stop" stops={stopNames} />
+                      {chainError && <p style={{ margin: '8px 0 0', fontSize: 12, color: C.error }}>{chainError}</p>}
+                      <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+                        <button
+                          onClick={addAnotherStop}
+                          disabled={!nextStop || nextStop === to || chainBusy}
+                          style={{
+                            flex: 1, cursor: nextStop && nextStop !== to ? 'pointer' : 'default', fontFamily: 'inherit',
+                            fontSize: 13, fontWeight: 700, padding: '10px', borderRadius: 999, border: 'none',
+                            background: nextStop && nextStop !== to ? C.accent : C.cardEl,
+                            color: nextStop && nextStop !== to ? C.onPrimary : C.muted,
+                          }}
+                        >
+                          {chainBusy ? 'Adding…' : 'Add to trip'}
+                        </button>
+                        <button
+                          onClick={() => { setAddingStop(false); setNextStop(''); setChainError(null); }}
+                          style={{ fontSize: 13, fontWeight: 600, padding: '10px 16px', borderRadius: 999, border: 'none', background: 'none', color: C.muted, cursor: 'pointer', fontFamily: 'inherit' }}
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <button onClick={() => setAddingStop(true)} style={{
+                      width: '100%', background: 'transparent', color: C.ink,
+                      border: `1.5px solid ${C.border}`, borderRadius: 999,
+                      padding: '14px', fontSize: 14, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit',
+                    }}>
+                      + Add another stop
+                    </button>
+                  )}
+
                   <button
                     onClick={saveCommute}
                     disabled={commuteSave === 'saving' || commuteSave === 'saved'}
