@@ -641,7 +641,14 @@ export default function Planner() {
     ? null
     : disruptions.length === 0
       ? <Micro color={C.accent}>● All lines running normally</Micro>
-      : <Micro color={C.ink} style={{ letterSpacing: '0.04em' }}>▲ {disruptions.length} service alert{disruptions.length > 1 ? 's' : ''} — {disruptions[0].description}</Micro>;
+      : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+          <Micro color={C.ink} style={{ letterSpacing: '0.04em' }}>▲ {disruptions.length} service alert{disruptions.length > 1 ? 's' : ''} — {disruptions[0].description}</Micro>
+          <a href="tel:1342" style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.04em', color: C.muted, textDecoration: 'underline' }}>
+            {t(lang, 'report_to_ltfrb')}
+          </a>
+        </div>
+      );
 
   return (
     <div style={{ position: 'fixed', inset: 0, fontFamily: 'Inter,system-ui,sans-serif', background: C.bg }}>

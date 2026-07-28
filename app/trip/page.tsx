@@ -381,14 +381,19 @@ function TripScreen() {
 
       {/* Active disruption — bold type, no color theatre */}
       {activeDisruption && status !== 'rerouting' && (
-        <div style={{ padding: '14px 24px', borderTop: `1px solid ${C.border}`, borderBottom: `1px solid ${C.border}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-          <p style={{ margin: 0, fontSize: 14, fontWeight: 700, color: C.ink }}>▲ {activeDisruption.description}</p>
-          <button
-            style={{ background: 'none', border: 'none', fontSize: 13, fontWeight: 800, color: C.ink, textDecoration: 'underline', cursor: 'pointer', fontFamily: 'inherit', flexShrink: 0 }}
-            onClick={() => trip.triggerReroute()}
-          >
-            Reroute
-          </button>
+        <div style={{ padding: '14px 24px', borderTop: `1px solid ${C.border}`, borderBottom: `1px solid ${C.border}` }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+            <p style={{ margin: 0, fontSize: 14, fontWeight: 700, color: C.ink }}>▲ {activeDisruption.description}</p>
+            <button
+              style={{ background: 'none', border: 'none', fontSize: 13, fontWeight: 800, color: C.ink, textDecoration: 'underline', cursor: 'pointer', fontFamily: 'inherit', flexShrink: 0 }}
+              onClick={() => trip.triggerReroute()}
+            >
+              Reroute
+            </button>
+          </div>
+          <a href="tel:1342" style={{ display: 'block', marginTop: 6, fontSize: 12, fontWeight: 700, color: C.muted, textDecoration: 'underline' }}>
+            {t(lang, 'report_to_ltfrb')}
+          </a>
         </div>
       )}
 
