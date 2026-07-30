@@ -2,7 +2,6 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { supabaseBrowser } from '@/lib/supabase/browser';
 import { TripProvider, useTripContext } from '@/lib/trip/context';
 import type { Itinerary, RideLeg, WalkLeg } from '@/lib/routing/types';
 import { TRIP_PROGRESS_KEY, TRIP_STORAGE_KEY } from '@/lib/trip/types';
@@ -72,7 +71,6 @@ function legLabel(leg: RideLeg | WalkLeg | undefined): string {
 function TripScreen() {
   const router = useRouter();
   const trip = useTripContext();
-  const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'failed'>('idle');
   const [geoPerm, setGeoPerm] = useState<'granted' | 'prompt' | 'denied' | 'unknown'>('unknown');
   const [notifPerm, setNotifPerm] = useState<NotificationPermission | 'unsupported'>(notificationPermission);
   const [lang] = useState(loadLang);
@@ -105,15 +103,6 @@ function TripScreen() {
     } catch { /* unsupported */ }
     return () => { active = false; if (status) status.onchange = null; };
   }, []);
-
-  // Login required: no session → back to /auth
-  useEffect(() => {
-    let active = true;
-    supabaseBrowser.auth.getSession().then(({ data }) => {
-      if (active && !data.session) router.replace('/auth?next=/planner');
-    });
-    return () => { active = false; };
-  }, [router]);
 
   // On mount: restore itinerary from sessionStorage. If leg progress was
   // also saved (a prior tab session got this far before reload/eviction —
@@ -304,20 +293,6 @@ function TripScreen() {
           onClick={() => { trip.endTrip(); router.replace('/planner'); }}
         >
           Plan another trip
-        </button>
-        {/* Explicit save only (BASELINE §7.7) — nothing is stored unless tapped */}
-        <button
-          disabled={saveState === 'saving' || saveState === 'saved'}
-          style={{ marginTop: 12, padding: '15px', background: 'transparent', color: saveState === 'saved' ? C.accent : C.ink, border: `1.5px solid ${saveState === 'saved' ? C.accent : C.ink}`, borderRadius: 999, fontSize: 14, fontWeight: 700, cursor: saveState === 'idle' || saveState === 'failed' ? 'pointer' : 'default', fontFamily: 'inherit', width: '100%' }}
-          onClick={async () => {
-            setSaveState('saving');
-            setSaveState(await trip.saveTrip() ? 'saved' : 'failed');
-          }}
-        >
-          {saveState === 'saved' ? '✓ Saved to trip history'
-            : saveState === 'saving' ? 'Saving…'
-            : saveState === 'failed' ? 'Save failed — tap to retry'
-            : 'Save trip to history'}
         </button>
       </div>
     );

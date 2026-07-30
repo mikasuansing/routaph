@@ -1,5 +1,5 @@
 import { type NextRequest } from 'next/server';
-import { Errors, ok, okList } from '@/lib/api/envelope';
+import { Errors, ok } from '@/lib/api/envelope';
 import { IssueReportSchema } from '@/lib/validation';
 
 export const dynamic = 'force-dynamic';
@@ -11,7 +11,6 @@ export const dynamic = 'force-dynamic';
 // 'moderate' is an inert filler; the real signal lives in `note`, which we
 // prefix with "[category] " and parse back out below. See IssueReportSchema.
 const CROWDING_FILLER = 'moderate';
-const CATEGORY_PREFIX = /^\[(\w+)\]\s?/;
 
 function encodeNote(category: string, note?: string): string {
   return `[${category}] ${note ?? ''}`.trim();
@@ -19,66 +18,21 @@ function encodeNote(category: string, note?: string): string {
 
 function decodeNote(stored: string | null): { category: string | null; note: string | null } {
   if (!stored) return { category: null, note: null };
-  const match = stored.match(CATEGORY_PREFIX);
+  const match = stored.match(/^\[(\w+)\]\s?/);
   if (!match) return { category: null, note: stored };
   const rest = stored.slice(match[0].length).trim();
   return { category: match[1], note: rest.length > 0 ? rest : null };
 }
 
-async function getUser(req: NextRequest) {
-  const authHeader = req.headers.get('authorization');
-  if (!authHeader?.startsWith('Bearer ')) return null;
-  const token = authHeader.slice(7);
-
-  const { supabaseServer } = await import('@/lib/supabase/server');
-  const { data: { user }, error } = await supabaseServer.auth.getUser(token);
-  if (error || !user) return null;
-  return user;
-}
-
-export async function GET(req: NextRequest) {
-  const user = await getUser(req);
-  if (!user) return Errors.unauthorized();
-
-  try {
-    const { authLimiter, clientKey } = await import('@/lib/ratelimit');
-    const { success } = await authLimiter.limit(clientKey(req, user.id));
-    if (!success) return Errors.rateLimited();
-  } catch {
-    // Redis not configured — skip in dev
-  }
-
-  const { supabaseServer } = await import('@/lib/supabase/server');
-  const { data, error } = await supabaseServer
-    .from('crowd_reports')
-    .select('id, stop_id, route_id, note, created_at')
-    .eq('user_id', user.id)
-    .order('created_at', { ascending: false })
-    .limit(50);
-
-  if (error) return Errors.internal(error.message);
-  return okList(
-    (data ?? []).map(r => {
-      const { category, note } = decodeNote(r.note);
-      return {
-        id: r.id,
-        stopId: r.stop_id,
-        routeId: r.route_id,
-        category,
-        note,
-        createdAt: r.created_at,
-      };
-    }),
-  );
-}
-
+// Anonymous submission — the app has no accounts. Writes go through the
+// service-role key (bypasses RLS), so nothing here relies on a Supabase
+// session; rate limiting is IP-keyed instead of user-keyed. There is no GET:
+// reports were never surfaced back to the submitter, and without accounts
+// there's no "your reports" to scope a read to.
 export async function POST(req: NextRequest) {
-  const user = await getUser(req);
-  if (!user) return Errors.unauthorized();
-
   try {
     const { crowdLimiter, clientKey } = await import('@/lib/ratelimit');
-    const { success } = await crowdLimiter.limit(clientKey(req, user.id));
+    const { success } = await crowdLimiter.limit(clientKey(req));
     if (!success) return Errors.rateLimited();
   } catch {
     // Redis not configured — skip in dev
@@ -99,7 +53,6 @@ export async function POST(req: NextRequest) {
   const { data, error } = await supabaseServer
     .from('crowd_reports')
     .insert({
-      user_id:  user.id,
       stop_id:  parsed.data.stopId ?? null,
       route_id: parsed.data.routeId ?? null,
       crowding: CROWDING_FILLER,

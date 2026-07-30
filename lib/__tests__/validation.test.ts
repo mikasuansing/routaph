@@ -4,7 +4,6 @@ import {
   SearchBodySchema,
   CrowdReportSchema,
   IssueReportSchema,
-  SavedRouteSchema,
   LogSearchSchema,
 } from '../validation';
 
@@ -116,34 +115,6 @@ describe('IssueReportSchema', () => {
 
   it('rejects non-positive routeId', () => {
     expect(IssueReportSchema.safeParse({ category: 'wrong_fare', routeId: 0 }).success).toBe(false);
-  });
-});
-
-describe('SavedRouteSchema', () => {
-  const valid = {
-    name:       'Home to Work',
-    originLat:  14.55,
-    originLng:  121.0,
-    originName: 'Home',
-    destLat:    14.62,
-    destLng:    121.05,
-    destName:   'Ortigas',
-  };
-
-  it('accepts valid saved route', () => {
-    expect(SavedRouteSchema.safeParse(valid).success).toBe(true);
-  });
-
-  it('rejects empty name', () => {
-    expect(SavedRouteSchema.safeParse({ ...valid, name: '' }).success).toBe(false);
-  });
-
-  it('rejects name over 120 chars', () => {
-    expect(SavedRouteSchema.safeParse({ ...valid, name: 'x'.repeat(121) }).success).toBe(false);
-  });
-
-  it('rejects out-of-bounds coordinates', () => {
-    expect(SavedRouteSchema.safeParse({ ...valid, originLat: 9.0 }).success).toBe(false);
   });
 });
 

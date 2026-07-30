@@ -8,7 +8,6 @@ import {
   useReducer,
   useRef,
 } from 'react';
-import { supabaseBrowser } from '@/lib/supabase/browser';
 import type { Itinerary } from '@/lib/routing/types';
 import type {
   Disruption,
@@ -113,7 +112,6 @@ type TripContextValue = TripState & {
   resumeTrip:     (itinerary: Itinerary, legIndex: number) => void;
   endTrip:        () => void;
   advanceLeg:     () => void;
-  saveTrip:       () => Promise<boolean>;
   triggerReroute: () => Promise<void>;
 };
 
@@ -187,58 +185,6 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
   // last leg it transitions the trip to 'arrived'.
   const advanceLeg = useCallback(() => {
     dispatch({ type: 'ADVANCE_LEG' });
-  }, []);
-
-  // Explicit save only (BASELINE §7.7) — called from the arrival screen's
-  // "Save trip" action, never automatically.
-  const saveTrip = useCallback(async (): Promise<boolean> => {
-    const itinerary = latestStateRef.current.itinerary;
-    if (!itinerary) return false;
-    const session = (await supabaseBrowser.auth.getSession()).data.session;
-    if (!session) return false;
-    // Access walk legs carry generic "Origin"/"Destination" names — prefer
-    // the boarding/alighting stop of the first/last ride leg when so.
-    const rides = itinerary.legs.filter(l => l.type === 'ride');
-    const destinationLeg = itinerary.legs.at(-1);
-    let destinationName = destinationLeg?.type === 'walk'
-      ? destinationLeg.toName
-      : destinationLeg?.type === 'ride'
-        ? destinationLeg.to.name
-        : 'Destination';
-    if (destinationName === 'Destination' && rides.length > 0) {
-      destinationName = (rides.at(-1) as Extract<typeof rides[number], { type: 'ride' }>).to.name;
-    }
-    const firstLeg = itinerary.legs[0];
-    let originName = firstLeg?.type === 'walk'
-      ? firstLeg.fromName
-      : firstLeg?.type === 'ride'
-        ? firstLeg.from.name
-        : 'Origin';
-    if (originName === 'Origin' && rides.length > 0) {
-      originName = (rides[0] as Extract<typeof rides[number], { type: 'ride' }>).from.name;
-    }
-    const distanceKm = itinerary.legs.reduce((sum, leg) => sum + leg.distKm, 0);
-    const payload = {
-      origin: originName,
-      destination: destinationName,
-      distanceKm: Math.round(distanceKm * 100) / 100,
-      fareEstimate: itinerary.totalFare,
-      modesUsed: itinerary.legs.filter((leg) => leg.type === 'ride').map((leg) => leg.type === 'ride' ? leg.mode : 'walk'),
-    };
-
-    try {
-      const res = await fetch('/api/v1/me/trips', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${session.access_token}`,
-        },
-        body: JSON.stringify(payload),
-      });
-      return res.ok;
-    } catch {
-      return false;
-    }
   }, []);
 
   // Start GPS watcher whenever status transitions to 'active'
@@ -383,7 +329,7 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
   }, [state.itinerary, state.position, state.originalDest, state.currentLegIndex]);
 
   return (
-    <TripContext.Provider value={{ ...state, startTrip, resumeTrip, endTrip, advanceLeg, saveTrip, triggerReroute }}>
+    <TripContext.Provider value={{ ...state, startTrip, resumeTrip, endTrip, advanceLeg, triggerReroute }}>
       {children}
     </TripContext.Provider>
   );

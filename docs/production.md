@@ -4,11 +4,10 @@
 
 ## Frontend
 
-- ✅ Login-gated app (`/planner`, `/trip`); root redirects to the planner.
+- ✅ Anonymous app, no accounts — root redirects straight to the planner. Login/signup, saved commutes, trip history, and the admin page were removed (2026-07-26 scope change: directions/fares/ETA + live GPS tracking only).
 - ✅ Single design system in `app/globals.css` (cream + cobalt tokens, light/dark).
-- ✅ Dead code removed: legacy `/api/trips/plan`, design-a–d explorations, `lib/demoNetwork.ts`, `lib/nav.ts`, cookie-session code.
+- ✅ Dead code removed: legacy `/api/trips/plan`, design-a–d explorations, `lib/demoNetwork.ts`, `lib/nav.ts`, cookie-session code, `app/auth`, `app/me`, `app/admin`, `app/api/v1/me/*`, `app/api/v1/admin/*`, `proxy.ts`.
 - ✅ GPS is opt-in, foreground-only, never persisted (BASELINE §7.7); manual leg-advance fallback when denied.
-- ✅ Trip history saves **only** on the explicit "Save trip to history" action.
 - ✅ Last-train awareness (`lib/routing/lastTrain.ts`): warns on route cards and the detail screen when a rail leg would board after that line's last train, or is a "final call" within 20 minutes of closing. Closing times are conservative estimates — see the module's doc comment for sources.
 - ✅ Beep card fare toggle (`lib/routing/beepFare.ts`): "I have a Beep card" preference in the planner, persisted in `localStorage`. Adjusts displayed fare for LRT-1 (~20% cash/SJT surcharge) and notes MRT-3 (cash discontinued) / LRT-2 (same discounted fare either way) — no fabricated numbers where no real difference exists.
 
@@ -27,12 +26,11 @@
 
 ## Auth & permissions
 
-- ✅ Supabase Auth (password + email OTP; Google ready once the provider is enabled in the dashboard).
-- ✅ RLS enabled on every app table; user-scoped policies on `saved_routes` / `user_trips`; `search_logs` deny-all by design (service-role writes only).
-- ✅ `/api/v1/me/*` double-gated: `proxy.ts` edge check + per-handler Bearer validation. Service-role key exists only in `lib/supabase/server.ts`.
+- ✅ No accounts, no Supabase Auth in the app — every `/api/v1/*` endpoint is anonymous. `lib/supabase/browser.ts`/Auth client and `demo@parapo.app` are unused; delete the demo user in the Supabase dashboard (Authentication → Users) whenever convenient — it's inert either way.
+- ✅ RLS still enabled on every app table. `saved_routes` / `trip_history` are unused by the app (no login can produce a matching `auth.uid()`) but left in place, not dropped, in case that data is wanted later; `search_logs` and `crowd_reports` are deny-all/insert-only by design (service-role writes only — see `supabase/migrations/009_anonymous_app_no_auth.sql`, **prepared but not yet applied**, no live SQL connection this session).
+- ✅ Service-role key exists only in `lib/supabase/server.ts`, used for the handful of endpoints (crowd-reports, station-accessibility read) that still touch the DB server-side.
 - ✅ Advisor items on PostGIS (`st_estimatedextent`, `spatial_ref_sys`) — **accepted risk, documented**: the grants belong to `supabase_admin` and cannot be revoked from the SQL editor (silent no-op). Exposure is bbox statistics only, and the only geometry stored is the public stop catalog.
-- 📋 Leaked-password protection: requires the Pro plan — enable if/when upgrading.
-- 📋 Demo account (`demo@parapo.app`) — delete or rotate before real launch.
+- 📋 Apply `supabase/migrations/009_anonymous_app_no_auth.sql` (makes `crowd_reports.user_id` nullable + anon insert policy) via the SQL editor — verify crowd-report submissions actually persist first; if they already do, the column was already nullable and this is just RLS defense-in-depth.
 
 ## Hosting & deployment
 

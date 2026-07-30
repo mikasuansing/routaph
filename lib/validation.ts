@@ -59,12 +59,3 @@ export const StationAccessibilityUpdateSchema = z.object({
   note:    z.string().max(200).optional(),
 });
 
-export const SavedRouteSchema = z.object({
-  name:        z.string().min(1).max(120),
-  originLat:   lat,
-  originLng:   lng,
-  originName:  z.string().min(1).max(200),
-  destLat:     lat,
-  destLng:     lng,
-  destName:    z.string().min(1).max(200),
-});

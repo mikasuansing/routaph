@@ -212,86 +212,8 @@ describe('GET /api/v1/accessibility/score', () => {
   });
 });
 
-// ── POST /api/v1/me/trips ───────────────────────────────────────────────────
-
-describe('POST /api/v1/me/trips', () => {
-  let POST: (req: NextRequest) => Promise<Response>;
-
-  beforeEach(async () => {
-    vi.resetModules();
-    ({ POST } = await import('../v1/me/trips/route'));
-  });
-
-  it('returns 401 when unauthenticated', async () => {
-    const req = makeRequest('POST', {
-      origin: 'Katipunan',
-      destination: 'UP Diliman',
-      distanceKm: 4.2,
-      fareEstimate: 42,
-      modesUsed: ['lrt', 'walk'],
-    });
-    const res = await POST(req);
-    expect(res.status).toBe(401);
-  });
-});
-
-// ── GET /api/v1/me/routes ────────────────────────────────────────────────────
-
-describe('GET /api/v1/me/routes', () => {
-  let GET: (req: NextRequest) => Promise<Response>;
-
-  beforeEach(async () => {
-    vi.resetModules();
-    ({ GET } = await import('../v1/me/routes/route'));
-  });
-
-  it('returns 401 when no Authorization header is provided', async () => {
-    const req = makeRequest('GET');
-    const res = await GET(req);
-    expect(res.status).toBe(401);
-    const json = await res.json();
-    expect(json.error.code).toBe('unauthorized');
-  });
-
-  it('returns 401 when token is invalid', async () => {
-    const req = makeRequest('GET', undefined, { authorization: 'Bearer invalid-token' });
-    const res = await GET(req);
-    expect(res.status).toBe(401);
-  });
-});
-
-// ── POST /api/v1/me/routes ───────────────────────────────────────────────────
-
-describe('POST /api/v1/me/routes', () => {
-  let POST: (req: NextRequest) => Promise<Response>;
-
-  beforeEach(async () => {
-    vi.resetModules();
-    ({ POST } = await import('../v1/me/routes/route'));
-  });
-
-  it('returns 401 with no auth', async () => {
-    const req = makeRequest('POST', { name: 'test' });
-    const res = await POST(req);
-    expect(res.status).toBe(401);
-  });
-
-  it('returns 400 with bad body when auth mock returns a user', async () => {
-    // Override auth mock to simulate a logged-in user
-    const { supabaseServer } = await import('@/lib/supabase/server');
-    vi.mocked(supabaseServer.auth.getUser).mockResolvedValueOnce({
-      data: { user: { id: 'user-1', email: 'test@test.com' } as never },
-      error: null,
-    });
-
-    // Empty name fails SavedRouteSchema validation → 400
-    const req = makeRequest('POST', { name: '' }, { authorization: 'Bearer valid' });
-    const res = await POST(req);
-    expect(res.status).toBe(400);
-    const json = await res.json();
-    expect(json.error.code).toBe('validation_error');
-  });
-});
+// ── POST /api/v1/me/* — deleted with saved commutes / trip history (no auth
+// model in the app any more, see BASELINE.md scope note)
 
 // ── POST /api/v1/crowd-reports ───────────────────────────────────────────────
 
@@ -303,45 +225,23 @@ describe('POST /api/v1/crowd-reports', () => {
     ({ POST } = await import('../v1/crowd-reports/route'));
   });
 
-  it('returns 401 with no auth', async () => {
-    const req = makeRequest('POST', { stopId: 1, category: 'wrong_fare' });
-    const res = await POST(req);
-    expect(res.status).toBe(401);
-    const json = await res.json();
-    expect(json.error.code).toBe('unauthorized');
-  });
-
   it('returns 400 when category is not recognized', async () => {
-    const { supabaseServer } = await import('@/lib/supabase/server');
-    vi.mocked(supabaseServer.auth.getUser).mockResolvedValueOnce({
-      data: { user: { id: 'user-1', email: 'test@test.com' } as never },
-      error: null,
-    });
-    const req = makeRequest('POST', { stopId: 1, category: 'not_a_real_category' }, { authorization: 'Bearer valid' });
+    const req = makeRequest('POST', { stopId: 1, category: 'not_a_real_category' });
     const res = await POST(req);
     expect(res.status).toBe(400);
   });
 
   it('returns 400 when body is not valid JSON', async () => {
-    const { supabaseServer } = await import('@/lib/supabase/server');
-    vi.mocked(supabaseServer.auth.getUser).mockResolvedValueOnce({
-      data: { user: { id: 'user-1', email: 'test@test.com' } as never },
-      error: null,
-    });
     const req = new NextRequest('http://localhost:3000/api/test', {
       method: 'POST', body: 'not-json',
-      headers: { 'content-type': 'application/json', authorization: 'Bearer valid' },
+      headers: { 'content-type': 'application/json' },
     });
     const res = await POST(req);
     expect(res.status).toBe(400);
   });
 
-  it('returns 201 with the created report on a valid authenticated request', async () => {
+  it('returns 201 with the created report on a valid anonymous request', async () => {
     const { supabaseServer } = await import('@/lib/supabase/server');
-    vi.mocked(supabaseServer.auth.getUser).mockResolvedValueOnce({
-      data: { user: { id: 'user-1', email: 'test@test.com' } as never },
-      error: null,
-    });
     vi.mocked(supabaseServer.from).mockReturnValueOnce({
       insert: vi.fn().mockReturnThis(),
       select: vi.fn().mockReturnThis(),
@@ -350,55 +250,13 @@ describe('POST /api/v1/crowd-reports', () => {
         error: null,
       }),
     } as never);
-    const req = makeRequest('POST', { stopId: 5, category: 'wrong_stop', note: 'Pin is off' }, { authorization: 'Bearer valid' });
+    const req = makeRequest('POST', { stopId: 5, category: 'wrong_stop', note: 'Pin is off' });
     const res = await POST(req);
     expect(res.status).toBe(201);
     const json = await res.json();
     // The DB's crowding CHECK constraint means category is encoded into
     // `note` (see route.ts) — the API still returns it decoded as `category`.
     expect(json.data).toMatchObject({ id: 1, stopId: 5, category: 'wrong_stop', note: 'Pin is off' });
-  });
-});
-
-// ── GET /api/v1/crowd-reports ────────────────────────────────────────────────
-
-describe('GET /api/v1/crowd-reports', () => {
-  let GET: (req: NextRequest) => Promise<Response>;
-
-  beforeEach(async () => {
-    vi.resetModules();
-    ({ GET } = await import('../v1/crowd-reports/route'));
-  });
-
-  it('returns 401 when no Authorization header is provided', async () => {
-    const req = makeRequest('GET');
-    const res = await GET(req);
-    expect(res.status).toBe(401);
-  });
-
-  it('returns 401 when token is invalid', async () => {
-    const req = makeRequest('GET', undefined, { authorization: 'Bearer invalid-token' });
-    const res = await GET(req);
-    expect(res.status).toBe(401);
-  });
-
-  it('returns 200 with an array (own reports only) for an authenticated user', async () => {
-    const { supabaseServer } = await import('@/lib/supabase/server');
-    vi.mocked(supabaseServer.auth.getUser).mockResolvedValueOnce({
-      data: { user: { id: 'user-1', email: 'test@test.com' } as never },
-      error: null,
-    });
-    vi.mocked(supabaseServer.from).mockReturnValueOnce({
-      select: vi.fn().mockReturnThis(),
-      eq:     vi.fn().mockReturnThis(),
-      order:  vi.fn().mockReturnThis(),
-      limit:  vi.fn().mockResolvedValue({ data: [], error: null }),
-    } as never);
-    const req = makeRequest('GET', undefined, { authorization: 'Bearer valid' });
-    const res = await GET(req);
-    expect(res.status).toBe(200);
-    const json = await res.json();
-    expect(Array.isArray(json.data)).toBe(true);
   });
 });
 
@@ -455,87 +313,6 @@ describe('GET /api/v1/station-accessibility', () => {
     const req = new NextRequest('http://localhost:3000/api/v1/station-accessibility?stopId=0');
     const res = await GET(req);
     expect(res.status).toBe(400);
-  });
-});
-
-// ── PATCH /api/v1/admin/station-accessibility ────────────────────────────────
-
-describe('PATCH /api/v1/admin/station-accessibility', () => {
-  let PATCH: (req: NextRequest) => Promise<Response>;
-
-  beforeEach(async () => {
-    vi.resetModules();
-    delete process.env.ADMIN_EMAILS;
-    ({ PATCH } = await import('../v1/admin/station-accessibility/route'));
-  });
-
-  function makePatchRequest(body?: unknown, headers?: Record<string, string>): NextRequest {
-    return new NextRequest('http://localhost:3000/api/test', {
-      method: 'PATCH',
-      headers: { 'content-type': 'application/json', ...headers },
-      body: body !== undefined ? JSON.stringify(body) : undefined,
-    });
-  }
-
-  it('returns 401 with no auth', async () => {
-    const req = makePatchRequest({ stopId: 1, feature: 'elevator', status: 'operational' });
-    const res = await PATCH(req);
-    expect(res.status).toBe(401);
-  });
-
-  it('returns 403 when the authenticated email is not in ADMIN_EMAILS', async () => {
-    process.env.ADMIN_EMAILS = 'someone-else@parapo.app';
-    const { supabaseServer } = await import('@/lib/supabase/server');
-    vi.mocked(supabaseServer.auth.getUser).mockResolvedValueOnce({
-      data: { user: { id: 'user-1', email: 'not-admin@parapo.app' } as never },
-      error: null,
-    });
-    const req = makePatchRequest(
-      { stopId: 1, feature: 'elevator', status: 'operational' },
-      { authorization: 'Bearer valid' },
-    );
-    const res = await PATCH(req);
-    expect(res.status).toBe(403);
-  });
-
-  it('returns 400 for an invalid status value, even for an allowlisted admin', async () => {
-    process.env.ADMIN_EMAILS = 'admin@parapo.app';
-    const { supabaseServer } = await import('@/lib/supabase/server');
-    vi.mocked(supabaseServer.auth.getUser).mockResolvedValueOnce({
-      data: { user: { id: 'user-1', email: 'admin@parapo.app' } as never },
-      error: null,
-    });
-    const req = makePatchRequest(
-      { stopId: 1, feature: 'elevator', status: 'definitely_broken' },
-      { authorization: 'Bearer valid' },
-    );
-    const res = await PATCH(req);
-    expect(res.status).toBe(400);
-  });
-
-  it('returns 200 with the updated row for an allowlisted admin', async () => {
-    process.env.ADMIN_EMAILS = 'admin@parapo.app';
-    const { supabaseServer } = await import('@/lib/supabase/server');
-    vi.mocked(supabaseServer.auth.getUser).mockResolvedValueOnce({
-      data: { user: { id: 'user-1', email: 'admin@parapo.app' } as never },
-      error: null,
-    });
-    vi.mocked(supabaseServer.from).mockReturnValueOnce({
-      upsert: vi.fn().mockReturnThis(),
-      select: vi.fn().mockReturnThis(),
-      single: vi.fn().mockResolvedValue({
-        data: { stop_id: 201, feature: 'elevator', status: 'out_of_service', note: 'Reported by rider', updated_at: '2026-07-26T00:00:00Z' },
-        error: null,
-      }),
-    } as never);
-    const req = makePatchRequest(
-      { stopId: 201, feature: 'elevator', status: 'out_of_service', note: 'Reported by rider' },
-      { authorization: 'Bearer valid' },
-    );
-    const res = await PATCH(req);
-    expect(res.status).toBe(200);
-    const json = await res.json();
-    expect(json.data).toMatchObject({ stopId: 201, feature: 'elevator', status: 'out_of_service' });
   });
 });
 

@@ -3,6 +3,14 @@
 > Last updated: 2026-06-20
 > This document is the single source of truth for the project. When code and BASELINE.md disagree, fix one on purpose — never drift silently.
 
+> **Scope change (2026-07-26):** ParaPo has no accounts. Login/signup, saved
+> commutes (F5), trip history, and the internal admin surface were removed —
+> the product is now exactly: plan a route, see directions/fares/ETA, track
+> it live via GPS. Every `/api/v1/*` endpoint is anonymous. Sections below
+> that reference auth-gated features (F5, the `me/` API namespace, the
+> admin station-accessibility page) describe removed functionality — kept
+> here as history per the no-silent-drift rule above, not as current spec.
+
 ---
 
 ## §1 Vision

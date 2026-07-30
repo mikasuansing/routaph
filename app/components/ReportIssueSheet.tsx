@@ -1,6 +1,5 @@
 'use client';
 import { useState } from 'react';
-import { supabaseBrowser } from '@/lib/supabase/browser';
 
 /*
  * "Report an issue" — shared between the planner route-detail screen and
@@ -41,11 +40,9 @@ export function ReportIssueButton({ stopId, routeId, contextLabel }: {
     if (!category) return;
     setStatus('sending');
     try {
-      const session = (await supabaseBrowser.auth.getSession()).data.session;
-      if (!session) { setStatus('failed'); return; }
       const res = await fetch('/api/v1/crowd-reports', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ stopId, routeId, category, note: note.trim() || undefined }),
       });
       setStatus(res.ok ? 'sent' : 'failed');
@@ -104,7 +101,7 @@ export function ReportIssueButton({ stopId, routeId, contextLabel }: {
           />
           {status === 'failed' && (
             <p style={{ margin: '0 0 8px', fontSize: 12, color: 'var(--color-error)' }}>
-              Couldn&apos;t send — sign in and try again.
+              Couldn&apos;t send — check your connection and try again.
             </p>
           )}
           <div style={{ display: 'flex', gap: 8 }}>

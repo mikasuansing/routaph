@@ -2,7 +2,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { TRIP_STORAGE_KEY } from '@/lib/trip/types';
-import { supabaseBrowser } from '@/lib/supabase/browser';
 import { checkLastTrain, formatClockTime, type LastTrainCheck } from '@/lib/routing/lastTrain';
 import { beepAdjustedFare, beepAdjustedTotalFare } from '@/lib/routing/beepFare';
 import { suggestJeepneyCorridor } from '@/lib/routing/jeepneySuggest';
@@ -276,8 +275,6 @@ export default function Planner() {
   const [disruptions, setDisruptions] = useState<Disruption[] | null>(null);
   const [accessibilityByStop, setAccessibilityByStop] = useState<Record<number, StationAccessibility[]>>({});
   const [rainAdvisory, setRainAdvisory] = useState<RainAdvisory | null>(null);
-  const [authed, setAuthed]       = useState<boolean | null>(null);
-  const [commuteSave, setCommuteSave] = useState<'idle' | 'saving' | 'saved' | 'failed'>('idle');
   const [addingStop, setAddingStop] = useState(false);
   const [nextStop, setNextStop] = useState('');
   const [chainBusy, setChainBusy] = useState(false);
@@ -300,17 +297,6 @@ export default function Planner() {
       return next;
     });
   }
-
-  /* ── Login required: no session → back to /auth ───────────────────────── */
-  useEffect(() => {
-    let active = true;
-    supabaseBrowser.auth.getSession().then(({ data }) => {
-      if (!active) return;
-      if (!data.session) { router.replace('/auth?next=/planner'); return; }
-      setAuthed(true);
-    });
-    return () => { active = false; };
-  }, [router]);
 
   /* ── Load the stop catalog (F4) so pick lists match the routable network ── */
   useEffect(() => {
@@ -406,7 +392,6 @@ export default function Planner() {
   const routeGroup  = useRef<unknown>(null);
 
   useEffect(() => {
-    if (authed !== true) return; // container renders only after the auth gate
     if (!mapElRef.current || mapRef.current) return;
     let cancelled = false;
 
@@ -451,7 +436,7 @@ export default function Planner() {
     });
 
     return () => { cancelled = true; };
-  }, [authed]);
+  }, []);
 
   /* ── Draw the selected route — single ink line, dashed walks ──────────── */
   const drawRoute = useCallback(() => {
@@ -519,35 +504,12 @@ export default function Planner() {
     }
   }, [screen]);
 
-  /* ── Save the current origin/destination as a commute (F5) ────────────── */
-  async function saveCommute() {
-    const origin = originCoords(from), dest = stopCoords[to];
-    if (!origin || !dest) return;
-    setCommuteSave('saving');
-    try {
-      const session = (await supabaseBrowser.auth.getSession()).data.session;
-      if (!session) { setCommuteSave('failed'); return; }
-      const res = await fetch('/api/v1/me/routes', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
-        body: JSON.stringify({
-          name: `${from} → ${to}`,
-          originLat: origin[0], originLng: origin[1], originName: from,
-          destLat: dest[0], destLng: dest[1], destName: to,
-        }),
-      });
-      setCommuteSave(res.ok ? 'saved' : 'failed');
-    } catch {
-      setCommuteSave('failed');
-    }
-  }
-
   /* ── Search ──────────────────────────────────────────────────────────── */
   async function search() {
     const origin = originCoords(from), dest = stopCoords[to];
     if (!origin || !dest) return;
     const excludeModes = MODE_GROUPS.filter(g => !enabledModes[g.key]).flatMap(g => g.engineModes);
-    setError(null); setModeFilter('all'); setCommuteSave('idle'); setScreen('loading');
+    setError(null); setModeFilter('all'); setScreen('loading');
     try {
       const res = await fetch('/api/v1/routes/plan', {
         method: 'POST',
@@ -627,15 +589,6 @@ export default function Planner() {
 
   const canSearch = Boolean(from && to && from !== to && originCoords(from) && stopCoords[to] && Object.values(enabledModes).some(Boolean));
 
-  /* Hold rendering until the session check settles (redirects when absent) */
-  if (authed !== true) {
-    return (
-      <div style={{ position: 'fixed', inset: 0, background: C.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Inter,system-ui,sans-serif', color: C.muted, fontSize: 14 }}>
-        Checking session…
-      </div>
-    );
-  }
-
   /* Service status line — one glance, no chrome */
   const statusLine = disruptions === null
     ? null
@@ -664,17 +617,6 @@ export default function Planner() {
             <span style={{ fontFamily: DISPLAY, fontSize: 22, fontWeight: 800, letterSpacing: '-0.02em', color: C.accent }}>
               ParaPo<span style={{ color: C.ink }}>.</span>
             </span>
-            <div style={{ display: 'flex', gap: 8 }}>
-              <a href="/me" style={{ fontSize: 12, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: '#fff', textDecoration: 'none', background: C.accent, borderRadius: 999, padding: '8px 16px' }}>
-                My trips
-              </a>
-              <button
-                onClick={async () => { await supabaseBrowser.auth.signOut(); window.location.href = '/auth'; }}
-                style={{ fontSize: 12, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: C.ink, cursor: 'pointer', fontFamily: 'inherit', background: C.card, border: `1px solid ${C.border}`, borderRadius: 999, padding: '8px 16px' }}
-              >
-                Sign out
-              </button>
-            </div>
           </div>
 
           <Sheet height="auto" style={{ maxHeight: '62vh' }}>
@@ -1126,21 +1068,6 @@ export default function Planner() {
                     </button>
                   )}
 
-                  <button
-                    onClick={saveCommute}
-                    disabled={commuteSave === 'saving' || commuteSave === 'saved'}
-                    style={{
-                      width: '100%', background: 'transparent', color: commuteSave === 'saved' ? C.accent : C.ink,
-                      border: `1.5px solid ${commuteSave === 'saved' ? C.accent : C.ink}`, borderRadius: 999,
-                      padding: '14px', fontSize: 14, fontWeight: 700,
-                      cursor: commuteSave === 'idle' || commuteSave === 'failed' ? 'pointer' : 'default', fontFamily: 'inherit',
-                    }}
-                  >
-                    {commuteSave === 'saved' ? '✓ Commute saved — see My trips'
-                      : commuteSave === 'saving' ? 'Saving…'
-                      : commuteSave === 'failed' ? 'Save failed — tap to retry'
-                      : `☆ ${t(lang, 'save_commute')}`}
-                  </button>
                   <button onClick={() => { setFrom(''); setTo(''); setSelected(null); setItineraries([]); setScreen('home'); }} style={{
                     width: '100%', background: 'none', border: 'none', padding: '12px',
                     fontSize: 14, fontWeight: 600, color: C.muted, cursor: 'pointer', fontFamily: 'inherit',

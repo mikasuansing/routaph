@@ -1,6 +1,6 @@
 # ParaPo — API Contracts
 
-> Last verified from code: 2026-07-04
+> Last verified from code: 2026-07-26
 
 All responses use the standard envelope:
 
@@ -10,7 +10,9 @@ All responses use the standard envelope:
 | List | `{ "data": [...], "page": { "cursor": "...", "hasMore": true } }` |
 | Error | `{ "error": { "code": "snake_case", "message": "Human string", "details": {} } }` |
 
-Auth: `Authorization: Bearer <supabase-access-token>` where required.
+The app has no accounts — every endpoint below is anonymous (no
+`Authorization` header). ParaPo's scope is directions, fares, ETA, and live
+GPS trip tracking; there is no login, saved commutes, or trip history.
 
 ---
 
@@ -88,63 +90,6 @@ WalkLeg {
 **Query params:** `?bbox=minLat,minLng,maxLat,maxLng` (optional)  
 **Returns:** `{ "data": Stop[] }`  
 **Status codes:** 200, 400 (invalid bbox), 500
-
----
-
-## GET /api/v1/me/routes
-
-**Auth:** Bearer token (required)  
-**Returns:** `{ "data": SavedRoute[] }` ordered newest-first  
-**Status codes:** 200, 401
-
----
-
-## POST /api/v1/me/routes
-
-**Auth:** Bearer token (required)  
-**Body:**
-```json
-{
-  "name":        "string (1–120 chars)",
-  "originLat":   number,
-  "originLng":   number,
-  "originName":  "string",
-  "destLat":     number,
-  "destLng":     number,
-  "destName":    "string"
-}
-```
-**Returns:** `{ "data": SavedRoute }`  
-**Status codes:** 201, 400, 401, 500
-
----
-
-## DELETE /api/v1/me/routes/:id
-
-**Auth:** Bearer token (required)  
-**Returns:** `{ "data": { "ok": true } }`  
-**Status codes:** 200, 401, 404, 500
-
----
-
-## GET /api/v1/me/trips
-
-**Auth:** Bearer token (required)  
-**Returns:** `{ "data": TripHistory[] }` newest-first, max 50
-
-```typescript
-TripHistory {
-  id: number;
-  origin: string; destination: string;
-  distanceKm: number; fareEstimate: number;
-  modesUsed: string[];
-  createdAt: string; // ISO8601
-}
-```
-**Status codes:** 200, 401, 500  
-*(POST /api/v1/me/trips already documented below — saves one trip, called only from the explicit "Save trip" action.)*
-
----
 
 ---
 
@@ -227,7 +172,7 @@ RideOption {
 
 ## POST /api/v1/crowd-reports
 
-**Auth:** Bearer token (required)
+**Auth:** None — the app has no accounts; submissions are anonymous.
 **Body:**
 ```json
 {
@@ -238,7 +183,7 @@ RideOption {
 }
 ```
 **Returns:** `{ "data": CrowdReport }`
-**Status codes:** 201, 400, 401, 429, 500
+**Status codes:** 201, 400, 429, 500
 
 **Notes:**
 - The `crowd_reports` table predates this feature and only has `stop_id` /
@@ -253,29 +198,14 @@ RideOption {
   it back out on read — both directions handled in `app/api/v1/crowd-reports/route.ts`,
   entirely inside the API boundary. Clients only ever see `category` / `note`
   as separate fields. See `lib/validation.ts` (`IssueReportSchema`).
-- `user_id` is set server-side from the authenticated session — never
-  trusted from the request body.
-- Rate limited (`crowdLimiter`, 5/min/user) per BASELINE §-referenced crowd
-  endpoint budget.
-
----
-
-## GET /api/v1/crowd-reports
-
-**Auth:** Bearer token (required)
-**Returns:** `{ "data": CrowdReport[] }` — the caller's own reports only, newest-first, max 50
-
-```typescript
-CrowdReport {
-  id:        number;
-  stopId:    number | null;
-  routeId:   number | null;
-  category:  string | null;
-  note:      string | null;
-  createdAt: string; // ISO8601
-}
-```
-**Status codes:** 200, 401, 500
+- Writes go through the service-role key, so RLS never blocks the insert;
+  `supabase/migrations/009_anonymous_app_no_auth.sql` (not yet applied) makes
+  `user_id` nullable and adds an anon-insert policy as defense-in-depth for
+  direct anon-key access. `user_id` is always `null` — there is no session to
+  attach one to.
+- Rate limited (`crowdLimiter`, 5/min/IP) — no per-user key without accounts.
+- No GET: reports were never surfaced back to the submitter, and without
+  accounts there's no "your reports" to scope a read to.
 
 ---
 
@@ -301,27 +231,6 @@ StationAccessibility {
   a fabricated "operational".
 - Falls back to `[]` if the table doesn't exist yet (not-yet-applied
   migration) or the DB is unconfigured — never a 500 for that case.
-
----
-
-## PATCH /api/v1/admin/station-accessibility
-
-**Auth:** Bearer token (required) **+** caller's email must be in the
-`ADMIN_EMAILS` server env allowlist (comma-separated); everyone else gets
-403. There's no roles table in this schema — this is deliberately the
-simplest gate that isn't "anyone logged in."
-
-**Body:**
-```json
-{
-  "stopId":  number,
-  "feature": "elevator" | "escalator",
-  "status":  "unknown" | "operational" | "out_of_service",
-  "note":    "string, max 200 chars (optional)"
-}
-```
-**Returns:** `{ "data": StationAccessibility }`
-**Status codes:** 200, 400, 401, 403, 500
 
 ---
 
