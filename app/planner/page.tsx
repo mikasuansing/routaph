@@ -714,7 +714,7 @@ export default function Planner() {
                           Ask a jeepney toward {jeepneyFallback.towardLabel}
                         </p>
                         <p className="tnum" style={{ margin: '3px 0 0', fontSize: 12, color: C.muted }}>
-                          {jeepneyFallback.corridorName} · ~₱{jeepneyFallback.fareLow.toFixed(0)}–{jeepneyFallback.fareHigh.toFixed(0)} · not a tracked route, no schedule
+                          {jeepneyFallback.corridorName} · ~₱{jeepneyFallback.fareLow === jeepneyFallback.fareHigh ? jeepneyFallback.fareLow.toFixed(0) : `${jeepneyFallback.fareLow.toFixed(0)}–${jeepneyFallback.fareHigh.toFixed(0)}`} · not a tracked route, no schedule
                         </p>
                       </div>
                     )}
