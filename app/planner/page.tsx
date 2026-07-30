@@ -269,6 +269,7 @@ export default function Planner() {
   const [itineraries, setItineraries] = useState<Itinerary[]>([]);
   const [selected, setSelected]   = useState<Itinerary | null>(null);
   const [error, setError]         = useState<string | null>(null);
+  const [jeepneyFallback, setJeepneyFallback] = useState<ReturnType<typeof suggestJeepneyCorridor>>(null);
   const [stopCoords, setStopCoords] = useState<Record<string, [number, number]>>({});
   const [myLoc, setMyLoc]         = useState<[number, number] | null>(null);
   const [locBusy, setLocBusy]     = useState(false);
@@ -513,7 +514,7 @@ export default function Planner() {
     const origin = originCoords(from), dest = stopCoords[to];
     if (!origin || !dest) return;
     const excludeModes = MODE_GROUPS.filter(g => !enabledModes[g.key]).flatMap(g => g.engineModes);
-    setError(null); setModeFilter('all'); setFormOpen(false); setScreen('loading');
+    setError(null); setJeepneyFallback(null); setModeFilter('all'); setFormOpen(false); setScreen('loading');
     try {
       const res = await fetch('/api/v1/routes/plan', {
         method: 'POST',
@@ -526,7 +527,17 @@ export default function Planner() {
         }),
       });
       const json = await res.json() as { data?: Itinerary[]; error?: { message: string } };
-      if (!res.ok || json.error) { setError(json.error?.message ?? 'No route found.'); setFormOpen(true); setScreen('home'); return; }
+      if (!res.ok || json.error) {
+        setError(json.error?.message ?? 'No route found.');
+        // No tracked itinerary exists at all — before giving up, check
+        // whether the raw origin/destination sit near a known jeepney
+        // thoroughfare (see lib/routing/jeepneySuggest.ts). This is the
+        // same honest "not a routed leg" suggestion shown inline on walk
+        // gaps, surfaced here too so a jeepney-only search doesn't just
+        // dead-end with a bare error when a real (untracked) option exists.
+        setJeepneyFallback(suggestJeepneyCorridor(origin[0], origin[1], dest[0], dest[1]));
+        setFormOpen(true); setScreen('home'); return;
+      }
       setItineraries(json.data ?? []);
       setScreen('results');
     } catch {
@@ -597,10 +608,7 @@ export default function Planner() {
   const statusDetail = disruptions && disruptions.length > 0
     ? (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-          <Micro color={C.ink} style={{ letterSpacing: '0.04em' }}>▲ {disruptions.length} service alert{disruptions.length > 1 ? 's' : ''} — {disruptions[0].description}</Micro>
-          <a href="tel:1342" style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.04em', color: C.muted, textDecoration: 'underline' }}>
-            {t(lang, 'report_to_ltfrb')}
-          </a>
+          <Micro color={C.ink} style={{ letterSpacing: '0.04em' }}>▲ {disruptions.length} route update{disruptions.length > 1 ? 's' : ''} — {disruptions[0].description}</Micro>
         </div>
       )
     : null;
@@ -629,9 +637,9 @@ export default function Planner() {
               {disruptions === null ? (
                 <Micro>…</Micro>
               ) : disruptions.length === 0 ? (
-                <Micro color={C.accent}>● All lines normal</Micro>
+                <Micro color={C.accent}>● No major disruptions</Micro>
               ) : (
-                <Micro color={C.ink}>▲ {disruptions.length} alert{disruptions.length > 1 ? 's' : ''}</Micro>
+                <Micro color={C.ink}>▲ {disruptions.length} notice{disruptions.length > 1 ? 's' : ''}</Micro>
               )}
             </div>
             <button
@@ -691,7 +699,26 @@ export default function Planner() {
                 </div>
 
                 {error && (
-                  <p style={{ margin: '0 0 16px', fontSize: 13, fontWeight: 600, color: C.error }}>{error}</p>
+                  <div style={{ margin: '0 0 16px' }}>
+                    <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: C.error }}>
+                      {jeepneyFallback
+                        ? "No tracked route covers this trip yet — but here's a real jeepney thoroughfare that does:"
+                        : error}
+                    </p>
+                    {jeepneyFallback && (
+                      <div style={{
+                        marginTop: 10, padding: '12px 14px', borderRadius: 14,
+                        border: `1.5px dashed ${C.border}`, background: C.surface,
+                      }}>
+                        <p style={{ margin: 0, fontSize: 13, fontWeight: 700, color: C.ink }}>
+                          Ask a jeepney toward {jeepneyFallback.towardLabel}
+                        </p>
+                        <p className="tnum" style={{ margin: '3px 0 0', fontSize: 12, color: C.muted }}>
+                          {jeepneyFallback.corridorName} · ~₱{jeepneyFallback.fareLow.toFixed(0)}–{jeepneyFallback.fareHigh.toFixed(0)} · not a tracked route, no schedule
+                        </p>
+                      </div>
+                    )}
+                  </div>
                 )}
 
                 {/* From / To — typography only */}
