@@ -11,6 +11,18 @@
 > admin station-accessibility page) describe removed functionality — kept
 > here as history per the no-silent-drift rule above, not as current spec.
 
+> **Scope change (2026-07-31) — crowdsourced live vehicle tracking (F16):**
+> No PH operator publishes a real-time vehicle feed, so live positions are
+> estimated from opted-in riders' phones. This narrows the §7.7 privacy
+> invariant below, deliberately and in exactly one place: a rider who
+> explicitly opts in **per trip** sends anonymous positions that live in
+> Redis under a 180 s TTL and are never written to Postgres. Everything
+> else holds — GPS is still never persisted, still never in a log, still
+> never leaves the browser for riders who don't opt in (the default).
+> Jeepneys are excluded by design: overlapping routes on shared roads make
+> honest attribution impossible. See `lib/live/`, `docs/api-contracts.md`
+> (`/api/v1/live/*`), and `/privacy` §3.
+
 ---
 
 ## §1 Vision

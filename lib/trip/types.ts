@@ -38,6 +38,11 @@ export type TripState = {
   reroutes:          Itinerary[];
   rideOptions:       RideOption[];
   activeDisruption:  Disruption | null;
+  // Crowdsourced live tracking — OFF unless the rider turns it on for this
+  // trip. Never remembered across trips: consent to share your position on
+  // one ride is not consent for every future one, so this always starts
+  // false and resets when the trip ends.
+  sharingPosition:   boolean;
 };
 
 export type TripAction =
@@ -49,7 +54,8 @@ export type TripAction =
   | { type: 'ADVANCE_LEG' }
   | { type: 'REROUTING' }
   | { type: 'REROUTE_DONE'; reroutes: Itinerary[]; rideOptions: RideOption[] }
-  | { type: 'SET_DISRUPTION'; disruption: Disruption | null };
+  | { type: 'SET_DISRUPTION'; disruption: Disruption | null }
+  | { type: 'SET_SHARING'; sharing: boolean };
 
 export const TRIP_STORAGE_KEY = 'parapo:active_trip';
 

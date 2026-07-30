@@ -62,6 +62,16 @@ type Itinerary = { legs: Leg[]; totalDurationMin: number; totalFare: number; tra
 type Disruption = { id: number; corridorId: number; description: string };
 type StationAccessibility = { stopId: number; feature: 'elevator' | 'escalator'; status: 'unknown' | 'operational' | 'out_of_service'; note: string | null };
 type RainAdvisory = { heavyRainExpected: boolean; message: string };
+// Crowdsourced vehicle estimate — see docs/api-contracts.md. Never an
+// official operator position; every surface that shows one must say so.
+type LiveVehicle = {
+  lineId: number; lineName: string; mode: string;
+  direction: 'forward' | 'backward';
+  lat: number; lng: number;
+  nearStopId: number; nearStopName: string;
+  riderCount: number; confidence: 'low' | 'medium' | 'high';
+  updatedAt: string;
+};
 type Screen = 'home' | 'loading' | 'results' | 'detail';
 type ModeFilter = 'all' | 'train' | 'bus' | 'jeepney';
 type ModeGroup = 'train' | 'bus' | 'jeepney';
@@ -73,6 +83,9 @@ const MODE_GROUPS: { key: ModeGroup; label: string; engineModes: string[] }[] = 
 ];
 
 const MY_LOCATION = 'My location';
+// Live estimates go stale after 2 min server-side, so polling faster than
+// this buys nothing but battery.
+const LIVE_POLL_MS = 20_000;
 const OBJ_LABEL: Record<string, string> = {
   fastest: 'Fastest', fewest_transfers: 'Fewest transfers', cheapest: 'Cheapest',
 };
@@ -270,6 +283,7 @@ export default function Planner() {
   const [selected, setSelected]   = useState<Itinerary | null>(null);
   const [error, setError]         = useState<string | null>(null);
   const [jeepneyFallback, setJeepneyFallback] = useState<ReturnType<typeof suggestJeepneyCorridor>>(null);
+  const [liveVehicles, setLiveVehicles] = useState<LiveVehicle[]>([]);
   const [stopCoords, setStopCoords] = useState<Record<string, [number, number]>>({});
   const [myLoc, setMyLoc]         = useState<[number, number] | null>(null);
   const [locBusy, setLocBusy]     = useState(false);
@@ -395,6 +409,7 @@ export default function Planner() {
   const mapElRef    = useRef<HTMLDivElement>(null);
   const mapRef      = useRef<unknown>(null);
   const routeGroup  = useRef<unknown>(null);
+  const liveGroup   = useRef<unknown>(null);
 
   useEffect(() => {
     if (!mapElRef.current || mapRef.current) return;
@@ -437,6 +452,9 @@ export default function Planner() {
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       routeGroup.current = (L as any).layerGroup().addTo(map);
+      // Separate layer so live vehicles survive a route redraw and vice versa.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      liveGroup.current = (L as any).layerGroup().addTo(map);
       mapRef.current = map;
     });
 
@@ -508,6 +526,60 @@ export default function Planner() {
       }
     }
   }, [screen]);
+
+  /* ── Live vehicles — crowdsourced, never an official feed ─────────────── */
+  useEffect(() => {
+    let cancelled = false;
+
+    const draw = (vehicles: LiveVehicle[]) => {
+      if (!liveGroup.current) return;
+      import('leaflet').then(mod => {
+        if (cancelled) return;
+        const L = mod.default ?? mod;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const group = liveGroup.current as any;
+        group.clearLayers();
+
+        const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+        const accent = isDark ? '#7A90FF' : '#2947DE';
+
+        for (const v of vehicles) {
+          // A single-rider estimate is drawn hollow and smaller — the map
+          // should look less certain when the data is less certain.
+          const solid = v.confidence !== 'low';
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const marker = (L as any).circleMarker([v.lat, v.lng], {
+            radius: solid ? 8 : 6,
+            fillColor: accent,
+            fillOpacity: solid ? 0.95 : 0.35,
+            color: isDark ? '#000' : '#fff',
+            weight: 2.5,
+          }).addTo(group);
+          marker.bindTooltip(
+            `${v.lineName} · near ${v.nearStopName}<br>` +
+            `<span style="opacity:.7">Estimated from ${v.riderCount} rider${v.riderCount > 1 ? 's' : ''} — not an official position</span>`,
+            { direction: 'top', offset: [0, -8] },
+          );
+        }
+      });
+    };
+
+    const poll = async () => {
+      try {
+        const res = await fetch('/api/v1/live/vehicles');
+        if (!res.ok) return;
+        const json = await res.json() as { data?: LiveVehicle[] };
+        if (cancelled) return;
+        const vehicles = json.data ?? [];
+        setLiveVehicles(vehicles);
+        draw(vehicles);
+      } catch { /* live hints are optional — never break the planner */ }
+    };
+
+    poll();
+    const id = setInterval(poll, LIVE_POLL_MS);
+    return () => { cancelled = true; clearInterval(id); };
+  }, []);
 
   /* ── Search ──────────────────────────────────────────────────────────── */
   async function search() {
@@ -640,6 +712,14 @@ export default function Planner() {
                 <Micro color={C.accent}>● No major disruptions</Micro>
               ) : (
                 <Micro color={C.ink}>▲ {disruptions.length} notice{disruptions.length > 1 ? 's' : ''}</Micro>
+              )}
+              {/* Only appears when riders are actually contributing — an
+                  empty live map shows nothing rather than a zero. */}
+              {liveVehicles.length > 0 && (
+                <>
+                  <div style={{ width: 1, height: 14, background: C.border }} />
+                  <Micro color={C.accent}>◉ {liveVehicles.length} on the map</Micro>
+                </>
               )}
             </div>
             <button

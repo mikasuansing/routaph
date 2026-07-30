@@ -258,6 +258,80 @@ RainAdvisory {
 
 ---
 
+## POST /api/v1/live/ping
+
+**Auth:** None
+**Body:**
+
+```typescript
+{
+  lineId:    number;  // corridor the rider is currently aboard
+  riderKey:  string;  // 16–64 char ephemeral random token, regenerated per trip
+  lat:       number;  // -90..90
+  lng:       number;  // -180..180
+  accuracyM: number;  // GPS accuracy in metres; > 150 is rejected
+}
+```
+
+**Returns:** `{ "data": { "accepted": boolean } }`
+**Status codes:** 202 (accepted), 400 (validation), 429, 503 (Redis unset)
+**Notes:**
+- Opt-in only. The trip screen never sends a ping unless the rider has
+  explicitly enabled "Share my position" for that trip.
+- `riderKey` is a random token generated client-side per trip and thrown
+  away when the trip ends. It is not an account, device, or session ID and
+  is never linked to anything. Its only purpose is inferring travel
+  direction from a rider's own two most recent pings.
+- **Nothing is written to Postgres.** Pings live only in Redis under
+  `live:v1:line:<lineId>` (sorted set, score = epoch ms) and
+  `live:v1:rider:<riderKey>`, both with a 180 s TTL. Raw positions expire on
+  their own; there is no retention, export, or backup path. This preserves
+  BASELINE §7.7 ("raw GPS traces are never persisted") — Redis holds a
+  3-minute rolling window, not a trace.
+- Low-quality fixes (`accuracyM > 150`) are rejected rather than stored,
+  so a 500 m urban-canyon reading can't drag a vehicle estimate off-line.
+
+---
+
+## GET /api/v1/live/vehicles
+
+**Auth:** None
+**Query:** `lineId` (optional, positive int — omit for all tracked lines)
+**Returns:** `{ "data": VehicleEstimate[] }`
+
+```typescript
+VehicleEstimate {
+  lineId:      number;
+  lineName:    string;
+  mode:        "mrt" | "lrt" | "bus";
+  direction:   "forward" | "backward";
+  lat:         number;
+  lng:         number;
+  nearStopId:  number;
+  nearStopName: string;
+  riderCount:  number;  // how many pings back this estimate
+  confidence:  "low" | "medium" | "high";
+  updatedAt:   string;  // ISO8601 of the newest ping in the cluster
+}
+```
+
+**Status codes:** 200, 400 (invalid lineId), 429
+**Notes:**
+- **Crowdsourced, not an official feed.** No Philippine transit operator
+  publishes a real-time vehicle feed, so positions are estimated purely
+  from opted-in riders' phones. Every UI surface must label them as
+  estimates from riders, never as official positions.
+- Rail and the EDSA Carousel only. Jeepneys are excluded on purpose:
+  their routes overlap heavily on shared roads, so a ping can't be
+  attributed to a specific jeepney route honestly.
+- Returns `[]` when no fresh pings exist — the map shows nothing rather
+  than a simulated vehicle. Pings older than 120 s are ignored entirely.
+- `confidence` is `low` for a single rider, `medium` for 2–3, `high` for 4+.
+- Estimation logic lives in `lib/live/estimate.ts` (pure module, no
+  Next/Supabase/Redis imports — same rule as `lib/routing/`).
+
+---
+
 ## Planned (not yet implemented)
 
 | Method | Path | Auth | Description |

@@ -37,6 +37,7 @@ export const INITIAL: TripState = {
   reroutes:         [],
   rideOptions:      [],
   activeDisruption: null,
+  sharingPosition:  false,
 };
 
 // Exported for unit testing — a pure function is easiest tested directly,
@@ -100,6 +101,8 @@ export function reducer(state: TripState, action: TripAction): TripState {
       };
     case 'SET_DISRUPTION':
       return { ...state, activeDisruption: action.disruption };
+    case 'SET_SHARING':
+      return { ...state, sharingPosition: action.sharing };
     default:
       return state;
   }
@@ -113,6 +116,7 @@ type TripContextValue = TripState & {
   endTrip:        () => void;
   advanceLeg:     () => void;
   triggerReroute: () => Promise<void>;
+  setSharingPosition: (sharing: boolean) => void;
 };
 
 const TripContext = createContext<TripContextValue | null>(null);
@@ -122,6 +126,12 @@ const TripContext = createContext<TripContextValue | null>(null);
 const DISRUPTION_POLL_MS = 30_000;
 // "Next stop approaching" fires once per leg, inside this distance.
 const NEXT_STOP_NOTIFY_KM = 0.3;
+// How often an opted-in rider contributes a position to the live map.
+// 15 s is frequent enough to keep a train marker believable and slow
+// enough that it barely touches battery or data.
+const LIVE_PING_MS = 15_000;
+// Don't contribute a fix this poor — it would only blur the estimate.
+const LIVE_PING_MAX_ACCURACY_M = 150;
 
 export function TripProvider({ children }: { children: React.ReactNode }) {
   const [state, dispatch] = useReducer(reducer, INITIAL);
@@ -131,6 +141,12 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
   // Tracks which leg index the "approaching" alert already fired for, so it
   // doesn't re-fire on every GPS tick while still inside the notify radius.
   const notifiedLegRef = useRef<number>(-1);
+  // Ephemeral per-trip token for live position sharing. Random, never an
+  // account/device ID, regenerated on every trip and dropped when it ends —
+  // it only lets the server infer travel direction from a rider's own two
+  // most recent pings. See lib/live/store.ts for the privacy contract.
+  const riderKeyRef = useRef<string | null>(null);
+  const pingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
     latestStateRef.current = state;
@@ -145,6 +161,10 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
     if (pollRef.current !== null) {
       clearInterval(pollRef.current);
       pollRef.current = null;
+    }
+    if (pingTimerRef.current !== null) {
+      clearInterval(pingTimerRef.current);
+      pingTimerRef.current = null;
     }
   }, []);
 
@@ -174,6 +194,8 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
 
   const endTrip = useCallback(() => {
     cleanup();
+    // Drop the sharing token with the trip. Consent was for this ride only.
+    riderKeyRef.current = null;
     dispatch({ type: 'END' });
     try {
       sessionStorage.removeItem(TRIP_STORAGE_KEY);
@@ -288,6 +310,65 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.status, state.currentLegIndex]);
 
+  // Opt in / out of contributing this trip's position to the live map.
+  // Turning it on mints a fresh random token; turning it off destroys it,
+  // so a later re-opt-in is not linkable to the earlier stretch of the ride.
+  const setSharingPosition = useCallback((sharing: boolean) => {
+    if (sharing) {
+      riderKeyRef.current =
+        typeof crypto !== 'undefined' && 'randomUUID' in crypto
+          ? crypto.randomUUID().replace(/-/g, '')
+          : Math.random().toString(36).slice(2).padEnd(20, '0').repeat(2).slice(0, 32);
+    } else {
+      riderKeyRef.current = null;
+      if (pingTimerRef.current !== null) {
+        clearInterval(pingTimerRef.current);
+        pingTimerRef.current = null;
+      }
+    }
+    dispatch({ type: 'SET_SHARING', sharing });
+  }, []);
+
+  // Contribute position to the crowdsourced live map — only while the rider
+  // has explicitly opted in, only on a ride leg (never while walking, which
+  // would put a "train" on a sidewalk), and only off a good fix.
+  useEffect(() => {
+    if (!state.sharingPosition || state.status !== 'active') return;
+
+    const sendPing = async () => {
+      const latest = latestStateRef.current;
+      const rider = riderKeyRef.current;
+      if (!rider || !latest.itinerary || !latest.position) return;
+      if (latest.position.accuracyM > LIVE_PING_MAX_ACCURACY_M) return;
+
+      const lineId = getCurrentLineId(latest.itinerary, latest.currentLegIndex);
+      if (lineId === null) return; // walking leg — nothing to attribute a ping to
+
+      try {
+        await fetch('/api/v1/live/ping', {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            lineId,
+            riderKey:  rider,
+            lat:       latest.position.lat,
+            lng:       latest.position.lng,
+            accuracyM: latest.position.accuracyM,
+          }),
+        });
+      } catch { /* non-fatal — the rider's own trip must not depend on this */ }
+    };
+
+    sendPing();
+    pingTimerRef.current = setInterval(sendPing, LIVE_PING_MS);
+    return () => {
+      if (pingTimerRef.current !== null) {
+        clearInterval(pingTimerRef.current);
+        pingTimerRef.current = null;
+      }
+    };
+  }, [state.sharingPosition, state.status]);
+
   const triggerReroute = useCallback(async () => {
     if (!state.itinerary || !state.position || !state.originalDest) return;
     dispatch({ type: 'REROUTING' });
@@ -329,7 +410,7 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
   }, [state.itinerary, state.position, state.originalDest, state.currentLegIndex]);
 
   return (
-    <TripContext.Provider value={{ ...state, startTrip, resumeTrip, endTrip, advanceLeg, triggerReroute }}>
+    <TripContext.Provider value={{ ...state, startTrip, resumeTrip, endTrip, advanceLeg, triggerReroute, setSharingPosition }}>
       {children}
     </TripContext.Provider>
   );

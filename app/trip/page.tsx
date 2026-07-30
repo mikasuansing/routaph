@@ -300,7 +300,7 @@ function TripScreen() {
 
   if (trip.status === 'ended') return null;
 
-  const { itinerary, currentLegIndex, position, gpsDenied, status, reroutes, rideOptions, activeDisruption, originalDest } = trip;
+  const { itinerary, currentLegIndex, position, gpsDenied, status, reroutes, rideOptions, activeDisruption, originalDest, sharingPosition, setSharingPosition } = trip;
   if (!itinerary) return null;
 
   const currentLeg = itinerary.legs[currentLegIndex];
@@ -416,6 +416,39 @@ function TripScreen() {
             >
               Enable stop alerts
             </button>
+          </div>
+        )}
+
+        {/* Crowdsourced live map opt-in. Deliberately phrased as a give,
+            not a get: it does nothing for this rider's own trip, so the
+            copy has to be honest that it's for everyone else. */}
+        {status === 'active' && position && (
+          <div style={{ marginBottom: 22, background: C.card, border: `1px solid ${C.border}`, borderRadius: 20, padding: 16 }}>
+            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
+              <div style={{ flex: 1 }}>
+                <Micro color={sharingPosition ? C.accent : undefined}>
+                  {sharingPosition ? 'Helping the live map' : 'Help the live map'}
+                </Micro>
+                <p style={{ margin: '8px 0 0', fontSize: 13, color: C.body, lineHeight: 1.7 }}>
+                  {sharingPosition
+                    ? 'Other commuters can see roughly where this vehicle is. Your position is anonymous, kept for 3 minutes, and never saved to our database.'
+                    : 'No operator publishes live train or bus positions here. Share your position anonymously while you ride and others can see where this vehicle is.'}
+                </p>
+              </div>
+              <button
+                onClick={() => setSharingPosition(!sharingPosition)}
+                aria-pressed={sharingPosition}
+                style={{
+                  padding: '9px 16px', borderRadius: 999, border: sharingPosition ? `1.5px solid ${C.border}` : 'none',
+                  background: sharingPosition ? 'transparent' : C.accent,
+                  color: sharingPosition ? C.body : '#fff',
+                  fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit',
+                  flexShrink: 0, whiteSpace: 'nowrap',
+                }}
+              >
+                {sharingPosition ? 'Stop sharing' : 'Share position'}
+              </button>
+            </div>
           </div>
         )}
 

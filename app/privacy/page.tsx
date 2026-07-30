@@ -23,83 +23,107 @@ export default function PrivacyPage() {
 
         <h1 style={{ fontSize: 28, fontWeight: 700, color: C.ink, letterSpacing: '-0.02em', marginBottom: 8 }}>Privacy Policy</h1>
         <p style={{ fontSize: 13, color: C.muted, marginBottom: 40 }}>
-          Effective: June 2026 &middot; Governed by the Philippine Data Privacy Act of 2012 (RA 10173)
+          Effective: July 2026 &middot; Governed by the Philippine Data Privacy Act of 2012 (RA 10173)
         </p>
 
         {[
           {
-            title: '1. What we collect',
-            body: (
-              <>
-                <p>We collect only what the app needs to work:</p>
-                <ul style={{ paddingLeft: 20, marginTop: 8, display: 'flex', flexDirection: 'column' as const, gap: 4 }}>
-                  <li><strong>Account email</strong> &mdash; used to create and verify your account. Stored by Supabase Auth.</li>
-                  <li><strong>Saved commutes</strong> &mdash; origin and destination coordinates you explicitly save (home, work, etc.). Stored in our database, protected by row-level security so only you can read them.</li>
-                  <li><strong>Search logs</strong> &mdash; when you search for a route, we record a <em>geohash</em> (a fuzzy grid cell, not your exact coordinates) along with your chosen transport preference. We never store the raw latitude/longitude from searches.</li>
-                  <li><strong>Crowd reports</strong> &mdash; if you file a crowd report, it is linked to your account so you can delete it later.</li>
-                </ul>
-              </>
-            ),
-          },
-          {
-            title: '2. What we do NOT collect',
-            body: (
-              <ul style={{ paddingLeft: 20, display: 'flex', flexDirection: 'column' as const, gap: 4 }}>
-                <li>We do not collect payment information.</li>
-                <li>We do not sell your data to third parties.</li>
-                <li>We do not record GPS traces from the live-tracking feature &mdash; position data is processed in your browser only and never sent to our servers.</li>
-                <li>We do not share your saved routes or search history with advertisers.</li>
-              </ul>
-            ),
-          },
-          {
-            title: '3. How we use your data',
-            body: (
-              <ul style={{ paddingLeft: 20, display: 'flex', flexDirection: 'column' as const, gap: 4 }}>
-                <li>Account email: to send your email-verification link and password-reset emails.</li>
-                <li>Saved commutes: to show you your saved routes across sessions.</li>
-                <li>Geohashed search logs: to understand popular origin&ndash;destination corridors and improve route quality. Logs are deleted after 90 days.</li>
-                <li>Crowd reports: to show crowding status to other users on the same route.</li>
-              </ul>
-            ),
-          },
-          {
-            title: '4. Data retention',
+            title: '1. There is no account',
             body: (
               <p>
-                Search log entries are automatically deleted after <strong>90 days</strong>. Saved routes and crowd reports are kept until you delete your account or remove them yourself. Account data is deleted immediately when you request account deletion.
+                ParaPo has no sign-up, no login, and no user profile. We never ask for
+                your name, email, or phone number, and there is nothing in our database
+                that identifies you. Everything below describes the small amount of data
+                the app handles anyway &mdash; none of it is attached to a person.
               </p>
             ),
           },
           {
-            title: '5. Your rights (RA 10173)',
+            title: '2. What we collect',
             body: (
               <>
-                <p>As a data subject under the Philippine Data Privacy Act, you have the right to:</p>
-                <ul style={{ paddingLeft: 20, marginTop: 8, display: 'flex', flexDirection: 'column' as const, gap: 4 }}>
-                  <li><strong>Access</strong> &mdash; request a copy of the personal data we hold about you.</li>
-                  <li><strong>Rectification</strong> &mdash; correct inaccurate data.</li>
-                  <li><strong>Erasure</strong> &mdash; delete your account and all associated data using the &ldquo;Delete my account&rdquo; option in the app. We will remove your saved routes, crowd reports, and auth account immediately.</li>
-                  <li><strong>Object</strong> &mdash; object to processing your data for analytics purposes.</li>
+                <ul style={{ paddingLeft: 20, display: 'flex', flexDirection: 'column' as const, gap: 4 }}>
+                  <li><strong>Search logs</strong> &mdash; when you search for a route we record a <em>geohash</em> (a fuzzy grid cell roughly 1&nbsp;km across, not your exact coordinates) and the transport preference you chose. There is no identifier attached, so these cannot be traced back to you or grouped into one person&apos;s history.</li>
+                  <li><strong>Crowd reports</strong> &mdash; if you report crowding or a service problem, we store the report and the stop it refers to. It is submitted anonymously and is not linked to you.</li>
+                  <li><strong>Live position, only if you switch it on</strong> &mdash; see section 3.</li>
                 </ul>
-                <p style={{ marginTop: 8 }}>To exercise these rights, use the in-app deletion flow or contact us at the address below.</p>
               </>
             ),
           },
           {
-            title: '6. Third-party services',
+            title: '3. Sharing your position on the live map (opt-in)',
+            body: (
+              <>
+                <p>
+                  No transit operator in the Philippines publishes real-time vehicle
+                  positions, so the only way to show where a train or bus actually is
+                  right now is for riders to share it. During a trip you can turn on
+                  <strong> Share position</strong>. It is off by default, and turning it
+                  on applies to that one trip only &mdash; it never carries over to your
+                  next ride.
+                </p>
+                <p style={{ marginTop: 8 }}>While it is on:</p>
+                <ul style={{ paddingLeft: 20, marginTop: 8, display: 'flex', flexDirection: 'column' as const, gap: 4 }}>
+                  <li>Your coordinates are sent roughly every 15 seconds, and only while you are on a train or bus leg &mdash; never while you are walking.</li>
+                  <li>Each ping carries a <strong>random token generated for that trip and thrown away when it ends</strong>. It is not an account, device, or advertising ID. Its only purpose is working out which direction you are travelling.</li>
+                  <li>Positions are held in a temporary cache (Upstash Redis) that <strong>deletes them automatically after 3 minutes</strong>. They are never written to our main database, never backed up, and never exported.</li>
+                  <li>Your individual position is never shown to anyone. It is combined with other riders&apos; pings into a single estimated vehicle position on the map.</li>
+                  <li>Switching it off stops the pings immediately and destroys the token. Anything already sent expires on its own within 3 minutes.</li>
+                </ul>
+              </>
+            ),
+          },
+          {
+            title: '4. What we do NOT collect',
             body: (
               <ul style={{ paddingLeft: 20, display: 'flex', flexDirection: 'column' as const, gap: 4 }}>
-                <li><strong>Supabase</strong> (database + auth) &mdash; data is stored in the ap-northeast-1 region. <a href="https://supabase.com/privacy" style={{ color: C.accent }}>Supabase Privacy Policy</a>.</li>
-                <li><strong>Upstash Redis</strong> &mdash; used for rate limiting only; no personal data is stored. <a href="https://upstash.com/trust/privacy.pdf" style={{ color: C.accent }}>Upstash Privacy Policy</a>.</li>
+                <li>No names, emails, phone numbers, or accounts of any kind.</li>
+                <li>No payment information.</li>
+                <li>No advertising or cross-site tracking identifiers, and no third-party analytics or ad scripts.</li>
+                <li>No lasting record of where you have been. Outside the 3-minute live-map cache described above, GPS never leaves your browser &mdash; the turn-by-turn trip screen runs entirely on your device.</li>
+                <li>We do not sell data to anyone.</li>
+              </ul>
+            ),
+          },
+          {
+            title: '5. Data retention',
+            body: (
+              <ul style={{ paddingLeft: 20, display: 'flex', flexDirection: 'column' as const, gap: 4 }}>
+                <li><strong>Live positions: 3 minutes.</strong> Deleted automatically, whether or not anyone looks at them.</li>
+                <li><strong>Search logs: 90 days</strong>, then deleted. Geohashed and anonymous throughout.</li>
+                <li><strong>Crowd reports:</strong> kept while they are still useful to other commuters.</li>
+              </ul>
+            ),
+          },
+          {
+            title: '6. Your rights (RA 10173)',
+            body: (
+              <p>
+                The Philippine Data Privacy Act gives you the right to access, correct,
+                and erase personal data held about you. Because ParaPo has no accounts and
+                stores nothing that identifies you, there is no personal record for us to
+                look up, correct, or delete &mdash; and no way for us to link any stored
+                row back to you even if you asked. If you would still like to raise a
+                concern or ask what we hold, contact us at the address below.
+              </p>
+            ),
+          },
+          {
+            title: '7. Third-party services',
+            body: (
+              <ul style={{ paddingLeft: 20, display: 'flex', flexDirection: 'column' as const, gap: 4 }}>
+                <li><strong>Supabase</strong> (database) &mdash; stores transit data, anonymous search logs, and crowd reports in the ap-northeast-1 region. <a href="https://supabase.com/privacy" style={{ color: C.accent }}>Supabase Privacy Policy</a>.</li>
+                <li><strong>Upstash Redis</strong> &mdash; rate limiting, route caching, and the 3-minute live-position cache. <a href="https://upstash.com/trust/privacy.pdf" style={{ color: C.accent }}>Upstash Privacy Policy</a>.</li>
                 <li><strong>Vercel</strong> &mdash; hosting. Request logs are retained per Vercel&apos;s default policy. <a href="https://vercel.com/legal/privacy-policy" style={{ color: C.accent }}>Vercel Privacy Policy</a>.</li>
-                <li><strong>Waze deep links</strong> &mdash; if you tap &ldquo;Navigate with Waze,&rdquo; your destination coordinate is sent to Waze. ParaPo does not receive any data back from Waze.</li>
+                <li><strong>OpenStreetMap / CARTO</strong> &mdash; map tiles. They may log your IP address when tiles load.</li>
+                <li><strong>Open-Meteo</strong> &mdash; rain advisories, requested for one fixed Metro Manila point, never your location.</li>
+                <li><strong>Waze / Grab deep links</strong> &mdash; if you tap one, your destination coordinate is passed to that app. ParaPo receives nothing back.</li>
                 <li><strong>Google Fonts</strong> &mdash; loaded at runtime; Google may log your IP per their terms.</li>
               </ul>
             ),
           },
           {
-            title: '7. Contact',
+            title: '8. Contact',
             body: (
               <p>
                 For privacy questions or data requests, email us at{' '}
