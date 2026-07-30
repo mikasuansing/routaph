@@ -275,6 +275,10 @@ export default function Planner() {
   const [disruptions, setDisruptions] = useState<Disruption[] | null>(null);
   const [accessibilityByStop, setAccessibilityByStop] = useState<Record<number, StationAccessibility[]>>({});
   const [rainAdvisory, setRainAdvisory] = useState<RainAdvisory | null>(null);
+  // App-shell state (map-first, TrainSight-style): the map is the home
+  // screen by default; the plan form and settings are overlays a tap opens.
+  const [formOpen, setFormOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [addingStop, setAddingStop] = useState(false);
   const [nextStop, setNextStop] = useState('');
   const [chainBusy, setChainBusy] = useState(false);
@@ -509,7 +513,7 @@ export default function Planner() {
     const origin = originCoords(from), dest = stopCoords[to];
     if (!origin || !dest) return;
     const excludeModes = MODE_GROUPS.filter(g => !enabledModes[g.key]).flatMap(g => g.engineModes);
-    setError(null); setModeFilter('all'); setScreen('loading');
+    setError(null); setModeFilter('all'); setFormOpen(false); setScreen('loading');
     try {
       const res = await fetch('/api/v1/routes/plan', {
         method: 'POST',
@@ -522,11 +526,11 @@ export default function Planner() {
         }),
       });
       const json = await res.json() as { data?: Itinerary[]; error?: { message: string } };
-      if (!res.ok || json.error) { setError(json.error?.message ?? 'No route found.'); setScreen('home'); return; }
+      if (!res.ok || json.error) { setError(json.error?.message ?? 'No route found.'); setFormOpen(true); setScreen('home'); return; }
       setItineraries(json.data ?? []);
       setScreen('results');
     } catch {
-      setError('Network error — check your connection.'); setScreen('home');
+      setError('Network error — check your connection.'); setFormOpen(true); setScreen('home');
     }
   }
 
@@ -589,19 +593,17 @@ export default function Planner() {
 
   const canSearch = Boolean(from && to && from !== to && originCoords(from) && stopCoords[to] && Object.values(enabledModes).some(Boolean));
 
-  /* Service status line — one glance, no chrome */
-  const statusLine = disruptions === null
-    ? null
-    : disruptions.length === 0
-      ? <Micro color={C.accent}>● All lines running normally</Micro>
-      : (
+  /* Service status detail — shown as a banner under the top pill when there are alerts */
+  const statusDetail = disruptions && disruptions.length > 0
+    ? (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
           <Micro color={C.ink} style={{ letterSpacing: '0.04em' }}>▲ {disruptions.length} service alert{disruptions.length > 1 ? 's' : ''} — {disruptions[0].description}</Micro>
           <a href="tel:1342" style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.04em', color: C.muted, textDecoration: 'underline' }}>
             {t(lang, 'report_to_ltfrb')}
           </a>
         </div>
-      );
+      )
+    : null;
 
   return (
     <div style={{ position: 'fixed', inset: 0, fontFamily: 'Inter,system-ui,sans-serif', background: C.bg }}>
@@ -613,120 +615,197 @@ export default function Planner() {
       {/* ════════ HOME ════════ */}
       {screen === 'home' && (
         <>
-          <div style={{ position: 'absolute', top: 0, left: 0, right: 0, zIndex: 10, padding: '52px 20px 0', display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-            <span style={{ fontFamily: DISPLAY, fontSize: 22, fontWeight: 800, letterSpacing: '-0.02em', color: C.accent }}>
-              ParaPo<span style={{ color: C.ink }}>.</span>
-            </span>
+          {/* ── App-shell top bar: logo+status pill (left), settings gear (right) ── */}
+          <div style={{ position: 'absolute', top: 0, left: 0, right: 0, zIndex: 10, padding: '52px 20px 0', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: 10, background: C.surface,
+              border: `1px solid ${C.border}`, borderRadius: 999, padding: '10px 16px',
+              boxShadow: '0 2px 12px rgba(0,0,0,0.08)',
+            }}>
+              <span style={{ fontFamily: DISPLAY, fontSize: 16, fontWeight: 800, letterSpacing: '-0.02em', color: C.accent }}>
+                ParaPo<span style={{ color: C.ink }}>.</span>
+              </span>
+              <div style={{ width: 1, height: 14, background: C.border }} />
+              {disruptions === null ? (
+                <Micro>…</Micro>
+              ) : disruptions.length === 0 ? (
+                <Micro color={C.accent}>● All lines normal</Micro>
+              ) : (
+                <Micro color={C.ink}>▲ {disruptions.length} alert{disruptions.length > 1 ? 's' : ''}</Micro>
+              )}
+            </div>
+            <button
+              onClick={() => setSettingsOpen(true)}
+              aria-label="Settings"
+              style={{
+                width: 40, height: 40, borderRadius: '50%', flexShrink: 0,
+                background: C.surface, border: `1px solid ${C.border}`,
+                boxShadow: '0 2px 12px rgba(0,0,0,0.08)', cursor: 'pointer',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 17,
+              }}
+            >
+              ⚙️
+            </button>
           </div>
 
-          <Sheet height="auto" style={{ maxHeight: '62vh' }}>
-            <div style={{ overflowY: 'auto', padding: '14px 24px 28px', display: 'flex', flexDirection: 'column' }}>
-              {statusLine && <div style={{ marginBottom: 18 }}>{statusLine}</div>}
+          {/* Service alert detail — floats under the top pill */}
+          {statusDetail && (
+            <div style={{ position: 'absolute', top: 110, left: 20, right: 20, zIndex: 9, padding: '12px 14px', borderRadius: 14, background: C.surface, border: `1px solid ${C.border}`, boxShadow: '0 4px 16px rgba(0,0,0,0.1)' }}>
+              {statusDetail}
+            </div>
+          )}
 
-              {rainAdvisory && (
-                <div style={{ marginBottom: 18, padding: '12px 14px', borderRadius: 14, background: C.error, color: '#FFFFFF' }}>
-                  <p style={{ margin: 0, fontSize: 13, fontWeight: 700, lineHeight: 1.5 }}>{rainAdvisory.message}</p>
-                </div>
-              )}
+          {/* Rain advisory — floats over the map regardless of form state */}
+          {rainAdvisory && (
+            <div style={{ position: 'absolute', top: statusDetail ? 172 : 110, left: 20, right: 20, zIndex: 9, padding: '12px 14px', borderRadius: 14, background: C.error, color: '#FFFFFF', boxShadow: '0 4px 16px rgba(0,0,0,0.15)' }}>
+              <p style={{ margin: 0, fontSize: 13, fontWeight: 700, lineHeight: 1.5 }}>{rainAdvisory.message}</p>
+            </div>
+          )}
 
-              {error && (
-                <p style={{ margin: '0 0 16px', fontSize: 13, fontWeight: 600, color: C.error }}>{error}</p>
-              )}
-
-              {/* From / To — typography only */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 18, flexShrink: 0 }}>
-                <div>
-                  <StopRow label="From" value={from} onChange={setFrom} placeholder={t(lang, 'choose_a_stop')} stops={stopNames} extraOption={myLoc ? MY_LOCATION : undefined} />
-                  <button onClick={useMyLocation} disabled={locBusy} style={{ background: 'none', border: 'none', padding: '8px 0 0', fontSize: 13, fontWeight: 700, color: C.accent, cursor: 'pointer', fontFamily: 'inherit', letterSpacing: '0.02em' }}>
-                    {locBusy ? 'Locating…' : from === MY_LOCATION ? `● ${t(lang, 'use_current_location')}` : `◉ ${t(lang, 'use_current_location')}`}
+          {!formOpen ? (
+            /* ── Collapsed: map is the whole screen, one search bar at the bottom ── */
+            <button
+              onClick={() => setFormOpen(true)}
+              style={{
+                position: 'absolute', left: 20, right: 20, bottom: 'calc(24px + env(safe-area-inset-bottom))', zIndex: 10,
+                display: 'flex', alignItems: 'center', gap: 12,
+                background: C.surface, border: `1px solid ${C.border}`, borderRadius: 999,
+                padding: '16px 20px', cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left',
+                boxShadow: '0 4px 20px rgba(0,0,0,0.12)',
+              }}
+            >
+              <span style={{ fontSize: 17 }}>🔍</span>
+              <span style={{ fontSize: 15, fontWeight: from && to ? 700 : 500, color: from && to ? C.ink : C.muted }}>
+                {from && to ? `${from} → ${to}` : t(lang, 'choose_a_stop')}
+              </span>
+            </button>
+          ) : (
+            /* ── Expanded: the plan form ── */
+            <Sheet height="auto" style={{ maxHeight: '62vh' }}>
+              <div style={{ overflowY: 'auto', padding: '14px 24px 28px', display: 'flex', flexDirection: 'column' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+                  <Micro>Plan a trip</Micro>
+                  <button onClick={() => setFormOpen(false)} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: 13, fontWeight: 700, color: C.muted, fontFamily: 'inherit' }}>
+                    ✕ Close
                   </button>
                 </div>
-                <StopRow label="To" value={to} onChange={setTo} placeholder={t(lang, 'choose_a_stop')} stops={stopNames} />
-                <button onClick={() => { if (from !== MY_LOCATION) { const t = from; setFrom(to); setTo(t); } }} style={{ alignSelf: 'flex-end', background: 'none', border: 'none', fontSize: 13, fontWeight: 700, color: from === MY_LOCATION ? C.border : C.muted, cursor: 'pointer', fontFamily: 'inherit', marginTop: -8 }}>
-                  ⇅ Swap
+
+                {error && (
+                  <p style={{ margin: '0 0 16px', fontSize: 13, fontWeight: 600, color: C.error }}>{error}</p>
+                )}
+
+                {/* From / To — typography only */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 18, flexShrink: 0 }}>
+                  <div>
+                    <StopRow label="From" value={from} onChange={setFrom} placeholder={t(lang, 'choose_a_stop')} stops={stopNames} extraOption={myLoc ? MY_LOCATION : undefined} />
+                    <button onClick={useMyLocation} disabled={locBusy} style={{ background: 'none', border: 'none', padding: '8px 0 0', fontSize: 13, fontWeight: 700, color: C.accent, cursor: 'pointer', fontFamily: 'inherit', letterSpacing: '0.02em' }}>
+                      {locBusy ? 'Locating…' : from === MY_LOCATION ? `● ${t(lang, 'use_current_location')}` : `◉ ${t(lang, 'use_current_location')}`}
+                    </button>
+                  </div>
+                  <StopRow label="To" value={to} onChange={setTo} placeholder={t(lang, 'choose_a_stop')} stops={stopNames} />
+                  <button onClick={() => { if (from !== MY_LOCATION) { const t = from; setFrom(to); setTo(t); } }} style={{ alignSelf: 'flex-end', background: 'none', border: 'none', fontSize: 13, fontWeight: 700, color: from === MY_LOCATION ? C.border : C.muted, cursor: 'pointer', fontFamily: 'inherit', marginTop: -8 }}>
+                    ⇅ Swap
+                  </button>
+                </div>
+
+                {!Object.values(enabledModes).some(Boolean) && (
+                  <p style={{ margin: '14px 0 0', fontSize: 12, fontWeight: 600, color: C.error }}>
+                    All transport modes are off — enable at least one in Settings.
+                  </p>
+                )}
+
+                {/* CTA */}
+                <button
+                  onClick={search}
+                  disabled={!canSearch}
+                  style={{
+                    width: '100%', border: 'none', borderRadius: 999, padding: '17px', margin: '22px 0 0',
+                    fontSize: 15, fontWeight: 700, letterSpacing: '0.01em', flexShrink: 0,
+                    cursor: canSearch ? 'pointer' : 'default',
+                    background: canSearch ? 'var(--gradient-primary)' : C.cardEl,
+                    color: canSearch ? C.onPrimary : C.muted,
+                    fontFamily: 'inherit',
+                    boxShadow: canSearch ? '0 6px 18px rgba(41,71,222,0.25)' : 'none',
+                  }}
+                >
+                  {t(lang, 'find_routes')}
                 </button>
               </div>
+            </Sheet>
+          )}
 
-              {/* Transport modes — text toggles */}
-              <div style={{ margin: '18px 0 0', flexShrink: 0 }}>
-                <Micro>{t(lang, 'transport_modes')}</Micro>
-                <div style={{ display: 'flex', gap: 10, marginTop: 10 }}>
-                  {MODE_GROUPS.map(g => {
-                    const on = enabledModes[g.key];
-                    return (
-                      <button key={g.key}
-                        onClick={() => setEnabledModes(prev => ({ ...prev, [g.key]: !prev[g.key] }))}
-                        style={{
-                          cursor: 'pointer', fontFamily: 'inherit',
-                          fontSize: 14, fontWeight: 700, padding: '9px 18px',
-                          borderRadius: 999, transition: 'all 0.15s',
-                          background: on ? C.accent : 'transparent',
-                          color: on ? '#FFFFFF' : C.body,
-                          border: `1.5px solid ${on ? C.accent : C.border}`,
-                        }}
-                      >
-                        {g.label}{on ? ' ✓' : ''}
-                      </button>
-                    );
-                  })}
+          {/* ── Settings overlay: transport modes, rush hour, Beep, language, fares ── */}
+          {settingsOpen && (
+            <Sheet height="auto" style={{ maxHeight: '78vh' }}>
+              <div style={{ overflowY: 'auto', padding: '14px 24px 28px', display: 'flex', flexDirection: 'column' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 }}>
+                  <Micro>Settings</Micro>
+                  <button onClick={() => setSettingsOpen(false)} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: 13, fontWeight: 700, color: C.muted, fontFamily: 'inherit' }}>
+                    ✕ Close
+                  </button>
                 </div>
-                {!Object.values(enabledModes).some(Boolean) && (
-                  <p style={{ margin: '8px 0 0', fontSize: 12, fontWeight: 600, color: C.error }}>Pick at least one mode.</p>
-                )}
-              </div>
 
-              {/* Rush hour — one text row */}
-              <button onClick={() => setRush(!rush)} style={{ background: 'none', border: 'none', padding: 0, margin: '18px 0 0', cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left', flexShrink: 0 }}>
-                <Micro color={rush ? C.ink : C.muted}>Rush hour {rush ? 'on' : 'off'} · 7–9 am · 5–7 pm</Micro>
-              </button>
-
-              {/* Beep card — adjusts fare display, doesn't change routing */}
-              <button onClick={toggleHasBeep} style={{ background: 'none', border: 'none', padding: 0, margin: '10px 0 0', cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left', flexShrink: 0 }}>
-                <Micro color={hasBeep ? C.ink : C.muted}>
-                  {hasBeep ? '✓ I have a Beep card' : 'Paying cash / no Beep card'}
-                </Micro>
-              </button>
-
-              {/* Language — English / Taglish, key strings only */}
-              <button onClick={toggleLang} style={{ background: 'none', border: 'none', padding: 0, margin: '10px 0 0', cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left', flexShrink: 0 }}>
-                <Micro color={C.muted}>{lang === 'tl' ? 'Wika: Taglish' : 'Language: English'} · {lang === 'tl' ? 'Switch to English' : 'Switch sa Taglish'}</Micro>
-              </button>
-
-              {/* CTA */}
-              <button
-                onClick={search}
-                disabled={!canSearch}
-                style={{
-                  width: '100%', border: 'none', borderRadius: 999, padding: '17px', margin: '22px 0 0',
-                  fontSize: 15, fontWeight: 700, letterSpacing: '0.01em', flexShrink: 0,
-                  cursor: canSearch ? 'pointer' : 'default',
-                  background: canSearch ? 'var(--gradient-primary)' : C.cardEl,
-                  color: canSearch ? C.onPrimary : C.muted,
-                  fontFamily: 'inherit',
-                  boxShadow: canSearch ? '0 6px 18px rgba(41,71,222,0.25)' : 'none',
-                }}
-              >
-                {t(lang, 'find_routes')}
-              </button>
-
-              {/* Fare reference — plain text */}
-              <div style={{ margin: '28px 0 0', flexShrink: 0 }}>
-                <Micro>2026 fare rates</Micro>
-                <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  {FARE_REF.map(([mode, ref]) => (
-                    <div key={mode} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14 }}>
-                      <span style={{ fontWeight: 700, color: C.ink }}>{mode}</span>
-                      <span className="tnum" style={{ color: C.body }}>{ref}</span>
-                    </div>
-                  ))}
+                {/* Transport modes — text toggles */}
+                <div style={{ flexShrink: 0 }}>
+                  <Micro>{t(lang, 'transport_modes')}</Micro>
+                  <div style={{ display: 'flex', gap: 10, marginTop: 10, flexWrap: 'wrap' }}>
+                    {MODE_GROUPS.map(g => {
+                      const on = enabledModes[g.key];
+                      return (
+                        <button key={g.key}
+                          onClick={() => setEnabledModes(prev => ({ ...prev, [g.key]: !prev[g.key] }))}
+                          style={{
+                            cursor: 'pointer', fontFamily: 'inherit',
+                            fontSize: 14, fontWeight: 700, padding: '9px 18px',
+                            borderRadius: 999, transition: 'all 0.15s',
+                            background: on ? C.accent : 'transparent',
+                            color: on ? '#FFFFFF' : C.body,
+                            border: `1.5px solid ${on ? C.accent : C.border}`,
+                          }}
+                        >
+                          {g.label}{on ? ' ✓' : ''}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
-                <p style={{ margin: '12px 0 0', fontSize: 11, color: C.muted, lineHeight: 1.6 }}>
-                  LTFRB/DOTr-approved · per boarding, not per segment ·
-                  MRT-3 &amp; LRT-2 include the 50% DOTr discount (since Mar 23, 2026; LRT-1 not covered)
-                </p>
+
+                {/* Rush hour — one text row */}
+                <button onClick={() => setRush(!rush)} style={{ background: 'none', border: 'none', padding: 0, margin: '20px 0 0', cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left', flexShrink: 0 }}>
+                  <Micro color={rush ? C.ink : C.muted}>Rush hour {rush ? 'on' : 'off'} · 7–9 am · 5–7 pm</Micro>
+                </button>
+
+                {/* Beep card — adjusts fare display, doesn't change routing */}
+                <button onClick={toggleHasBeep} style={{ background: 'none', border: 'none', padding: 0, margin: '14px 0 0', cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left', flexShrink: 0 }}>
+                  <Micro color={hasBeep ? C.ink : C.muted}>
+                    {hasBeep ? '✓ I have a Beep card' : 'Paying cash / no Beep card'}
+                  </Micro>
+                </button>
+
+                {/* Language — English / Taglish, key strings only */}
+                <button onClick={toggleLang} style={{ background: 'none', border: 'none', padding: 0, margin: '14px 0 0', cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left', flexShrink: 0 }}>
+                  <Micro color={C.muted}>{lang === 'tl' ? 'Wika: Taglish' : 'Language: English'} · {lang === 'tl' ? 'Switch to English' : 'Switch sa Taglish'}</Micro>
+                </button>
+
+                {/* Fare reference — plain text */}
+                <div style={{ margin: '28px 0 0', flexShrink: 0 }}>
+                  <Micro>2026 fare rates</Micro>
+                  <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    {FARE_REF.map(([mode, ref]) => (
+                      <div key={mode} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14 }}>
+                        <span style={{ fontWeight: 700, color: C.ink }}>{mode}</span>
+                        <span className="tnum" style={{ color: C.body }}>{ref}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <p style={{ margin: '12px 0 0', fontSize: 11, color: C.muted, lineHeight: 1.6 }}>
+                    LTFRB/DOTr-approved · per boarding, not per segment ·
+                    MRT-3 &amp; LRT-2 include the 50% DOTr discount (since Mar 23, 2026; LRT-1 not covered)
+                  </p>
+                </div>
               </div>
-            </div>
-          </Sheet>
+            </Sheet>
+          )}
         </>
       )}
 
