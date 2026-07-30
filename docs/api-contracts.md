@@ -290,6 +290,13 @@ RainAdvisory {
   3-minute rolling window, not a trace.
 - Low-quality fixes (`accuracyM > 150`) are rejected rather than stored,
   so a 500 m urban-canyon reading can't drag a vehicle estimate off-line.
+- Rate limited by `liveLimiter` (120/min per IP), not the much tighter
+  `crowdLimiter`. A rider pings roughly 4×/min for the length of a ride and
+  PH mobile carriers put many riders behind one CGNAT address, so an IP
+  here is closer to a neighbourhood than a person.
+- `{ accepted: false }` is a normal, non-error outcome: the first ping of a
+  trip has no previous position to infer direction from, and pings on an
+  untracked mode or too far from the line are dropped the same way.
 
 ---
 

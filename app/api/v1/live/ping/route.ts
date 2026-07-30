@@ -38,8 +38,8 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const { crowdLimiter, clientKey } = await import('@/lib/ratelimit');
-    const { success } = await crowdLimiter.limit(`live:${clientKey(req)}`);
+    const { liveLimiter, clientKey } = await import('@/lib/ratelimit');
+    const { success } = await liveLimiter.limit(clientKey(req));
     if (!success) return Errors.rateLimited();
   } catch {
     // Redis unset in dev — fall through; the store call below will fail

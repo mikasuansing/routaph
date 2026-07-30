@@ -32,6 +32,7 @@ vi.mock('@/lib/supabase/graph-loader', () => ({
 vi.mock('@/lib/ratelimit', () => ({
   searchLimiter: { limit: vi.fn().mockResolvedValue({ success: true }) },
   crowdLimiter:  { limit: vi.fn().mockResolvedValue({ success: true }) },
+  liveLimiter:   { limit: vi.fn().mockResolvedValue({ success: true }) },
   authLimiter:   { limit: vi.fn().mockResolvedValue({ success: true }) },
   clientKey:     vi.fn().mockReturnValue('ip:127.0.0.1'),
 }));
