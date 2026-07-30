@@ -340,10 +340,10 @@ function TripScreen() {
           {/* Live status — the single accent marks a live GPS fix */}
           <p style={{ margin: '6px 0 0', fontSize: 12, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: position ? C.accent : C.muted }}>
             {position
-              ? '● Live — GPS tracking'
+              ? '● Live location'
               : gpsDenied
-                ? '○ Location off — manual mode'
-                : <span style={{ animation: 'pulse 1.6s ease-in-out infinite' }}>○ Waiting for GPS</span>}
+                ? '○ Location unavailable — manual mode'
+                : <span style={{ animation: 'pulse 1.6s ease-in-out infinite' }}>○ Finding your location</span>}
           </p>
         </div>
         <button
@@ -366,9 +366,6 @@ function TripScreen() {
               Reroute
             </button>
           </div>
-          <a href="tel:1342" style={{ display: 'block', marginTop: 6, fontSize: 12, fontWeight: 700, color: C.muted, textDecoration: 'underline' }}>
-            {t(lang, 'report_to_ltfrb')}
-          </a>
         </div>
       )}
 
@@ -379,7 +376,7 @@ function TripScreen() {
         {/* GPS state — explain, and offer a way in, instead of failing silently */}
         {!position && (gpsDenied || geoPerm === 'denied') && (
           <div style={{ marginBottom: 22, background: C.card, border: `1px solid ${C.border}`, borderRadius: 20, padding: 16 }}>
-            <Micro>Location is blocked</Micro>
+            <Micro>Location access is blocked</Micro>
             <p style={{ margin: '8px 0 0', fontSize: 13, color: C.body, lineHeight: 1.7 }}>
               Your browser is blocking location for this site, so the map can&apos;t follow
               you and legs won&apos;t advance automatically. To enable: tap the
@@ -393,7 +390,7 @@ function TripScreen() {
         {!position && !gpsDenied && geoPerm !== 'denied' && (
           <div style={{ marginBottom: 22, background: C.card, border: `1px solid ${C.border}`, borderRadius: 20, padding: 16, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
             <p style={{ margin: 0, fontSize: 13, color: C.body, animation: 'pulse 1.6s ease-in-out infinite' }}>
-              Waiting for a GPS fix…
+              Finding your location…
             </p>
             <button
               onClick={() => {

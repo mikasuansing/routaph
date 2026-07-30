@@ -19,7 +19,7 @@ describe('t', () => {
     for (const key of [
       'find_routes', 'choose_a_stop', 'use_current_location', 'transport_modes',
       'step_by_step', 'walk_to', 'board_here', 'no_fixed_schedule', 'fare_breakdown',
-      'total_per_person', 'start_trip', 'save_commute', 'plan_another_trip',
+      'total_per_person', 'start_trip', 'plan_another_trip',
       'now', 'next', 'mark_leg_done', 'mark_arrived', 'almost_there', 'get_off_at',
     ] as const) {
       expect(t('en', key)).toBeTruthy();

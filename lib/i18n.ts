@@ -21,7 +21,6 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     fare_breakdown:       'Fare breakdown',
     total_per_person:    'Total per person',
     start_trip:          'Start trip — track live',
-    save_commute:        'Save commute',
     plan_another_trip:   'Plan another trip',
     now:                  'Now',
     next:                 'Next',
@@ -29,7 +28,6 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     mark_arrived:         "Mark as done — I've arrived",
     almost_there:         'Almost there — this is the last leg.',
     get_off_at:           'Get off at {stop}',
-    report_to_ltfrb:      'Report to LTFRB · 1342',
   },
   tl: {
     find_routes:        'Hanapin ang ruta',
@@ -43,7 +41,6 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     fare_breakdown:       'Breakdown ng pamasahe',
     total_per_person:    'Kabuuan bawat tao',
     start_trip:          'Simulan ang biyahe — subaybayan nang live',
-    save_commute:        'I-save ang biyahe',
     plan_another_trip:   'Magplano ng panibagong biyahe',
     now:                  'Ngayon',
     next:                 'Susunod',
@@ -51,7 +48,6 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     mark_arrived:         'Tapos na — nakarating na ako',
     almost_there:         'Malapit ka na — ito na ang huling hakbang.',
     get_off_at:           'Bumaba sa {stop}',
-    report_to_ltfrb:      'Magreklamo sa LTFRB · 1342',
   },
 };
 
