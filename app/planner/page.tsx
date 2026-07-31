@@ -59,7 +59,7 @@ type CatalogStop = { id: number; name: string; lat: number; lng: number };
 type WalkLeg = { type: 'walk'; fromName: string; toName: string; fromLat: number; fromLng: number; toLat: number; toLng: number; distKm: number; durationMin: number };
 type RideLeg = { type: 'ride'; mode: string; line: { id: number; name: string; color: string }; from: { id: number; name: string; lat: number; lng: number }; to: { id: number; name: string; lat: number; lng: number }; stops: { id: number; name: string; lat: number; lng: number }[]; distKm: number; durationMin: number; fare: number; fareRule?: { baseFare: number; perKmRate: number; flagDistanceKm: number } };
 type Leg = WalkLeg | RideLeg;
-type Itinerary = { legs: Leg[]; totalDurationMin: number; totalFare: number; transfers: number; objective: string };
+type Itinerary = { legs: Leg[]; totalDurationMin: number; totalFare: number; transfers: number; objective: string; alternative?: true };
 type Disruption = { id: number; corridorId: number; description: string };
 type StationAccessibility = { stopId: number; feature: 'elevator' | 'escalator'; status: 'unknown' | 'operational' | 'out_of_service'; note: string | null };
 type RainAdvisory = { heavyRainExpected: boolean; message: string };
@@ -993,9 +993,13 @@ export default function Planner() {
                   const displayFare = beepAdjustedTotalFare(itin.legs.filter(l => l.type === 'ride') as RideLeg[], hasBeep);
                   // Don't claim "cheapest" when another shown route is cheaper
                   const minFare = Math.min(...filtered.map(x => beepAdjustedTotalFare(x.legs.filter(l => l.type === 'ride') as RideLeg[], hasBeep)));
-                  const objLabel = itin.objective === 'cheapest' && displayFare > minFare
-                    ? 'Alternative'
-                    : OBJ_LABEL[itin.objective] ?? itin.objective;
+                  // An alternative is a different way to make the trip, not the
+                  // winner of an objective — labelling it "Fastest" would be a lie.
+                  const objLabel = itin.alternative
+                    ? 'Another way'
+                    : itin.objective === 'cheapest' && displayFare > minFare
+                      ? 'Alternative'
+                      : OBJ_LABEL[itin.objective] ?? itin.objective;
                   const worstRail = worstLastTrainCheck(checkLastTrain(itin.legs));
                   return (
                   <button key={idx} onClick={() => { setSelected(itin); setScreen('detail'); }}
@@ -1058,7 +1062,7 @@ export default function Planner() {
                 ← Routes
               </button>
               <span style={{ background: C.accent, borderRadius: 999, padding: '9px 16px', fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#FFFFFF' }}>
-                {OBJ_LABEL[selected.objective] ?? selected.objective}
+                {selected.alternative ? 'Another way' : OBJ_LABEL[selected.objective] ?? selected.objective}
               </span>
             </div>
 

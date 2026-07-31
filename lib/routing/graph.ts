@@ -24,6 +24,7 @@ const SEED_LINES: Line[] = [
   { id: 3, name: 'MRT-3',             mode: 'mrt',     color: '#6366F1' },
   { id: 4, name: 'LRT-2',             mode: 'lrt',     color: '#06B6D4' },
   { id: 5, name: 'LRT-1',             mode: 'lrt',     color: '#0B7A45' },
+  { id: 6, name: 'Route 3 (Aurora Blvd)', mode: 'bus', color: '#C2410C' },
 ];
 
 const SEED_STOPS: Stop[] = [
@@ -115,6 +116,50 @@ const SEED_STOPS: Stop[] = [
   { id: 418, name: 'Monumento (LRT-1)',   lat: 14.653834, lng: 120.983848 },
   { id: 419, name: 'Balintawak (LRT-1)',  lat: 14.657422, lng: 121.003517 },
   { id: 420, name: 'Fernando Poe Jr.',    lat: 14.657622, lng: 121.020688 },
+
+  // ── Route 3 (Aurora Blvd) — LTFRB Route 3, Antipolo ↔ Quiapo ─────────────
+  { id: 501, name: "Robinsons Place Antipolo", lat: 14.594111, lng: 121.172412 },
+  { id: 502, name: "Olalia Road", lat: 14.606704, lng: 121.172952 },
+  { id: 503, name: "Cloud 9", lat: 14.612892, lng: 121.154585 },
+  { id: 504, name: "Our Lady of Fatima University", lat: 14.619117, lng: 121.151106 },
+  { id: 505, name: "XentroMall Antipolo", lat: 14.617214, lng: 121.135769 },
+  { id: 506, name: "Masinag", lat: 14.625341, lng: 121.123084 },
+  { id: 507, name: "LRT Antipolo Station", lat: 14.624875, lng: 121.120322 },
+  { id: 508, name: "AMA East Rizal Campus", lat: 14.623946, lng: 121.116246 },
+  { id: 509, name: "Narra Village", lat: 14.621925, lng: 121.106624 },
+  { id: 510, name: "LRT Marikina-Pasig Station", lat: 14.620699, lng: 121.100971 },
+  { id: 511, name: "Ayala Malls Feliz", lat: 14.619266, lng: 121.093589 },
+  { id: 512, name: "LRT Santolan Station", lat: 14.622068, lng: 121.086864 },
+  { id: 513, name: "SM City Marikina", lat: 14.624701, lng: 121.084138 },
+  { id: 514, name: "Barangka", lat: 14.630057, lng: 121.079531 },
+  { id: 515, name: "Katipunan Flyover", lat: 14.632278, lng: 121.074962 },
+  { id: 516, name: "LRT Katipunan Station", lat: 14.631174, lng: 121.072720 },
+  { id: 517, name: "J. P. Rizal Street", lat: 14.629217, lng: 121.068659 },
+  { id: 518, name: "LRT Anonas Station", lat: 14.627965, lng: 121.063897 },
+  { id: 519, name: "La Salle Street", lat: 14.626260, lng: 121.059703 },
+  { id: 520, name: "Miami Street", lat: 14.625362, lng: 121.057881 },
+  { id: 521, name: "LRT Araneta Center-Cubao Station", lat: 14.622738, lng: 121.052448 },
+  { id: 522, name: "Aurora\u2013N. Domingo", lat: 14.620216, lng: 121.046309 },
+  { id: 523, name: "LRT Betty Go-Belmonte Station", lat: 14.618705, lng: 121.042689 },
+  { id: 524, name: "Robinsons Magnolia", lat: 14.615901, lng: 121.038056 },
+  { id: 525, name: "St. Paul University", lat: 14.614948, lng: 121.036447 },
+  { id: 526, name: "LRT Gilmore Station", lat: 14.613663, lng: 121.034144 },
+  { id: 527, name: "LRT J. Ruiz Station", lat: 14.610822, lng: 121.026659 },
+  { id: 528, name: "UE Ramon Magsaysay Campus", lat: 14.607885, lng: 121.020759 },
+  { id: 529, name: "SM City Santa Mesa", lat: 14.605197, lng: 121.017997 },
+  { id: 530, name: "LRT V. Mapa Station", lat: 14.603861, lng: 121.016664 },
+  { id: 531, name: "Magsaysay\u2013V. Mapa Intersection", lat: 14.602758, lng: 121.015146 },
+  { id: 532, name: "Old Santa Mesa Street", lat: 14.602395, lng: 121.011029 },
+  { id: 533, name: "Civil Registration Central Outlet", lat: 14.601692, lng: 121.003777 },
+  { id: 534, name: "M. Jhocson Street", lat: 14.600841, lng: 120.995387 },
+  { id: 535, name: "LRT Legarda Station", lat: 14.601388, lng: 120.992220 },
+  { id: 536, name: "Recto\u2013Mendiola", lat: 14.599973, lng: 120.990595 },
+  { id: 537, name: "Tanduay-NTC", lat: 14.597936, lng: 120.989631 },
+  { id: 538, name: "TIP P. Casal Campus", lat: 14.595865, lng: 120.989054 },
+  { id: 539, name: "Philippine Normal University", lat: 14.586905, lng: 120.983236 },
+  { id: 540, name: "Liwasang Bonifacio", lat: 14.591065, lng: 120.980799 },
+  { id: 541, name: "Lawton", lat: 14.593120, lng: 120.980154 },
+  { id: 542, name: "Quiapo", lat: 14.600471, lng: 120.984672 },
 ];
 
 // Stop sequences per line  [lineId, [stopId, stopId, ...]]
@@ -124,6 +169,7 @@ const SEED_LINE_STOPS: Array<[number, number[]]> = [
   [3, [201, 202, 203, 204, 213, 205, 206, 207, 208, 209, 210, 211, 212]],
   [4, [301, 307, 308, 309, 310, 311, 312, 302, 313, 303, 304, 305, 306]],
   [5, [441, 440, 439, 438, 437, 401, 402, 403, 404, 405, 406, 407, 408, 409, 410, 411, 412, 413, 414, 415, 416, 417, 418, 419, 420]],
+  [6, [501, 502, 503, 504, 505, 506, 507, 508, 509, 510, 511, 512, 513, 514, 515, 516, 517, 518, 519, 520, 521, 522, 523, 524, 525, 526, 527, 528, 529, 530, 531, 532, 533, 534, 535, 536, 537, 538, 539, 540, 541, 542]],
 ];
 
 // ---------------------------------------------------------------------------
