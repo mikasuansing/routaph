@@ -15,10 +15,16 @@ import type { FareRule, Mode } from './types';
  * rules from the `fares` table, which is where LRT-1 gets its real pricing.
  */
 export const DEFAULT_FARE_RULES: FareRule[] = [
+  // Road modes: LTFRB publishes a per-km rate with no ceiling, so none is
+  // invented here — a made-up cap would be a worse error than the overshoot.
   { lineId: null, mode: 'jeepney', baseFare: 14,  perKmRate: 2.00, flagDistanceKm: 4 },
   { lineId: null, mode: 'bus',     baseFare: 18,  perKmRate: 2.98, flagDistanceKm: 5 },
-  { lineId: null, mode: 'mrt',     baseFare: 6,   perKmRate: 0.48, flagDistanceKm: 0 },
-  { lineId: null, mode: 'lrt',     baseFare: 8,   perKmRate: 0.46, flagDistanceKm: 0 },
+  // Rail: matrices with a published maximum, so the per-km approximation is
+  // clamped. The mode-level LRT cap uses LRT-2's ₱18 because that is the
+  // discounted matrix these defaults describe; LRT-1's ₱30 ceiling rides on
+  // its per-line rule from the `fares` table.
+  { lineId: null, mode: 'mrt',     baseFare: 6,   perKmRate: 0.48, flagDistanceKm: 0, maxFare: 14 },
+  { lineId: null, mode: 'lrt',     baseFare: 8,   perKmRate: 0.46, flagDistanceKm: 0, maxFare: 18 },
 ];
 
 /**
@@ -56,5 +62,10 @@ export function computeFare(
     ? rule.baseFare
     : rule.baseFare + (distKm - flag) * rule.perKmRate;
 
-  return Math.round(raw * 100) / 100;
+  // Clamp to the operator's published ceiling. Rail fares are matrices with
+  // a maximum, so an uncapped per-km line overshoots on long journeys — the
+  // full length of LRT-1 priced at P51 against a P15-30 matrix before this.
+  const capped = rule.maxFare !== undefined ? Math.min(raw, rule.maxFare) : raw;
+
+  return Math.round(capped * 100) / 100;
 }

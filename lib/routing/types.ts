@@ -22,6 +22,16 @@ export type FareRule = {
   baseFare: number;    // minimum fare (charged for the whole boarding)
   perKmRate: number;   // per-km rate applied beyond flagDistanceKm
   flagDistanceKm?: number; // free km included in baseFare; defaults to 4 in computeFare
+  /**
+   * Highest fare the operator will charge for a single journey.
+   *
+   * Rail fares here are published as a MATRIX with a ceiling, not as an
+   * open-ended per-km rate — `base + rate x km` only approximates the middle
+   * of that matrix and overshoots at the ends. Without a cap, LRT-1 end to
+   * end came out at P51 against a published P15-30 matrix. Omit when the
+   * operator genuinely publishes no ceiling.
+   */
+  maxFare?: number;
 };
 
 // Graph edges stored per stop

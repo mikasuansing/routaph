@@ -28,6 +28,22 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     mark_arrived:         "Mark as done — I've arrived",
     almost_there:         'Almost there — this is the last leg.',
     get_off_at:           'Get off at {stop}',
+    // Step-by-step guidance. Each leg names the vehicle to take, where to
+    // get off, and what comes after, so finishing one step visibly hands
+    // over to the next.
+    step_of:              'Step {n} of {total}',
+    take_the_train:       'Take the {line} train',
+    take_the_bus:         'Take the {line} bus',
+    take_a_jeepney:       'Take the {line} jeepney',
+    walk_step:            'Walk to {stop}',
+    board_at:             'Get on at {stop}',
+    ride_stops:           '{count} stops',
+    done_got_off:         "Done — I got off at {stop}",
+    done_arrived_at:      "Done — I'm at {stop}",
+    done_finish_trip:     "Done — I've arrived",
+    up_next:              'Up next',
+    trip_finished:        'Trip finished',
+    about_min:            'about {n} min',
   },
   tl: {
     find_routes:        'Hanapin ang ruta',
@@ -48,6 +64,19 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     mark_arrived:         'Tapos na — nakarating na ako',
     almost_there:         'Malapit ka na — ito na ang huling hakbang.',
     get_off_at:           'Bumaba sa {stop}',
+    step_of:              'Hakbang {n} sa {total}',
+    take_the_train:       'Sumakay sa tren na {line}',
+    take_the_bus:         'Sumakay sa bus na {line}',
+    take_a_jeepney:       'Sumakay ng jeep sa {line}',
+    walk_step:            'Maglakad papuntang {stop}',
+    board_at:             'Sumakay sa {stop}',
+    ride_stops:           '{count} na hintuan',
+    done_got_off:         'Tapos — bumaba na ako sa {stop}',
+    done_arrived_at:      'Tapos — nandito na ako sa {stop}',
+    done_finish_trip:     'Tapos — nakarating na ako',
+    up_next:              'Susunod na hakbang',
+    trip_finished:        'Tapos na ang biyahe',
+    about_min:            'mga {n} minuto',
   },
 };
 

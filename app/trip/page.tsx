@@ -9,7 +9,7 @@ import { distToNextStop, etaToNextStop } from '@/lib/trip/geo';
 import { ReportIssueButton } from '@/app/components/ReportIssueSheet';
 import { notificationPermission, requestNotificationPermission } from '@/lib/trip/notify';
 import { nearestStationEntrance } from '@/lib/routing/stationEntrances';
-import { t, loadLang } from '@/lib/i18n';
+import { t, loadLang, type Lang } from '@/lib/i18n';
 import { useTheme } from '@/app/providers';
 
 // Voyager (light) / Dark Matter (dark). Swapped live on theme change, not
@@ -71,6 +71,50 @@ function legLabel(leg: RideLeg | WalkLeg | undefined): string {
   }
   const w = leg as WalkLeg;
   return `Walk to ${w.toName} (${Math.round(w.distKm * 1000)} m)`;
+}
+
+/*
+ * Step-by-step instruction helpers.
+ *
+ * The old card read "LRT-2 → Buendia (9 stops)", which packs the line, the
+ * destination and the stop count into one line of shorthand and never says
+ * what to actually DO. These split a leg into an instruction you can follow
+ * without decoding it: what to get on, where to get off, and — once the
+ * step is done — what the next one is.
+ */
+
+/** What to do for this leg, as an instruction ("Take the LRT-2 train"). */
+function legAction(leg: RideLeg | WalkLeg | undefined, lang: Lang): string {
+  if (!leg) return '';
+  if (leg.type === 'walk') {
+    return t(lang, 'walk_step', { stop: (leg as WalkLeg).toName });
+  }
+  const r = leg as RideLeg;
+  const key =
+    r.line.mode === 'jeepney' ? 'take_a_jeepney'
+    : r.line.mode === 'bus'   ? 'take_the_bus'
+    : 'take_the_train';
+  return t(lang, key, { line: r.line.name });
+}
+
+/** Where this leg ends — the place completing it puts you. */
+function legEndName(leg: RideLeg | WalkLeg | undefined): string {
+  if (!leg) return '';
+  return leg.type === 'walk' ? (leg as WalkLeg).toName : (leg as RideLeg).to.name;
+}
+
+/**
+ * Label for the button that completes this leg. It names the place rather
+ * than saying "mark leg done", so tapping it is an obvious statement of
+ * fact ("I got off at Cubao") instead of app jargon.
+ */
+function legDoneLabel(leg: RideLeg | WalkLeg | undefined, isLast: boolean, lang: Lang): string {
+  if (isLast) return t(lang, 'done_finish_trip');
+  const stop = legEndName(leg);
+  if (!leg) return t(lang, 'done_finish_trip');
+  return leg.type === 'ride'
+    ? t(lang, 'done_got_off', { stop })
+    : t(lang, 'done_arrived_at', { stop });
 }
 
 // ── Inner component (must be inside TripProvider) ─────────────────────────────
@@ -395,11 +439,12 @@ function TripScreen() {
             <Micro>Location access is blocked</Micro>
             <p style={{ margin: '8px 0 0', fontSize: 13, color: C.body, lineHeight: 1.7 }}>
               Your browser is blocking location for this site, so the map can&apos;t follow
-              you and legs won&apos;t advance automatically. To enable: tap the
+              you and steps won&apos;t advance on their own. To turn it on: tap the
               <strong style={{ color: C.ink }}> padlock icon</strong> next to the address →
               <strong style={{ color: C.ink }}> Site settings</strong> →
               <strong style={{ color: C.ink }}> Location</strong> → Allow, then reload.
-              Meanwhile, use <strong style={{ color: C.ink }}>Mark leg done</strong> as you go.
+              You can still follow the trip — just tap
+              <strong style={{ color: C.ink }}> Done</strong> at the end of each step.
             </p>
           </div>
         )}
@@ -471,19 +516,39 @@ function TripScreen() {
         {/* Current leg — the glance */}
         {currentLeg && (
           <section style={{ marginBottom: 28, background: C.card, border: `1px solid ${C.border}`, borderRadius: 20, padding: 18 }}>
-            <Micro color={C.accent}>{t(lang, 'now')} · {modeTag(currentLeg)}</Micro>
+            <Micro color={C.accent}>
+              {t(lang, 'step_of', { n: String(currentLegIndex + 1), total: String(itinerary.legs.length) })} · {modeTag(currentLeg)}
+            </Micro>
+
+            {/* The instruction, as an instruction — "Take the LRT-2 train",
+                not "LRT-2 → Buendia (9 stops)". */}
             <p style={{ margin: '8px 0 0', fontFamily: DISPLAY, fontSize: 24, fontWeight: 800, color: C.ink, letterSpacing: '-0.02em', lineHeight: 1.25 }}>
-              {legLabel(currentLeg)}
+              {legAction(currentLeg, lang)}
             </p>
-            {distKm !== null && (
-              <p className="tnum" style={{ margin: '8px 0 0', fontSize: 16, color: C.body }}>
-                {distKm < 1 ? `${Math.round(distKm * 1000)} m` : `${distKm.toFixed(1)} km`}
-                {eta !== null && ` · ~${eta} min`} to next stop
+
+            {/* Where to get off is the one thing a rider must not miss, so it
+                gets its own line at full contrast rather than a muted aside. */}
+            {currentLeg.type === 'ride' && (
+              <p style={{ margin: '10px 0 0', fontSize: 17, fontWeight: 700, color: C.ink, lineHeight: 1.35 }}>
+                {t(lang, 'get_off_at', { stop: (currentLeg as RideLeg).to.name })}
+                <span style={{ fontWeight: 500, color: C.muted }}>
+                  {' · '}{t(lang, 'ride_stops', { count: String((currentLeg as RideLeg).stops.length) })}
+                </span>
               </p>
             )}
-            {currentLeg.type === 'ride' && (
-              <p style={{ margin: '4px 0 0', fontSize: 13, color: C.muted }}>
-                {t(lang, 'get_off_at', { stop: (currentLeg as RideLeg).to.name })}
+            {currentLeg.type === 'walk' && (
+              <p className="tnum" style={{ margin: '10px 0 0', fontSize: 17, fontWeight: 700, color: C.ink }}>
+                {Math.round((currentLeg as WalkLeg).distKm * 1000)} m
+                <span style={{ fontWeight: 500, color: C.muted }}>
+                  {' · '}{t(lang, 'about_min', { n: String(Math.max(1, Math.round((currentLeg as WalkLeg).durationMin))) })}
+                </span>
+              </p>
+            )}
+
+            {distKm !== null && (
+              <p className="tnum" style={{ margin: '6px 0 0', fontSize: 14, color: C.muted }}>
+                {distKm < 1 ? `${Math.round(distKm * 1000)} m` : `${distKm.toFixed(1)} km`}
+                {eta !== null && ` · ~${eta} min`} to next stop
               </p>
             )}
             {signalStale && (
@@ -517,8 +582,17 @@ function TripScreen() {
                   trip.advanceLeg();
                 }}
               >
-                {isLastLeg ? `✓ ${t(lang, 'mark_arrived')}` : `✓ ${t(lang, 'mark_leg_done')}`}
+                ✓ {legDoneLabel(currentLeg, isLastLeg, lang)}
               </button>
+            )}
+
+            {/* Naming the next step on the button's own card is what makes
+                the hand-off legible: finish the bus leg and it is already
+                clear that a jeepney comes next, before the card changes. */}
+            {status === 'active' && nextLeg && !isLastLeg && (
+              <p style={{ margin: '12px 0 0', fontSize: 13, color: C.muted, textAlign: 'center', lineHeight: 1.5 }}>
+                {t(lang, 'up_next')}: <span style={{ fontWeight: 700, color: C.body }}>{legAction(nextLeg, lang)}</span>
+              </p>
             )}
             <div style={{ marginTop: 14, textAlign: 'center' }}>
               <ReportIssueButton
@@ -530,13 +604,9 @@ function TripScreen() {
           </section>
         )}
 
-        {/* Next leg */}
-        {nextLeg && !isLastLeg && (
-          <section style={{ marginBottom: 28 }}>
-            <Micro>{t(lang, 'next')} · {modeTag(nextLeg)}</Micro>
-            <p style={{ margin: '6px 0 0', fontSize: 15, color: C.body }}>{legLabel(nextLeg)}</p>
-          </section>
-        )}
+        {/* The next step is announced on the action card itself (see "Up
+            next" above) and listed in full below, so a third copy of it
+            here was just noise between the button and the itinerary. */}
 
         {isLastLeg && (
           <p style={{ margin: '0 0 28px', fontSize: 13, fontWeight: 700, color: C.accent, letterSpacing: '0.02em' }}>
@@ -544,27 +614,48 @@ function TripScreen() {
           </p>
         )}
 
-        {/* Full itinerary */}
+        {/* All steps — a numbered checklist, so progress through a
+            multi-vehicle trip is readable at a glance and a completed step
+            visibly stays completed. */}
         <section style={{ marginBottom: 28 }}>
-          <Micro>Full itinerary</Micro>
-          <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <Micro>{t(lang, 'step_by_step')}</Micro>
+          <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 2 }}>
             {itinerary.legs.map((leg, i) => {
               const done = i < currentLegIndex;
               const here = i === currentLegIndex;
               return (
-                <div key={i} style={{ display: 'flex', gap: 12, alignItems: 'baseline' }}>
-                  <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: '0.1em', color: here ? C.ink : C.muted, width: 38, flexShrink: 0 }}>
-                    {modeTag(leg)}
-                  </span>
+                <div key={i} style={{
+                  display: 'flex', gap: 12, alignItems: 'flex-start',
+                  padding: '10px 12px', borderRadius: 14,
+                  background: here ? C.cardEl : 'transparent',
+                }}>
+                  {/* Step number, or a tick once the step is behind you */}
                   <span style={{
-                    flex: 1, fontSize: 14,
-                    fontWeight: here ? 700 : 400,
-                    color: done ? C.muted : here ? C.ink : C.body,
-                    textDecoration: done ? 'line-through' : 'none',
+                    flexShrink: 0, width: 24, height: 24, borderRadius: '50%',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontSize: 11, fontWeight: 800,
+                    background: done ? C.accent : here ? C.ink : 'transparent',
+                    color: done || here ? C.onPrimary : C.muted,
+                    border: done || here ? 'none' : `1.5px solid ${C.border}`,
                   }}>
-                    {legLabel(leg)}
+                    {done ? '✓' : i + 1}
                   </span>
-                  {here && <Micro color={C.accent} style={{ flexShrink: 0 }}>You are here</Micro>}
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <p style={{
+                      margin: 0, fontSize: 14,
+                      fontWeight: here ? 700 : 500,
+                      color: done ? C.muted : here ? C.ink : C.body,
+                      lineHeight: 1.4,
+                    }}>
+                      {legAction(leg, lang)}
+                    </p>
+                    <p style={{ margin: '2px 0 0', fontSize: 12, color: C.muted, lineHeight: 1.4 }}>
+                      {leg.type === 'ride'
+                        ? `${t(lang, 'get_off_at', { stop: (leg as RideLeg).to.name })} · ${t(lang, 'ride_stops', { count: String((leg as RideLeg).stops.length) })}`
+                        : `${Math.round((leg as WalkLeg).distKm * 1000)} m · ${t(lang, 'about_min', { n: String(Math.max(1, Math.round((leg as WalkLeg).durationMin))) })}`}
+                    </p>
+                  </div>
+                  {here && <Micro color={C.accent} style={{ flexShrink: 0, paddingTop: 4 }}>{t(lang, 'now')}</Micro>}
                 </div>
               );
             })}
