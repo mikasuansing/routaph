@@ -8,6 +8,7 @@ import { suggestJeepneyCorridor } from '@/lib/routing/jeepneySuggest';
 import { nearestStationEntrance } from '@/lib/routing/stationEntrances';
 import { ReportIssueButton } from '@/app/components/ReportIssueSheet';
 import { t, loadLang, LANG_STORAGE_KEY, type Lang } from '@/lib/i18n';
+import { useTheme } from '@/app/providers';
 
 const BEEP_STORAGE_KEY = 'parapo:has_beep';
 
@@ -83,6 +84,12 @@ const MODE_GROUPS: { key: ModeGroup; label: string; engineModes: string[] }[] = 
 ];
 
 const MY_LOCATION = 'My location';
+// Warm basemaps — Voyager (light) / Dark Matter (dark). Picked at map init
+// AND swapped on every theme change; a dark basemap under a cream page is
+// the one thing that makes the whole screen look broken.
+const TILE_URL = (isDark: boolean) => isDark
+  ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
+  : 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png';
 // Live estimates go stale after 2 min server-side, so polling faster than
 // this buys nothing but battery.
 const LIVE_POLL_MS = 20_000;
@@ -266,6 +273,7 @@ function Sheet({ children, height, style }: { children: React.ReactNode; height:
 /* ── Main ───────────────────────────────────────────────────────────────── */
 export default function Planner() {
   const router = useRouter();
+  const { theme } = useTheme();
   const [screen, setScreen]       = useState<Screen>('home');
   const [from, setFrom]           = useState('');
   const [to, setTo]               = useState('');
@@ -410,6 +418,7 @@ export default function Planner() {
   const mapRef      = useRef<unknown>(null);
   const routeGroup  = useRef<unknown>(null);
   const liveGroup   = useRef<unknown>(null);
+  const tileRef     = useRef<unknown>(null);
 
   useEffect(() => {
     if (!mapElRef.current || mapRef.current) return;
@@ -428,10 +437,7 @@ export default function Planner() {
       const L = mod.default ?? mod;
 
       const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
-      // Warm basemaps — Voyager (light) / Dark Matter (dark)
-      const tileUrl = isDark
-        ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
-        : 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png';
+      const tileUrl = TILE_URL(isDark);
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const map = (L as any).map(mapElRef.current, {
@@ -442,7 +448,7 @@ export default function Planner() {
       });
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (L as any).tileLayer(tileUrl, {
+      tileRef.current = (L as any).tileLayer(tileUrl, {
         attribution: '© OpenStreetMap contributors © CARTO',
         subdomains: 'abcd', maxZoom: 19,
       }).addTo(map);
@@ -526,6 +532,16 @@ export default function Planner() {
       }
     }
   }, [screen]);
+
+  /* ── Keep the basemap in step with the theme toggle ───────────────────── */
+  useEffect(() => {
+    if (!tileRef.current) return;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (tileRef.current as any).setUrl(TILE_URL(theme === 'dark'));
+    // Route/vehicle colours are baked into the drawn layers, so they need a
+    // redraw too — otherwise cobalt-on-cream lines stay on a dark basemap.
+    drawRoute();
+  }, [theme, drawRoute]);
 
   /* ── Live vehicles — crowdsourced, never an official feed ─────────────── */
   useEffect(() => {

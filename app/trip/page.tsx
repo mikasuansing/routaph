@@ -10,6 +10,13 @@ import { ReportIssueButton } from '@/app/components/ReportIssueSheet';
 import { notificationPermission, requestNotificationPermission } from '@/lib/trip/notify';
 import { nearestStationEntrance } from '@/lib/routing/stationEntrances';
 import { t, loadLang } from '@/lib/i18n';
+import { useTheme } from '@/app/providers';
+
+// Voyager (light) / Dark Matter (dark). Swapped live on theme change, not
+// just picked once at init — see the theme effect below.
+const TILE_URL = (isDark: boolean) => isDark
+  ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
+  : 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png';
 
 /*
  * Trip Companion — live tracking screen.
@@ -71,6 +78,7 @@ function legLabel(leg: RideLeg | WalkLeg | undefined): string {
 function TripScreen() {
   const router = useRouter();
   const trip = useTripContext();
+  const { theme } = useTheme();
   const [geoPerm, setGeoPerm] = useState<'granted' | 'prompt' | 'denied' | 'unknown'>('unknown');
   const [notifPerm, setNotifPerm] = useState<NotificationPermission | 'unsupported'>(notificationPermission);
   const [lang] = useState(loadLang);
@@ -87,6 +95,7 @@ function TripScreen() {
 
   const mapElRef  = useRef<HTMLDivElement>(null);
   const mapRef    = useRef<unknown>(null);
+  const tileRef   = useRef<unknown>(null);
   const posMarker = useRef<unknown>(null);
 
   // Track browser geolocation permission so the UI can explain itself
@@ -187,10 +196,8 @@ function TripScreen() {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const map = (L as any).map(mapElRef.current, { zoomControl: false, attributionControl: false });
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (L as any).tileLayer(
-        isDark
-          ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
-          : 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
+      tileRef.current = (L as any).tileLayer(
+        TILE_URL(isDark),
         { subdomains: 'abcd', maxZoom: 19 },
       ).addTo(map);
 
@@ -232,10 +239,19 @@ function TripScreen() {
     return () => { cancelled = true; };
   }, [trip.status, trip.itinerary]);
 
+  // Keep the basemap in step with the theme toggle — a dark basemap left
+  // under a cream page makes the whole screen look broken.
+  useEffect(() => {
+    if (!tileRef.current) return;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (tileRef.current as any).setUrl(TILE_URL(theme === 'dark'));
+  }, [theme]);
+
   // Tear the map down when leaving the active screen
   useEffect(() => {
     if (trip.status === 'active' || trip.status === 'rerouting') return;
     if (mapRef.current) {
+      tileRef.current = null;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (mapRef.current as any).remove();
       mapRef.current = null;
@@ -424,31 +440,31 @@ function TripScreen() {
             copy has to be honest that it's for everyone else. */}
         {status === 'active' && position && (
           <div style={{ marginBottom: 22, background: C.card, border: `1px solid ${C.border}`, borderRadius: 20, padding: 16 }}>
-            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
-              <div style={{ flex: 1 }}>
-                <Micro color={sharingPosition ? C.accent : undefined}>
-                  {sharingPosition ? 'Helping the live map' : 'Help the live map'}
-                </Micro>
-                <p style={{ margin: '8px 0 0', fontSize: 13, color: C.body, lineHeight: 1.7 }}>
-                  {sharingPosition
-                    ? 'Other commuters can see roughly where this vehicle is. Your position is anonymous, kept for 3 minutes, and never saved to our database.'
-                    : 'No operator publishes live train or bus positions here. Share your position anonymously while you ride and others can see where this vehicle is.'}
-                </p>
-              </div>
-              <button
-                onClick={() => setSharingPosition(!sharingPosition)}
-                aria-pressed={sharingPosition}
-                style={{
-                  padding: '9px 16px', borderRadius: 999, border: sharingPosition ? `1.5px solid ${C.border}` : 'none',
-                  background: sharingPosition ? 'transparent' : C.accent,
-                  color: sharingPosition ? C.body : '#fff',
-                  fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit',
-                  flexShrink: 0, whiteSpace: 'nowrap',
-                }}
-              >
-                {sharingPosition ? 'Stop sharing' : 'Share position'}
-              </button>
-            </div>
+            <Micro color={sharingPosition ? C.accent : undefined}>
+              {sharingPosition ? 'Helping the live map' : 'Help the live map'}
+            </Micro>
+            <p style={{ margin: '8px 0 14px', fontSize: 13, color: C.body, lineHeight: 1.7 }}>
+              {sharingPosition
+                ? 'Other commuters can see roughly where this vehicle is. Your position is anonymous, kept for 3 minutes, and never saved to our database.'
+                : 'No operator publishes live train or bus positions here. Share your position anonymously while you ride and others can see where this vehicle is.'}
+            </p>
+            {/* Full-width below the copy rather than beside it — at 375 px a
+                side-by-side button starves the explanation into a column
+                barely six words wide, and this is text people should read
+                before opting in. */}
+            <button
+              onClick={() => setSharingPosition(!sharingPosition)}
+              aria-pressed={sharingPosition}
+              style={{
+                width: '100%', padding: '11px 16px', borderRadius: 999,
+                border: sharingPosition ? `1.5px solid ${C.border}` : 'none',
+                background: sharingPosition ? 'transparent' : C.accent,
+                color: sharingPosition ? C.body : '#fff',
+                fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit',
+              }}
+            >
+              {sharingPosition ? 'Stop sharing' : 'Share position'}
+            </button>
           </div>
         )}
 
