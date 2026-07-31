@@ -399,10 +399,16 @@ function TripScreen() {
           <h1 style={{ margin: '4px 0 0', fontFamily: DISPLAY, fontSize: 28, fontWeight: 800, letterSpacing: '-0.02em' }}>Trip in progress</h1>
           {/* Live status — the single accent marks a live GPS fix */}
           <p style={{ margin: '6px 0 0', fontSize: 12, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: position ? C.accent : C.muted }}>
+            {/* `gpsDenied` is set only on PERMISSION_DENIED — a genuinely
+                unavailable fix or a timeout keeps the watcher alive and
+                stays on "Finding your location". So this state is "blocked",
+                and calling it "unavailable" sent people looking for a signal
+                problem instead of a permission they can grant. Matches the
+                "Location access is blocked" banner below. */}
             {position
               ? '● Live location'
               : gpsDenied
-                ? '○ Location unavailable — manual mode'
+                ? '○ Location blocked — tap Done as you go'
                 : <span style={{ animation: 'pulse 1.6s ease-in-out infinite' }}>○ Finding your location</span>}
           </p>
         </div>
