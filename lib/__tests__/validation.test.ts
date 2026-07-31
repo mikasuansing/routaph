@@ -3,7 +3,7 @@ import {
   SearchSchema,
   SearchBodySchema,
   CrowdReportSchema,
-  SavedRouteSchema,
+  IssueReportSchema,
   LogSearchSchema,
 } from '../validation';
 
@@ -95,31 +95,26 @@ describe('CrowdReportSchema', () => {
   });
 });
 
-describe('SavedRouteSchema', () => {
-  const valid = {
-    name:       'Home to Work',
-    originLat:  14.55,
-    originLng:  121.0,
-    originName: 'Home',
-    destLat:    14.62,
-    destLng:    121.05,
-    destName:   'Ortigas',
-  };
-
-  it('accepts valid saved route', () => {
-    expect(SavedRouteSchema.safeParse(valid).success).toBe(true);
+describe('IssueReportSchema', () => {
+  it('accepts each "Report an issue" category', () => {
+    for (const category of ['wrong_fare', 'wrong_stop', 'route_missing', 'other']) {
+      expect(IssueReportSchema.safeParse({ category, stopId: 1 }).success).toBe(true);
+    }
   });
 
-  it('rejects empty name', () => {
-    expect(SavedRouteSchema.safeParse({ ...valid, name: '' }).success).toBe(false);
+  it('rejects a crowding-level value (different enum from CrowdReportSchema)', () => {
+    expect(IssueReportSchema.safeParse({ category: 'packed', stopId: 1 }).success).toBe(false);
   });
 
-  it('rejects name over 120 chars', () => {
-    expect(SavedRouteSchema.safeParse({ ...valid, name: 'x'.repeat(121) }).success).toBe(false);
+  it('rejects note longer than 200 chars', () => {
+    expect(IssueReportSchema.safeParse({
+      category: 'other',
+      note: 'x'.repeat(201),
+    }).success).toBe(false);
   });
 
-  it('rejects out-of-bounds coordinates', () => {
-    expect(SavedRouteSchema.safeParse({ ...valid, originLat: 9.0 }).success).toBe(false);
+  it('rejects non-positive routeId', () => {
+    expect(IssueReportSchema.safeParse({ category: 'wrong_fare', routeId: 0 }).success).toBe(false);
   });
 });
 

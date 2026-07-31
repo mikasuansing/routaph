@@ -8,7 +8,6 @@ import {
   useReducer,
   useRef,
 } from 'react';
-import { supabaseBrowser } from '@/lib/supabase/browser';
 import type { Itinerary } from '@/lib/routing/types';
 import type {
   Disruption,
@@ -19,13 +18,16 @@ import type {
 } from './types';
 import {
   getCurrentLineId,
+  getLegArrivalStop,
+  TRIP_PROGRESS_KEY,
   TRIP_STORAGE_KEY,
 } from './types';
-import { shouldAdvanceLeg } from './geo';
+import { distToNextStop, shouldAdvanceLeg } from './geo';
+import { notifyApproachingStop } from './notify';
 
 // ── Reducer ───────────────────────────────────────────────────────────────────
 
-const INITIAL: TripState = {
+export const INITIAL: TripState = {
   status:           'idle',
   itinerary:        null,
   originalDest:     null,
@@ -35,9 +37,13 @@ const INITIAL: TripState = {
   reroutes:         [],
   rideOptions:      [],
   activeDisruption: null,
+  sharingPosition:  false,
 };
 
-function reducer(state: TripState, action: TripAction): TripState {
+// Exported for unit testing — a pure function is easiest tested directly,
+// consistent with this project's lib/** pure-function test convention,
+// rather than mounting the provider through React Testing Library.
+export function reducer(state: TripState, action: TripAction): TripState {
   switch (action.type) {
     case 'START': {
       const dest = action.itinerary.legs.at(-1);
@@ -52,6 +58,22 @@ function reducer(state: TripState, action: TripAction): TripState {
         itinerary:     action.itinerary,
         originalDest,
         currentLegIndex: 0,
+      };
+    }
+    case 'RESUME': {
+      const dest = action.itinerary.legs.at(-1);
+      const originalDest = dest
+        ? dest.type === 'walk'
+          ? { lat: dest.toLat, lng: dest.toLng }
+          : { lat: dest.to.lat, lng: dest.to.lng }
+        : null;
+      const legIndex = Math.min(Math.max(action.legIndex, 0), action.itinerary.legs.length - 1);
+      return {
+        ...INITIAL,
+        status:        'active',
+        itinerary:     action.itinerary,
+        originalDest,
+        currentLegIndex: legIndex,
       };
     }
     case 'END':
@@ -79,6 +101,8 @@ function reducer(state: TripState, action: TripAction): TripState {
       };
     case 'SET_DISRUPTION':
       return { ...state, activeDisruption: action.disruption };
+    case 'SET_SHARING':
+      return { ...state, sharingPosition: action.sharing };
     default:
       return state;
   }
@@ -88,10 +112,11 @@ function reducer(state: TripState, action: TripAction): TripState {
 
 type TripContextValue = TripState & {
   startTrip:      (itinerary: Itinerary) => void;
+  resumeTrip:     (itinerary: Itinerary, legIndex: number) => void;
   endTrip:        () => void;
   advanceLeg:     () => void;
-  saveTrip:       () => Promise<boolean>;
   triggerReroute: () => Promise<void>;
+  setSharingPosition: (sharing: boolean) => void;
 };
 
 const TripContext = createContext<TripContextValue | null>(null);
@@ -99,12 +124,29 @@ const TripContext = createContext<TripContextValue | null>(null);
 // ── Provider ──────────────────────────────────────────────────────────────────
 
 const DISRUPTION_POLL_MS = 30_000;
+// "Next stop approaching" fires once per leg, inside this distance.
+const NEXT_STOP_NOTIFY_KM = 0.3;
+// How often an opted-in rider contributes a position to the live map.
+// 15 s is frequent enough to keep a train marker believable and slow
+// enough that it barely touches battery or data.
+const LIVE_PING_MS = 15_000;
+// Don't contribute a fix this poor — it would only blur the estimate.
+const LIVE_PING_MAX_ACCURACY_M = 150;
 
 export function TripProvider({ children }: { children: React.ReactNode }) {
   const [state, dispatch] = useReducer(reducer, INITIAL);
   const latestStateRef = useRef<TripState>(INITIAL);
   const watchIdRef = useRef<number | null>(null);
   const pollRef    = useRef<ReturnType<typeof setInterval> | null>(null);
+  // Tracks which leg index the "approaching" alert already fired for, so it
+  // doesn't re-fire on every GPS tick while still inside the notify radius.
+  const notifiedLegRef = useRef<number>(-1);
+  // Ephemeral per-trip token for live position sharing. Random, never an
+  // account/device ID, regenerated on every trip and dropped when it ends —
+  // it only lets the server infer travel direction from a rider's own two
+  // most recent pings. See lib/live/store.ts for the privacy contract.
+  const riderKeyRef = useRef<string | null>(null);
+  const pingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
     latestStateRef.current = state;
@@ -120,82 +162,51 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
       clearInterval(pollRef.current);
       pollRef.current = null;
     }
+    if (pingTimerRef.current !== null) {
+      clearInterval(pingTimerRef.current);
+      pingTimerRef.current = null;
+    }
   }, []);
 
   const startTrip = useCallback((itinerary: Itinerary) => {
     cleanup();
+    notifiedLegRef.current = -1;
     dispatch({ type: 'START', itinerary });
     // Persist itinerary in sessionStorage for page reload resilience.
-    // GPS is NEVER persisted — only the itinerary shape.
+    // GPS is NEVER persisted — only the itinerary shape (+ leg progress).
     try {
       sessionStorage.setItem(TRIP_STORAGE_KEY, JSON.stringify(itinerary));
+      sessionStorage.removeItem(TRIP_PROGRESS_KEY); // fresh trip starts at leg 0
     } catch {
       // sessionStorage unavailable (SSR guard / private mode) — non-fatal
     }
   }, [cleanup]);
 
+  // Resumes a trip already in sessionStorage at its last-confirmed leg,
+  // instead of restarting from leg 0 — for when the tab was reloaded or
+  // killed mid-trip (a background tab losing signal in an MRT tunnel is
+  // exactly when mobile browsers are most likely to evict it).
+  const resumeTrip = useCallback((itinerary: Itinerary, legIndex: number) => {
+    cleanup();
+    notifiedLegRef.current = legIndex; // already past this leg's "approaching" alert
+    dispatch({ type: 'RESUME', itinerary, legIndex });
+  }, [cleanup]);
+
   const endTrip = useCallback(() => {
     cleanup();
+    // Drop the sharing token with the trip. Consent was for this ride only.
+    riderKeyRef.current = null;
     dispatch({ type: 'END' });
-    try { sessionStorage.removeItem(TRIP_STORAGE_KEY); } catch { /* noop */ }
+    try {
+      sessionStorage.removeItem(TRIP_STORAGE_KEY);
+      sessionStorage.removeItem(TRIP_PROGRESS_KEY);
+    } catch { /* noop */ }
   }, [cleanup]);
 
   // Manual advance — "mark this leg done". Works with or without GPS; on the
   // last leg it transitions the trip to 'arrived'.
   const advanceLeg = useCallback(() => {
     dispatch({ type: 'ADVANCE_LEG' });
-  }, []);
-
-  // Explicit save only (BASELINE §7.7) — called from the arrival screen's
-  // "Save trip" action, never automatically.
-  const saveTrip = useCallback(async (): Promise<boolean> => {
-    const itinerary = latestStateRef.current.itinerary;
-    if (!itinerary) return false;
-    const session = (await supabaseBrowser.auth.getSession()).data.session;
-    if (!session) return false;
-    // Access walk legs carry generic "Origin"/"Destination" names — prefer
-    // the boarding/alighting stop of the first/last ride leg when so.
-    const rides = itinerary.legs.filter(l => l.type === 'ride');
-    const destinationLeg = itinerary.legs.at(-1);
-    let destinationName = destinationLeg?.type === 'walk'
-      ? destinationLeg.toName
-      : destinationLeg?.type === 'ride'
-        ? destinationLeg.to.name
-        : 'Destination';
-    if (destinationName === 'Destination' && rides.length > 0) {
-      destinationName = (rides.at(-1) as Extract<typeof rides[number], { type: 'ride' }>).to.name;
-    }
-    const firstLeg = itinerary.legs[0];
-    let originName = firstLeg?.type === 'walk'
-      ? firstLeg.fromName
-      : firstLeg?.type === 'ride'
-        ? firstLeg.from.name
-        : 'Origin';
-    if (originName === 'Origin' && rides.length > 0) {
-      originName = (rides[0] as Extract<typeof rides[number], { type: 'ride' }>).from.name;
-    }
-    const distanceKm = itinerary.legs.reduce((sum, leg) => sum + leg.distKm, 0);
-    const payload = {
-      origin: originName,
-      destination: destinationName,
-      distanceKm: Math.round(distanceKm * 100) / 100,
-      fareEstimate: itinerary.totalFare,
-      modesUsed: itinerary.legs.filter((leg) => leg.type === 'ride').map((leg) => leg.type === 'ride' ? leg.mode : 'walk'),
-    };
-
-    try {
-      const res = await fetch('/api/v1/me/trips', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${session.access_token}`,
-        },
-        body: JSON.stringify(payload),
-      });
-      return res.ok;
-    } catch {
-      return false;
-    }
   }, []);
 
   // Start GPS watcher whenever status transitions to 'active'
@@ -227,6 +238,24 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
           shouldAdvanceLeg(gp, latest.itinerary, latest.currentLegIndex)
         ) {
           dispatch({ type: 'ADVANCE_LEG' });
+          return;
+        }
+
+        // "Next stop approaching" — once per leg, well before the 150 m
+        // auto-advance threshold so there's time to get up / move to the door.
+        if (
+          latest.itinerary &&
+          latest.currentLegIndex < latest.itinerary.legs.length &&
+          notifiedLegRef.current !== latest.currentLegIndex
+        ) {
+          const dist = distToNextStop(gp, latest.itinerary, latest.currentLegIndex);
+          if (dist !== null && dist <= NEXT_STOP_NOTIFY_KM) {
+            notifiedLegRef.current = latest.currentLegIndex;
+            const leg = latest.itinerary.legs[latest.currentLegIndex];
+            const arrival = getLegArrivalStop(latest.itinerary, latest.currentLegIndex);
+            const modeLabel = leg?.type === 'ride' ? leg.line.mode.toUpperCase() : 'WALK';
+            if (arrival) notifyApproachingStop(arrival.name, modeLabel);
+          }
         }
       },
       (err) => {
@@ -240,6 +269,15 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
     return cleanup;
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.status, state.itinerary]);
+
+  // Persist leg progress on every advance so a reload/tab-kill mid-trip
+  // resumes at the right leg instead of restarting (see resumeTrip above).
+  useEffect(() => {
+    if (state.status !== 'active') return;
+    try {
+      sessionStorage.setItem(TRIP_PROGRESS_KEY, JSON.stringify({ legIndex: state.currentLegIndex }));
+    } catch { /* non-fatal */ }
+  }, [state.status, state.currentLegIndex]);
 
   // Disruption poll — runs while a trip is active
   useEffect(() => {
@@ -271,6 +309,65 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.status, state.currentLegIndex]);
+
+  // Opt in / out of contributing this trip's position to the live map.
+  // Turning it on mints a fresh random token; turning it off destroys it,
+  // so a later re-opt-in is not linkable to the earlier stretch of the ride.
+  const setSharingPosition = useCallback((sharing: boolean) => {
+    if (sharing) {
+      riderKeyRef.current =
+        typeof crypto !== 'undefined' && 'randomUUID' in crypto
+          ? crypto.randomUUID().replace(/-/g, '')
+          : Math.random().toString(36).slice(2).padEnd(20, '0').repeat(2).slice(0, 32);
+    } else {
+      riderKeyRef.current = null;
+      if (pingTimerRef.current !== null) {
+        clearInterval(pingTimerRef.current);
+        pingTimerRef.current = null;
+      }
+    }
+    dispatch({ type: 'SET_SHARING', sharing });
+  }, []);
+
+  // Contribute position to the crowdsourced live map — only while the rider
+  // has explicitly opted in, only on a ride leg (never while walking, which
+  // would put a "train" on a sidewalk), and only off a good fix.
+  useEffect(() => {
+    if (!state.sharingPosition || state.status !== 'active') return;
+
+    const sendPing = async () => {
+      const latest = latestStateRef.current;
+      const rider = riderKeyRef.current;
+      if (!rider || !latest.itinerary || !latest.position) return;
+      if (latest.position.accuracyM > LIVE_PING_MAX_ACCURACY_M) return;
+
+      const lineId = getCurrentLineId(latest.itinerary, latest.currentLegIndex);
+      if (lineId === null) return; // walking leg — nothing to attribute a ping to
+
+      try {
+        await fetch('/api/v1/live/ping', {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            lineId,
+            riderKey:  rider,
+            lat:       latest.position.lat,
+            lng:       latest.position.lng,
+            accuracyM: latest.position.accuracyM,
+          }),
+        });
+      } catch { /* non-fatal — the rider's own trip must not depend on this */ }
+    };
+
+    sendPing();
+    pingTimerRef.current = setInterval(sendPing, LIVE_PING_MS);
+    return () => {
+      if (pingTimerRef.current !== null) {
+        clearInterval(pingTimerRef.current);
+        pingTimerRef.current = null;
+      }
+    };
+  }, [state.sharingPosition, state.status]);
 
   const triggerReroute = useCallback(async () => {
     if (!state.itinerary || !state.position || !state.originalDest) return;
@@ -313,7 +410,7 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
   }, [state.itinerary, state.position, state.originalDest, state.currentLegIndex]);
 
   return (
-    <TripContext.Provider value={{ ...state, startTrip, endTrip, advanceLeg, saveTrip, triggerReroute }}>
+    <TripContext.Provider value={{ ...state, startTrip, resumeTrip, endTrip, advanceLeg, triggerReroute, setSharingPosition }}>
       {children}
     </TripContext.Provider>
   );

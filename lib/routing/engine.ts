@@ -33,6 +33,22 @@ type Weights = {
   fareFactor: number;       // weight of fare in cost function
 };
 
+/** Cap on how many options the planner offers before it stops helping. */
+const MAX_ITINERARIES = 4;
+
+/**
+ * An alternative may be slower than the best route — that's the point — but
+ * past some margin it stops being a choice and becomes noise.
+ *
+ * The margin is deliberately generous. Metro Manila rail runs on its own
+ * right-of-way while everything else sits in the same traffic, so a road
+ * alternative is routinely two to three times slower than the train over
+ * the same corridor. That is exactly the trade a commuter makes when the
+ * queue at the turnstile is out the door, so cutting it off near 2x would
+ * hide the honest answer on most rail trips.
+ */
+const ALT_MAX_DURATION_RATIO = 3;
+
 const WEIGHTS: Record<Objective, Weights> = {
   fastest:          { timeFactor: 1,    transferPenalty: 5,  fareFactor: 0    },
   fewest_transfers: { timeFactor: 1,    transferPenalty: 30, fareFactor: 0    },
@@ -465,6 +481,67 @@ export function planRoute(graph: TransitGraph, query: PlanQuery): Itinerary[] {
     if (!seen.has(dedupKey)) {
       seen.add(dedupKey);
       results.push(itinerary);
+    }
+  }
+
+  // ── Mode-diverse alternatives ─────────────────────────────────────────────
+  // The three objectives often agree, collapsing to a single itinerary — and
+  // then the planner looks like it thinks there is only one way to make the
+  // trip. Metro Manila almost always has another: a bus down the same road
+  // as the rail line, a jeepney where the train is queued out the door.
+  // So re-run the search with each line the winner used taken away, and keep
+  // whatever genuinely different route falls out.
+  if (results.length > 0 && results.length < MAX_ITINERARIES) {
+    const primaryLineIds = results[0].legs
+      .filter((l): l is RideLeg => l.type === 'ride')
+      .map(l => l.line.id);
+
+    for (const lineId of primaryLineIds) {
+      if (results.length >= MAX_ITINERARIES) break;
+
+      const without = new Set(excludeLineSet ?? []);
+      without.add(lineId);
+
+      const w = WEIGHTS.fastest;
+      let best: PQItem | null = null;
+      let bestOriginStop: Stop | null = null;
+      let bestDestStop: Stop | null = null;
+
+      for (const { stop: oStop, distKm: accessDist } of originCandidates) {
+        const initialG = walkMinutes(accessDist) * w.timeFactor;
+        const result = search(graph, oStop.id, destStopIds, destLat, destLng, w, initialG, without, excludeModeSet, rideMult);
+        if (!result) continue;
+        if (!best || result.g < best.g) {
+          best = result;
+          bestOriginStop = oStop;
+          bestDestStop = destCandidates.find(c => c.stop.id === result.stopId)?.stop
+            ?? destCandidates[0].stop;
+        }
+      }
+
+      if (!best || !bestOriginStop || !bestDestStop) continue;
+
+      const alt = reconstructItinerary(
+        best, graph,
+        originLat, originLng, 'Origin',
+        bestOriginStop.id,
+        destLat, destLng, 'Destination',
+        bestDestStop.id,
+        'fastest',
+        rideMult,
+      );
+
+      // A detour several times longer isn't a real choice, it's a warning.
+      if (alt.totalDurationMin > results[0].totalDurationMin * ALT_MAX_DURATION_RATIO) continue;
+
+      const key = alt.legs
+        .filter(l => l.type === 'ride')
+        .map(l => `${(l as RideLeg).line.id}:${(l as RideLeg).from.id}-${(l as RideLeg).to.id}`)
+        .join('|');
+      if (key === '' || seen.has(key)) continue;
+
+      seen.add(key);
+      results.push({ ...alt, alternative: true });
     }
   }
 

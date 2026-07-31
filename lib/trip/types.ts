@@ -38,19 +38,33 @@ export type TripState = {
   reroutes:          Itinerary[];
   rideOptions:       RideOption[];
   activeDisruption:  Disruption | null;
+  // Crowdsourced live tracking — OFF unless the rider turns it on for this
+  // trip. Never remembered across trips: consent to share your position on
+  // one ride is not consent for every future one, so this always starts
+  // false and resets when the trip ends.
+  sharingPosition:   boolean;
 };
 
 export type TripAction =
   | { type: 'START';      itinerary: Itinerary }
+  | { type: 'RESUME';     itinerary: Itinerary; legIndex: number }
   | { type: 'END' }
   | { type: 'SET_POS';    position: GeoPosition }
   | { type: 'GPS_DENIED' }
   | { type: 'ADVANCE_LEG' }
   | { type: 'REROUTING' }
   | { type: 'REROUTE_DONE'; reroutes: Itinerary[]; rideOptions: RideOption[] }
-  | { type: 'SET_DISRUPTION'; disruption: Disruption | null };
+  | { type: 'SET_DISRUPTION'; disruption: Disruption | null }
+  | { type: 'SET_SHARING'; sharing: boolean };
 
 export const TRIP_STORAGE_KEY = 'parapo:active_trip';
+
+// Separate from TRIP_STORAGE_KEY (which holds the Itinerary handoff shape
+// documented in BASELINE §3.2) so a tab kill/reload mid-trip — the exact
+// moment MRT tunnels tend to cause, between signal loss and a background
+// tab getting evicted — resumes at the leg the rider was actually on
+// instead of silently restarting the trip from leg 0.
+export const TRIP_PROGRESS_KEY = 'parapo:trip_progress';
 
 // Helpers to identify the "arrival stop" of a leg for auto-advance checks
 export function getLegArrivalStop(itinerary: Itinerary, legIndex: number) {

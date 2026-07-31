@@ -24,8 +24,20 @@ vi.mock('@/lib/redis/client', () => ({
 vi.mock('@/lib/ratelimit', () => ({
   searchLimiter: { limit: vi.fn().mockResolvedValue({ success: true }) },
   crowdLimiter:  { limit: vi.fn().mockResolvedValue({ success: true }) },
+  liveLimiter:   { limit: vi.fn().mockResolvedValue({ success: true }) },
   authLimiter:   { limit: vi.fn().mockResolvedValue({ success: true }) },
   clientKey:     vi.fn().mockReturnValue('ip:127.0.0.1'),
+}));
+
+// Never hit the real Open-Meteo API in tests
+vi.mock('@/lib/weather', () => ({
+  fetchOpenMeteoForecast: vi.fn().mockResolvedValue({
+    current: { precipitation: 0, rain: 0 },
+    hourly: { precipitation_probability: [10, 10], rain: [0, 0] },
+  }),
+  interpretForecast: vi.fn().mockReturnValue({
+    heavyRainExpected: false, currentPrecipitationMm: 0, maxProbabilityPercent: 10, message: 'No heavy rain expected',
+  }),
 }));
 
 // Silence the graph loader so routing tests don't hit Supabase
@@ -167,118 +179,57 @@ describe('GET /api/v1/transport/options (guest access)', () => {
   });
 });
 
-// ── POST /api/v1/geo/isochrone ─────────────────────────────────────────────
+// /api/v1/geo/isochrone and /api/v1/accessibility/score were deleted along
+// with the account system. Both were auth-gated stubs — permanently 401 in
+// an app with no login — and neither was ever called by the UI. The
+// accessibility one also returned a hardcoded score of 82, which is exactly
+// the kind of invented figure this project refuses to ship.
 
-describe('POST /api/v1/geo/isochrone', () => {
+// ── POST /api/v1/me/* — deleted with saved commutes / trip history (no auth
+// model in the app any more, see BASELINE.md scope note)
+
+// ── POST /api/v1/crowd-reports ───────────────────────────────────────────────
+
+describe('POST /api/v1/crowd-reports', () => {
   let POST: (req: NextRequest) => Promise<Response>;
 
   beforeEach(async () => {
     vi.resetModules();
-    ({ POST } = await import('../v1/geo/isochrone/route'));
+    ({ POST } = await import('../v1/crowd-reports/route'));
   });
 
-  it('returns 401 when unauthenticated', async () => {
-    const req = makeRequest('POST', { lat: 14.55, lng: 121.0, minutes: 20 });
-    const res = await POST(req);
-    expect(res.status).toBe(401);
-  });
-});
-
-// ── GET /api/v1/accessibility/score ────────────────────────────────────────
-
-describe('GET /api/v1/accessibility/score', () => {
-  let GET: (req: NextRequest) => Promise<Response>;
-
-  beforeEach(async () => {
-    vi.resetModules();
-    ({ GET } = await import('../v1/accessibility/score/route'));
-  });
-
-  it('returns 401 when unauthenticated', async () => {
-    const req = new NextRequest('http://localhost:3000/api/v1/accessibility/score?stopId=1');
-    const res = await GET(req);
-    expect(res.status).toBe(401);
-  });
-});
-
-// ── POST /api/v1/me/trips ───────────────────────────────────────────────────
-
-describe('POST /api/v1/me/trips', () => {
-  let POST: (req: NextRequest) => Promise<Response>;
-
-  beforeEach(async () => {
-    vi.resetModules();
-    ({ POST } = await import('../v1/me/trips/route'));
-  });
-
-  it('returns 401 when unauthenticated', async () => {
-    const req = makeRequest('POST', {
-      origin: 'Katipunan',
-      destination: 'UP Diliman',
-      distanceKm: 4.2,
-      fareEstimate: 42,
-      modesUsed: ['lrt', 'walk'],
-    });
-    const res = await POST(req);
-    expect(res.status).toBe(401);
-  });
-});
-
-// ── GET /api/v1/me/routes ────────────────────────────────────────────────────
-
-describe('GET /api/v1/me/routes', () => {
-  let GET: (req: NextRequest) => Promise<Response>;
-
-  beforeEach(async () => {
-    vi.resetModules();
-    ({ GET } = await import('../v1/me/routes/route'));
-  });
-
-  it('returns 401 when no Authorization header is provided', async () => {
-    const req = makeRequest('GET');
-    const res = await GET(req);
-    expect(res.status).toBe(401);
-    const json = await res.json();
-    expect(json.error.code).toBe('unauthorized');
-  });
-
-  it('returns 401 when token is invalid', async () => {
-    const req = makeRequest('GET', undefined, { authorization: 'Bearer invalid-token' });
-    const res = await GET(req);
-    expect(res.status).toBe(401);
-  });
-});
-
-// ── POST /api/v1/me/routes ───────────────────────────────────────────────────
-
-describe('POST /api/v1/me/routes', () => {
-  let POST: (req: NextRequest) => Promise<Response>;
-
-  beforeEach(async () => {
-    vi.resetModules();
-    ({ POST } = await import('../v1/me/routes/route'));
-  });
-
-  it('returns 401 with no auth', async () => {
-    const req = makeRequest('POST', { name: 'test' });
-    const res = await POST(req);
-    expect(res.status).toBe(401);
-  });
-
-  it('returns 400 with bad body when auth mock returns a user', async () => {
-    // Override auth mock to simulate a logged-in user
-    const { supabaseServer } = await import('@/lib/supabase/server');
-    vi.mocked(supabaseServer.auth.getUser).mockResolvedValueOnce({
-      data: { user: { id: 'user-1', email: 'test@test.com' } as never },
-      error: null,
-    });
-
-    // Empty name fails SavedRouteSchema validation → 400
-    const req = makeRequest('POST', { name: '' }, { authorization: 'Bearer valid' });
+  it('returns 400 when category is not recognized', async () => {
+    const req = makeRequest('POST', { stopId: 1, category: 'not_a_real_category' });
     const res = await POST(req);
     expect(res.status).toBe(400);
+  });
+
+  it('returns 400 when body is not valid JSON', async () => {
+    const req = new NextRequest('http://localhost:3000/api/test', {
+      method: 'POST', body: 'not-json',
+      headers: { 'content-type': 'application/json' },
+    });
+    const res = await POST(req);
+    expect(res.status).toBe(400);
+  });
+
+  it('returns 201 with the created report on a valid anonymous request', async () => {
+    const { supabaseServer } = await import('@/lib/supabase/server');
+    vi.mocked(supabaseServer.from).mockReturnValueOnce({
+      insert: vi.fn().mockReturnThis(),
+      select: vi.fn().mockReturnThis(),
+      single: vi.fn().mockResolvedValue({
+        data: { id: 1, stop_id: 5, route_id: null, note: '[wrong_stop] Pin is off', created_at: '2026-07-26T00:00:00Z' },
+        error: null,
+      }),
+    } as never);
+    const req = makeRequest('POST', { stopId: 5, category: 'wrong_stop', note: 'Pin is off' });
+    const res = await POST(req);
+    expect(res.status).toBe(201);
     const json = await res.json();
-    expect(json.error.code).toBe('validation_error');
+    // The DB's crowding CHECK constraint means category is encoded into
+    // `note` (see route.ts) — the API still returns it decoded as `category`.
+    expect(json.data).toMatchObject({ id: 1, stopId: 5, category: 'wrong_stop', note: 'Pin is off' });
   });
 });
 
@@ -304,6 +255,75 @@ describe('GET /api/v1/disruptions', () => {
     expect(res.status).toBe(200);
     const json = await res.json();
     expect(Array.isArray(json.data)).toBe(true);
+  });
+});
+
+// ── GET /api/v1/station-accessibility ────────────────────────────────────────
+
+describe('GET /api/v1/station-accessibility', () => {
+  let GET: (req: NextRequest) => Promise<Response>;
+
+  beforeEach(async () => {
+    vi.resetModules();
+    ({ GET } = await import('../v1/station-accessibility/route'));
+  });
+
+  it('returns 400 on invalid stopId', async () => {
+    const req = new NextRequest('http://localhost:3000/api/v1/station-accessibility?stopId=abc');
+    const res = await GET(req);
+    expect(res.status).toBe(400);
+  });
+
+  it('returns 200 with data array on valid request (Supabase unconfigured → empty)', async () => {
+    const req = new NextRequest('http://localhost:3000/api/v1/station-accessibility');
+    const res = await GET(req);
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(Array.isArray(json.data)).toBe(true);
+  });
+
+  it('returns 400 on a non-positive stopId', async () => {
+    const req = new NextRequest('http://localhost:3000/api/v1/station-accessibility?stopId=0');
+    const res = await GET(req);
+    expect(res.status).toBe(400);
+  });
+});
+
+// ── GET /api/v1/weather/advisory ─────────────────────────────────────────────
+
+describe('GET /api/v1/weather/advisory', () => {
+  let GET: (req: NextRequest) => Promise<Response>;
+
+  beforeEach(async () => {
+    vi.resetModules();
+    ({ GET } = await import('../v1/weather/advisory/route'));
+  });
+
+  it('returns 200 with the advisory shape', async () => {
+    const req = new NextRequest('http://localhost:3000/api/v1/weather/advisory');
+    const res = await GET(req);
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(typeof json.data.heavyRainExpected).toBe('boolean');
+    expect(typeof json.data.message).toBe('string');
+  });
+
+  it('returns 429 when rate limited', async () => {
+    const { searchLimiter } = await import('@/lib/ratelimit');
+    vi.mocked(searchLimiter.limit).mockResolvedValueOnce({ success: false } as never);
+    const req = new NextRequest('http://localhost:3000/api/v1/weather/advisory');
+    const res = await GET(req);
+    expect(res.status).toBe(429);
+  });
+
+  it('never returns 500, even if the forecast fetch throws', async () => {
+    const { fetchOpenMeteoForecast } = await import('@/lib/weather');
+    vi.mocked(fetchOpenMeteoForecast).mockRejectedValueOnce(new Error('network down'));
+    const req = new NextRequest('http://localhost:3000/api/v1/weather/advisory');
+    const res = await GET(req);
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.data.heavyRainExpected).toBe(false);
   });
 });
 

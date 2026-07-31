@@ -2,7 +2,15 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { TRIP_STORAGE_KEY } from '@/lib/trip/types';
-import { supabaseBrowser } from '@/lib/supabase/browser';
+import { checkLastTrain, formatClockTime, type LastTrainCheck } from '@/lib/routing/lastTrain';
+import { beepAdjustedFare, beepAdjustedTotalFare } from '@/lib/routing/beepFare';
+import { suggestJeepneyCorridor } from '@/lib/routing/jeepneySuggest';
+import { nearestStationEntrance } from '@/lib/routing/stationEntrances';
+import { ReportIssueButton } from '@/app/components/ReportIssueSheet';
+import { t, loadLang, LANG_STORAGE_KEY, type Lang } from '@/lib/i18n';
+import { useTheme } from '@/app/providers';
+
+const BEEP_STORAGE_KEY = 'parapo:has_beep';
 
 /*
  * Planner — the primary commuter dashboard.
@@ -49,10 +57,22 @@ const FARE_REF: [string, string][] = [
 type CatalogStop = { id: number; name: string; lat: number; lng: number };
 
 type WalkLeg = { type: 'walk'; fromName: string; toName: string; fromLat: number; fromLng: number; toLat: number; toLng: number; distKm: number; durationMin: number };
-type RideLeg = { type: 'ride'; mode: string; line: { id: number; name: string; color: string }; from: { name: string; lat: number; lng: number }; to: { name: string; lat: number; lng: number }; stops: { name: string; lat: number; lng: number }[]; distKm: number; durationMin: number; fare: number; fareRule?: { baseFare: number; perKmRate: number; flagDistanceKm: number } };
+type RideLeg = { type: 'ride'; mode: string; line: { id: number; name: string; color: string }; from: { id: number; name: string; lat: number; lng: number }; to: { id: number; name: string; lat: number; lng: number }; stops: { id: number; name: string; lat: number; lng: number }[]; distKm: number; durationMin: number; fare: number; fareRule?: { baseFare: number; perKmRate: number; flagDistanceKm: number } };
 type Leg = WalkLeg | RideLeg;
-type Itinerary = { legs: Leg[]; totalDurationMin: number; totalFare: number; transfers: number; objective: string };
+type Itinerary = { legs: Leg[]; totalDurationMin: number; totalFare: number; transfers: number; objective: string; alternative?: true };
 type Disruption = { id: number; corridorId: number; description: string };
+type StationAccessibility = { stopId: number; feature: 'elevator' | 'escalator'; status: 'unknown' | 'operational' | 'out_of_service'; note: string | null };
+type RainAdvisory = { heavyRainExpected: boolean; message: string };
+// Crowdsourced vehicle estimate — see docs/api-contracts.md. Never an
+// official operator position; every surface that shows one must say so.
+type LiveVehicle = {
+  lineId: number; lineName: string; mode: string;
+  direction: 'forward' | 'backward';
+  lat: number; lng: number;
+  nearStopId: number; nearStopName: string;
+  riderCount: number; confidence: 'low' | 'medium' | 'high';
+  updatedAt: string;
+};
 type Screen = 'home' | 'loading' | 'results' | 'detail';
 type ModeFilter = 'all' | 'train' | 'bus' | 'jeepney';
 type ModeGroup = 'train' | 'bus' | 'jeepney';
@@ -64,6 +84,15 @@ const MODE_GROUPS: { key: ModeGroup; label: string; engineModes: string[] }[] = 
 ];
 
 const MY_LOCATION = 'My location';
+// Warm basemaps — Voyager (light) / Dark Matter (dark). Picked at map init
+// AND swapped on every theme change; a dark basemap under a cream page is
+// the one thing that makes the whole screen look broken.
+const TILE_URL = (isDark: boolean) => isDark
+  ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
+  : 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png';
+// Live estimates go stale after 2 min server-side, so polling faster than
+// this buys nothing but battery.
+const LIVE_POLL_MS = 20_000;
 const OBJ_LABEL: Record<string, string> = {
   fastest: 'Fastest', fewest_transfers: 'Fewest transfers', cheapest: 'Cheapest',
 };
@@ -82,6 +111,12 @@ function matchesFilter(itin: Itinerary, f: ModeFilter): boolean {
 function arriveAt(durationMin: number): string {
   return new Date(Date.now() + durationMin * 60_000)
     .toLocaleTimeString('en-PH', { hour: 'numeric', minute: '2-digit' });
+}
+
+/* Worst-first: a "closed" line always outranks a "final call" for display */
+function worstLastTrainCheck(checks: LastTrainCheck[]): LastTrainCheck | null {
+  if (checks.length === 0) return null;
+  return checks.find(c => c.status === 'closed') ?? checks[0];
 }
 
 /* Transport combination, e.g. "MRT-3 → EDSA Carousel" */
@@ -238,33 +273,57 @@ function Sheet({ children, height, style }: { children: React.ReactNode; height:
 /* ── Main ───────────────────────────────────────────────────────────────── */
 export default function Planner() {
   const router = useRouter();
+  const { theme } = useTheme();
   const [screen, setScreen]       = useState<Screen>('home');
   const [from, setFrom]           = useState('');
   const [to, setTo]               = useState('');
   const [rush, setRush]           = useState(() => { const h = new Date().getHours(); return (h >= 7 && h <= 9) || (h >= 17 && h <= 19); });
+  const [hasBeep, setHasBeep]     = useState(() => {
+    if (typeof window === 'undefined') return true;
+    try {
+      const saved = localStorage.getItem(BEEP_STORAGE_KEY);
+      return saved === null ? true : saved === 'true';
+    } catch { return true; }
+  });
   const [modeFilter, setModeFilter] = useState<ModeFilter>('all');
   const [enabledModes, setEnabledModes] = useState<Record<ModeGroup, boolean>>({ train: true, bus: true, jeepney: true });
   const [itineraries, setItineraries] = useState<Itinerary[]>([]);
   const [selected, setSelected]   = useState<Itinerary | null>(null);
   const [error, setError]         = useState<string | null>(null);
+  const [jeepneyFallback, setJeepneyFallback] = useState<ReturnType<typeof suggestJeepneyCorridor>>(null);
+  const [liveVehicles, setLiveVehicles] = useState<LiveVehicle[]>([]);
   const [stopCoords, setStopCoords] = useState<Record<string, [number, number]>>({});
   const [myLoc, setMyLoc]         = useState<[number, number] | null>(null);
   const [locBusy, setLocBusy]     = useState(false);
   const [disruptions, setDisruptions] = useState<Disruption[] | null>(null);
-  const [authed, setAuthed]       = useState<boolean | null>(null);
-  const [commuteSave, setCommuteSave] = useState<'idle' | 'saving' | 'saved' | 'failed'>('idle');
+  const [accessibilityByStop, setAccessibilityByStop] = useState<Record<number, StationAccessibility[]>>({});
+  const [rainAdvisory, setRainAdvisory] = useState<RainAdvisory | null>(null);
+  // App-shell state (map-first, TrainSight-style): the map is the home
+  // screen by default; the plan form and settings are overlays a tap opens.
+  const [formOpen, setFormOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [addingStop, setAddingStop] = useState(false);
+  const [nextStop, setNextStop] = useState('');
+  const [chainBusy, setChainBusy] = useState(false);
+  const [chainError, setChainError] = useState<string | null>(null);
+  const [lang, setLang] = useState<Lang>(loadLang);
+  function toggleLang() {
+    setLang(prev => {
+      const next: Lang = prev === 'en' ? 'tl' : 'en';
+      try { localStorage.setItem(LANG_STORAGE_KEY, next); } catch { /* noop */ }
+      return next;
+    });
+  }
   const stopNames = Object.keys(stopCoords).sort();
 
-  /* ── Login required: no session → back to /auth ───────────────────────── */
-  useEffect(() => {
-    let active = true;
-    supabaseBrowser.auth.getSession().then(({ data }) => {
-      if (!active) return;
-      if (!data.session) { router.replace('/auth?next=/planner'); return; }
-      setAuthed(true);
+  /* ── Beep card preference — persisted locally, not tied to the account ──── */
+  function toggleHasBeep() {
+    setHasBeep(prev => {
+      const next = !prev;
+      try { localStorage.setItem(BEEP_STORAGE_KEY, String(next)); } catch { /* noop */ }
+      return next;
     });
-    return () => { active = false; };
-  }, [router]);
+  }
 
   /* ── Load the stop catalog (F4) so pick lists match the routable network ── */
   useEffect(() => {
@@ -295,6 +354,33 @@ export default function Planner() {
       .then(res => res.json())
       .then((json: { data?: Disruption[] }) => { if (active) setDisruptions(json.data ?? []); })
       .catch(() => { if (active) setDisruptions(null); });
+    return () => { active = false; };
+  }, []);
+
+  /* ── Rain/flood advisory (planner home nudge) ──────────────────────────── */
+  useEffect(() => {
+    let active = true;
+    fetch('/api/v1/weather/advisory')
+      .then(res => res.json())
+      .then((json: { data?: RainAdvisory }) => { if (active && json.data?.heavyRainExpected) setRainAdvisory(json.data); })
+      .catch(() => { /* non-fatal — a missed nudge is not worth surfacing as an error */ });
+    return () => { active = false; };
+  }, []);
+
+  /* ── Station accessibility (MRT-3 elevator/escalator) — manual, best-effort */
+  useEffect(() => {
+    let active = true;
+    fetch('/api/v1/station-accessibility')
+      .then(res => res.json())
+      .then((json: { data?: StationAccessibility[] }) => {
+        if (!active) return;
+        const map: Record<number, StationAccessibility[]> = {};
+        for (const row of json.data ?? []) {
+          (map[row.stopId] ??= []).push(row);
+        }
+        setAccessibilityByStop(map);
+      })
+      .catch(() => { /* non-fatal — absence of this data doesn't block planning */ });
     return () => { active = false; };
   }, []);
 
@@ -331,9 +417,10 @@ export default function Planner() {
   const mapElRef    = useRef<HTMLDivElement>(null);
   const mapRef      = useRef<unknown>(null);
   const routeGroup  = useRef<unknown>(null);
+  const liveGroup   = useRef<unknown>(null);
+  const tileRef     = useRef<unknown>(null);
 
   useEffect(() => {
-    if (authed !== true) return; // container renders only after the auth gate
     if (!mapElRef.current || mapRef.current) return;
     let cancelled = false;
 
@@ -350,10 +437,7 @@ export default function Planner() {
       const L = mod.default ?? mod;
 
       const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
-      // Warm basemaps — Voyager (light) / Dark Matter (dark)
-      const tileUrl = isDark
-        ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
-        : 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png';
+      const tileUrl = TILE_URL(isDark);
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const map = (L as any).map(mapElRef.current, {
@@ -364,7 +448,7 @@ export default function Planner() {
       });
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (L as any).tileLayer(tileUrl, {
+      tileRef.current = (L as any).tileLayer(tileUrl, {
         attribution: '© OpenStreetMap contributors © CARTO',
         subdomains: 'abcd', maxZoom: 19,
       }).addTo(map);
@@ -374,11 +458,14 @@ export default function Planner() {
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       routeGroup.current = (L as any).layerGroup().addTo(map);
+      // Separate layer so live vehicles survive a route redraw and vice versa.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      liveGroup.current = (L as any).layerGroup().addTo(map);
       mapRef.current = map;
     });
 
     return () => { cancelled = true; };
-  }, [authed]);
+  }, []);
 
   /* ── Draw the selected route — single ink line, dashed walks ──────────── */
   const drawRoute = useCallback(() => {
@@ -446,35 +533,76 @@ export default function Planner() {
     }
   }, [screen]);
 
-  /* ── Save the current origin/destination as a commute (F5) ────────────── */
-  async function saveCommute() {
-    const origin = originCoords(from), dest = stopCoords[to];
-    if (!origin || !dest) return;
-    setCommuteSave('saving');
-    try {
-      const session = (await supabaseBrowser.auth.getSession()).data.session;
-      if (!session) { setCommuteSave('failed'); return; }
-      const res = await fetch('/api/v1/me/routes', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
-        body: JSON.stringify({
-          name: `${from} → ${to}`,
-          originLat: origin[0], originLng: origin[1], originName: from,
-          destLat: dest[0], destLng: dest[1], destName: to,
-        }),
+  /* ── Keep the basemap in step with the theme toggle ───────────────────── */
+  useEffect(() => {
+    if (!tileRef.current) return;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (tileRef.current as any).setUrl(TILE_URL(theme === 'dark'));
+    // Route/vehicle colours are baked into the drawn layers, so they need a
+    // redraw too — otherwise cobalt-on-cream lines stay on a dark basemap.
+    drawRoute();
+  }, [theme, drawRoute]);
+
+  /* ── Live vehicles — crowdsourced, never an official feed ─────────────── */
+  useEffect(() => {
+    let cancelled = false;
+
+    const draw = (vehicles: LiveVehicle[]) => {
+      if (!liveGroup.current) return;
+      import('leaflet').then(mod => {
+        if (cancelled) return;
+        const L = mod.default ?? mod;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const group = liveGroup.current as any;
+        group.clearLayers();
+
+        const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+        const accent = isDark ? '#7A90FF' : '#2947DE';
+
+        for (const v of vehicles) {
+          // A single-rider estimate is drawn hollow and smaller — the map
+          // should look less certain when the data is less certain.
+          const solid = v.confidence !== 'low';
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const marker = (L as any).circleMarker([v.lat, v.lng], {
+            radius: solid ? 8 : 6,
+            fillColor: accent,
+            fillOpacity: solid ? 0.95 : 0.35,
+            color: isDark ? '#000' : '#fff',
+            weight: 2.5,
+          }).addTo(group);
+          marker.bindTooltip(
+            `${v.lineName} · near ${v.nearStopName}<br>` +
+            `<span style="opacity:.7">Estimated from ${v.riderCount} rider${v.riderCount > 1 ? 's' : ''} — not an official position</span>`,
+            { direction: 'top', offset: [0, -8] },
+          );
+        }
       });
-      setCommuteSave(res.ok ? 'saved' : 'failed');
-    } catch {
-      setCommuteSave('failed');
-    }
-  }
+    };
+
+    const poll = async () => {
+      try {
+        const res = await fetch('/api/v1/live/vehicles');
+        if (!res.ok) return;
+        const json = await res.json() as { data?: LiveVehicle[] };
+        if (cancelled) return;
+        const vehicles = json.data ?? [];
+        setLiveVehicles(vehicles);
+        draw(vehicles);
+      } catch { /* live hints are optional — never break the planner */ }
+    };
+
+    poll();
+    const id = setInterval(poll, LIVE_POLL_MS);
+    return () => { cancelled = true; clearInterval(id); };
+  }, []);
 
   /* ── Search ──────────────────────────────────────────────────────────── */
   async function search() {
     const origin = originCoords(from), dest = stopCoords[to];
     if (!origin || !dest) return;
     const excludeModes = MODE_GROUPS.filter(g => !enabledModes[g.key]).flatMap(g => g.engineModes);
-    setError(null); setModeFilter('all'); setCommuteSave('idle'); setScreen('loading');
+    setError(null); setJeepneyFallback(null); setModeFilter('all'); setFormOpen(false); setScreen('loading');
     try {
       const res = await fetch('/api/v1/routes/plan', {
         method: 'POST',
@@ -487,11 +615,66 @@ export default function Planner() {
         }),
       });
       const json = await res.json() as { data?: Itinerary[]; error?: { message: string } };
-      if (!res.ok || json.error) { setError(json.error?.message ?? 'No route found.'); setScreen('home'); return; }
+      if (!res.ok || json.error) {
+        setError(json.error?.message ?? 'No route found.');
+        // No tracked itinerary exists at all — before giving up, check
+        // whether the raw origin/destination sit near a known jeepney
+        // thoroughfare (see lib/routing/jeepneySuggest.ts). This is the
+        // same honest "not a routed leg" suggestion shown inline on walk
+        // gaps, surfaced here too so a jeepney-only search doesn't just
+        // dead-end with a bare error when a real (untracked) option exists.
+        setJeepneyFallback(suggestJeepneyCorridor(origin[0], origin[1], dest[0], dest[1]));
+        setFormOpen(true); setScreen('home'); return;
+      }
       setItineraries(json.data ?? []);
       setScreen('results');
     } catch {
-      setError('Network error — check your connection.'); setScreen('home');
+      setError('Network error — check your connection.'); setFormOpen(true); setScreen('home');
+    }
+  }
+
+  /* ── Multi-stop chaining: plan a second leg from the current itinerary's
+     destination, then splice both into one combined Itinerary. Reuses the
+     same planning endpoint twice — no routing-engine changes. ────────────── */
+  async function addAnotherStop() {
+    if (!selected) return;
+    const dest = stopCoords[nextStop];
+    if (!dest) return;
+    const lastLeg = selected.legs.at(-1);
+    if (!lastLeg) return;
+    const chainOrigin = lastLeg.type === 'walk'
+      ? { lat: lastLeg.toLat, lng: lastLeg.toLng }
+      : { lat: lastLeg.to.lat, lng: lastLeg.to.lng };
+
+    setChainBusy(true); setChainError(null);
+    try {
+      const res = await fetch('/api/v1/routes/plan', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ origin: chainOrigin, destination: { lat: dest[0], lng: dest[1] }, rush }),
+      });
+      const json = await res.json() as { data?: Itinerary[]; error?: { message: string } };
+      if (!res.ok || json.error || !json.data || json.data.length === 0) {
+        setChainError(json.error?.message ?? 'No route found to that stop.');
+        return;
+      }
+      const nextLeg = json.data.find(it => it.objective === selected.objective) ?? json.data[0];
+
+      const combined: Itinerary = {
+        legs: [...selected.legs, ...nextLeg.legs],
+        totalDurationMin: selected.totalDurationMin + nextLeg.totalDurationMin,
+        totalFare: selected.totalFare + nextLeg.totalFare,
+        transfers: selected.transfers + nextLeg.transfers,
+        objective: selected.objective,
+      };
+      setSelected(combined);
+      setTo(nextStop);
+      setAddingStop(false);
+      setNextStop('');
+    } catch {
+      setChainError('Network error — check your connection.');
+    } finally {
+      setChainBusy(false);
     }
   }
 
@@ -509,21 +692,14 @@ export default function Planner() {
 
   const canSearch = Boolean(from && to && from !== to && originCoords(from) && stopCoords[to] && Object.values(enabledModes).some(Boolean));
 
-  /* Hold rendering until the session check settles (redirects when absent) */
-  if (authed !== true) {
-    return (
-      <div style={{ position: 'fixed', inset: 0, background: C.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Inter,system-ui,sans-serif', color: C.muted, fontSize: 14 }}>
-        Checking session…
-      </div>
-    );
-  }
-
-  /* Service status line — one glance, no chrome */
-  const statusLine = disruptions === null
-    ? null
-    : disruptions.length === 0
-      ? <Micro color={C.accent}>● All lines running normally</Micro>
-      : <Micro color={C.ink} style={{ letterSpacing: '0.04em' }}>▲ {disruptions.length} service alert{disruptions.length > 1 ? 's' : ''} — {disruptions[0].description}</Micro>;
+  /* Service status detail — shown as a banner under the top pill when there are alerts */
+  const statusDetail = disruptions && disruptions.length > 0
+    ? (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+          <Micro color={C.ink} style={{ letterSpacing: '0.04em' }}>▲ {disruptions.length} route update{disruptions.length > 1 ? 's' : ''} — {disruptions[0].description}</Micro>
+        </div>
+      )
+    : null;
 
   return (
     <div style={{ position: 'fixed', inset: 0, fontFamily: 'Inter,system-ui,sans-serif', background: C.bg }}>
@@ -535,113 +711,224 @@ export default function Planner() {
       {/* ════════ HOME ════════ */}
       {screen === 'home' && (
         <>
-          <div style={{ position: 'absolute', top: 0, left: 0, right: 0, zIndex: 10, padding: '52px 20px 0', display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-            <span style={{ fontFamily: DISPLAY, fontSize: 22, fontWeight: 800, letterSpacing: '-0.02em', color: C.accent }}>
-              ParaPo<span style={{ color: C.ink }}>.</span>
-            </span>
-            <div style={{ display: 'flex', gap: 8 }}>
-              <a href="/me" style={{ fontSize: 12, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: '#fff', textDecoration: 'none', background: C.accent, borderRadius: 999, padding: '8px 16px' }}>
-                My trips
-              </a>
-              <button
-                onClick={async () => { await supabaseBrowser.auth.signOut(); window.location.href = '/auth'; }}
-                style={{ fontSize: 12, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: C.ink, cursor: 'pointer', fontFamily: 'inherit', background: C.card, border: `1px solid ${C.border}`, borderRadius: 999, padding: '8px 16px' }}
-              >
-                Sign out
-              </button>
+          {/* ── App-shell top bar: logo+status pill (left), settings gear (right) ── */}
+          <div style={{ position: 'absolute', top: 0, left: 0, right: 0, zIndex: 10, padding: '52px 20px 0', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: 10, background: C.surface,
+              border: `1px solid ${C.border}`, borderRadius: 999, padding: '10px 16px',
+              boxShadow: '0 2px 12px rgba(0,0,0,0.08)',
+            }}>
+              <span style={{ fontFamily: DISPLAY, fontSize: 16, fontWeight: 800, letterSpacing: '-0.02em', color: C.accent }}>
+                ParaPo<span style={{ color: C.ink }}>.</span>
+              </span>
+              <div style={{ width: 1, height: 14, background: C.border }} />
+              {disruptions === null ? (
+                <Micro>…</Micro>
+              ) : disruptions.length === 0 ? (
+                <Micro color={C.accent}>● No major disruptions</Micro>
+              ) : (
+                <Micro color={C.ink}>▲ {disruptions.length} notice{disruptions.length > 1 ? 's' : ''}</Micro>
+              )}
+              {/* Only appears when riders are actually contributing — an
+                  empty live map shows nothing rather than a zero. */}
+              {liveVehicles.length > 0 && (
+                <>
+                  <div style={{ width: 1, height: 14, background: C.border }} />
+                  <Micro color={C.accent}>◉ {liveVehicles.length} on the map</Micro>
+                </>
+              )}
             </div>
+            <button
+              onClick={() => setSettingsOpen(true)}
+              aria-label="Settings"
+              style={{
+                width: 40, height: 40, borderRadius: '50%', flexShrink: 0,
+                background: C.surface, border: `1px solid ${C.border}`,
+                boxShadow: '0 2px 12px rgba(0,0,0,0.08)', cursor: 'pointer',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 17,
+              }}
+            >
+              ⚙️
+            </button>
           </div>
 
-          <Sheet height="auto" style={{ maxHeight: '62vh' }}>
-            <div style={{ overflowY: 'auto', padding: '14px 24px 28px', display: 'flex', flexDirection: 'column' }}>
-              {statusLine && <div style={{ marginBottom: 18 }}>{statusLine}</div>}
+          {/* Service alert detail — floats under the top pill */}
+          {statusDetail && (
+            <div style={{ position: 'absolute', top: 110, left: 20, right: 20, zIndex: 9, padding: '12px 14px', borderRadius: 14, background: C.surface, border: `1px solid ${C.border}`, boxShadow: '0 4px 16px rgba(0,0,0,0.1)' }}>
+              {statusDetail}
+            </div>
+          )}
 
-              {error && (
-                <p style={{ margin: '0 0 16px', fontSize: 13, fontWeight: 600, color: C.error }}>{error}</p>
-              )}
+          {/* Rain advisory — floats over the map regardless of form state */}
+          {rainAdvisory && (
+            <div style={{ position: 'absolute', top: statusDetail ? 172 : 110, left: 20, right: 20, zIndex: 9, padding: '12px 14px', borderRadius: 14, background: C.error, color: '#FFFFFF', boxShadow: '0 4px 16px rgba(0,0,0,0.15)' }}>
+              <p style={{ margin: 0, fontSize: 13, fontWeight: 700, lineHeight: 1.5 }}>{rainAdvisory.message}</p>
+            </div>
+          )}
 
-              {/* From / To — typography only */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 18, flexShrink: 0 }}>
-                <div>
-                  <StopRow label="From" value={from} onChange={setFrom} placeholder="Choose a stop" stops={stopNames} extraOption={myLoc ? MY_LOCATION : undefined} />
-                  <button onClick={useMyLocation} disabled={locBusy} style={{ background: 'none', border: 'none', padding: '8px 0 0', fontSize: 13, fontWeight: 700, color: C.accent, cursor: 'pointer', fontFamily: 'inherit', letterSpacing: '0.02em' }}>
-                    {locBusy ? 'Locating…' : from === MY_LOCATION ? '● Using current location' : '◉ Use current location'}
+          {!formOpen ? (
+            /* ── Collapsed: map is the whole screen, one search bar at the bottom ── */
+            <button
+              onClick={() => setFormOpen(true)}
+              style={{
+                position: 'absolute', left: 20, right: 20, bottom: 'calc(24px + env(safe-area-inset-bottom))', zIndex: 10,
+                display: 'flex', alignItems: 'center', gap: 12,
+                background: C.surface, border: `1px solid ${C.border}`, borderRadius: 999,
+                padding: '16px 20px', cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left',
+                boxShadow: '0 4px 20px rgba(0,0,0,0.12)',
+              }}
+            >
+              <span style={{ fontSize: 17 }}>🔍</span>
+              <span style={{ fontSize: 15, fontWeight: from && to ? 700 : 500, color: from && to ? C.ink : C.muted }}>
+                {from && to ? `${from} → ${to}` : t(lang, 'choose_a_stop')}
+              </span>
+            </button>
+          ) : (
+            /* ── Expanded: the plan form ── */
+            <Sheet height="auto" style={{ maxHeight: '62vh' }}>
+              <div style={{ overflowY: 'auto', padding: '14px 24px 28px', display: 'flex', flexDirection: 'column' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+                  <Micro>Plan a trip</Micro>
+                  <button onClick={() => setFormOpen(false)} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: 13, fontWeight: 700, color: C.muted, fontFamily: 'inherit' }}>
+                    ✕ Close
                   </button>
                 </div>
-                <StopRow label="To" value={to} onChange={setTo} placeholder="Choose a stop" stops={stopNames} />
-                <button onClick={() => { if (from !== MY_LOCATION) { const t = from; setFrom(to); setTo(t); } }} style={{ alignSelf: 'flex-end', background: 'none', border: 'none', fontSize: 13, fontWeight: 700, color: from === MY_LOCATION ? C.border : C.muted, cursor: 'pointer', fontFamily: 'inherit', marginTop: -8 }}>
-                  ⇅ Swap
+
+                {error && (
+                  <div style={{ margin: '0 0 16px' }}>
+                    <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: C.error }}>
+                      {jeepneyFallback
+                        ? "No tracked route covers this trip yet — but here's a real jeepney thoroughfare that does:"
+                        : error}
+                    </p>
+                    {jeepneyFallback && (
+                      <div style={{
+                        marginTop: 10, padding: '12px 14px', borderRadius: 14,
+                        border: `1.5px dashed ${C.border}`, background: C.surface,
+                      }}>
+                        <p style={{ margin: 0, fontSize: 13, fontWeight: 700, color: C.ink }}>
+                          Ask a jeepney toward {jeepneyFallback.towardLabel}
+                        </p>
+                        <p className="tnum" style={{ margin: '3px 0 0', fontSize: 12, color: C.muted }}>
+                          {jeepneyFallback.corridorName} · ~₱{jeepneyFallback.fareLow === jeepneyFallback.fareHigh ? jeepneyFallback.fareLow.toFixed(0) : `${jeepneyFallback.fareLow.toFixed(0)}–${jeepneyFallback.fareHigh.toFixed(0)}`} · not a tracked route, no schedule
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* From / To — typography only */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 18, flexShrink: 0 }}>
+                  <div>
+                    <StopRow label="From" value={from} onChange={setFrom} placeholder={t(lang, 'choose_a_stop')} stops={stopNames} extraOption={myLoc ? MY_LOCATION : undefined} />
+                    <button onClick={useMyLocation} disabled={locBusy} style={{ background: 'none', border: 'none', padding: '8px 0 0', fontSize: 13, fontWeight: 700, color: C.accent, cursor: 'pointer', fontFamily: 'inherit', letterSpacing: '0.02em' }}>
+                      {locBusy ? 'Locating…' : from === MY_LOCATION ? `● ${t(lang, 'use_current_location')}` : `◉ ${t(lang, 'use_current_location')}`}
+                    </button>
+                  </div>
+                  <StopRow label="To" value={to} onChange={setTo} placeholder={t(lang, 'choose_a_stop')} stops={stopNames} />
+                  <button onClick={() => { if (from !== MY_LOCATION) { const t = from; setFrom(to); setTo(t); } }} style={{ alignSelf: 'flex-end', background: 'none', border: 'none', fontSize: 13, fontWeight: 700, color: from === MY_LOCATION ? C.border : C.muted, cursor: 'pointer', fontFamily: 'inherit', marginTop: -8 }}>
+                    ⇅ Swap
+                  </button>
+                </div>
+
+                {!Object.values(enabledModes).some(Boolean) && (
+                  <p style={{ margin: '14px 0 0', fontSize: 12, fontWeight: 600, color: C.error }}>
+                    All transport modes are off — enable at least one in Settings.
+                  </p>
+                )}
+
+                {/* CTA */}
+                <button
+                  onClick={search}
+                  disabled={!canSearch}
+                  style={{
+                    width: '100%', border: 'none', borderRadius: 999, padding: '17px', margin: '22px 0 0',
+                    fontSize: 15, fontWeight: 700, letterSpacing: '0.01em', flexShrink: 0,
+                    cursor: canSearch ? 'pointer' : 'default',
+                    background: canSearch ? 'var(--gradient-primary)' : C.cardEl,
+                    color: canSearch ? C.onPrimary : C.muted,
+                    fontFamily: 'inherit',
+                    boxShadow: canSearch ? '0 6px 18px rgba(41,71,222,0.25)' : 'none',
+                  }}
+                >
+                  {t(lang, 'find_routes')}
                 </button>
               </div>
+            </Sheet>
+          )}
 
-              {/* Transport modes — text toggles */}
-              <div style={{ margin: '18px 0 0', flexShrink: 0 }}>
-                <Micro>Transport modes</Micro>
-                <div style={{ display: 'flex', gap: 10, marginTop: 10 }}>
-                  {MODE_GROUPS.map(g => {
-                    const on = enabledModes[g.key];
-                    return (
-                      <button key={g.key}
-                        onClick={() => setEnabledModes(prev => ({ ...prev, [g.key]: !prev[g.key] }))}
-                        style={{
-                          cursor: 'pointer', fontFamily: 'inherit',
-                          fontSize: 14, fontWeight: 700, padding: '9px 18px',
-                          borderRadius: 999, transition: 'all 0.15s',
-                          background: on ? C.accent : 'transparent',
-                          color: on ? '#FFFFFF' : C.body,
-                          border: `1.5px solid ${on ? C.accent : C.border}`,
-                        }}
-                      >
-                        {g.label}{on ? ' ✓' : ''}
-                      </button>
-                    );
-                  })}
+          {/* ── Settings overlay: transport modes, rush hour, Beep, language, fares ── */}
+          {settingsOpen && (
+            <Sheet height="auto" style={{ maxHeight: '78vh' }}>
+              <div style={{ overflowY: 'auto', padding: '14px 24px 28px', display: 'flex', flexDirection: 'column' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 }}>
+                  <Micro>Settings</Micro>
+                  <button onClick={() => setSettingsOpen(false)} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: 13, fontWeight: 700, color: C.muted, fontFamily: 'inherit' }}>
+                    ✕ Close
+                  </button>
                 </div>
-                {!Object.values(enabledModes).some(Boolean) && (
-                  <p style={{ margin: '8px 0 0', fontSize: 12, fontWeight: 600, color: C.error }}>Pick at least one mode.</p>
-                )}
-              </div>
 
-              {/* Rush hour — one text row */}
-              <button onClick={() => setRush(!rush)} style={{ background: 'none', border: 'none', padding: 0, margin: '18px 0 0', cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left', flexShrink: 0 }}>
-                <Micro color={rush ? C.ink : C.muted}>Rush hour {rush ? 'on' : 'off'} · 7–9 am · 5–7 pm</Micro>
-              </button>
-
-              {/* CTA */}
-              <button
-                onClick={search}
-                disabled={!canSearch}
-                style={{
-                  width: '100%', border: 'none', borderRadius: 999, padding: '17px', margin: '22px 0 0',
-                  fontSize: 15, fontWeight: 700, letterSpacing: '0.01em', flexShrink: 0,
-                  cursor: canSearch ? 'pointer' : 'default',
-                  background: canSearch ? 'var(--gradient-primary)' : C.cardEl,
-                  color: canSearch ? C.onPrimary : C.muted,
-                  fontFamily: 'inherit',
-                  boxShadow: canSearch ? '0 6px 18px rgba(41,71,222,0.25)' : 'none',
-                }}
-              >
-                Find routes
-              </button>
-
-              {/* Fare reference — plain text */}
-              <div style={{ margin: '28px 0 0', flexShrink: 0 }}>
-                <Micro>2026 fare rates</Micro>
-                <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  {FARE_REF.map(([mode, ref]) => (
-                    <div key={mode} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14 }}>
-                      <span style={{ fontWeight: 700, color: C.ink }}>{mode}</span>
-                      <span className="tnum" style={{ color: C.body }}>{ref}</span>
-                    </div>
-                  ))}
+                {/* Transport modes — text toggles */}
+                <div style={{ flexShrink: 0 }}>
+                  <Micro>{t(lang, 'transport_modes')}</Micro>
+                  <div style={{ display: 'flex', gap: 10, marginTop: 10, flexWrap: 'wrap' }}>
+                    {MODE_GROUPS.map(g => {
+                      const on = enabledModes[g.key];
+                      return (
+                        <button key={g.key}
+                          onClick={() => setEnabledModes(prev => ({ ...prev, [g.key]: !prev[g.key] }))}
+                          style={{
+                            cursor: 'pointer', fontFamily: 'inherit',
+                            fontSize: 14, fontWeight: 700, padding: '9px 18px',
+                            borderRadius: 999, transition: 'all 0.15s',
+                            background: on ? C.accent : 'transparent',
+                            color: on ? '#FFFFFF' : C.body,
+                            border: `1.5px solid ${on ? C.accent : C.border}`,
+                          }}
+                        >
+                          {g.label}{on ? ' ✓' : ''}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
-                <p style={{ margin: '12px 0 0', fontSize: 11, color: C.muted, lineHeight: 1.6 }}>
-                  LTFRB/DOTr-approved · per boarding, not per segment ·
-                  MRT-3 &amp; LRT-2 include the 50% DOTr discount (since Mar 23, 2026; LRT-1 not covered)
-                </p>
+
+                {/* Rush hour — one text row */}
+                <button onClick={() => setRush(!rush)} style={{ background: 'none', border: 'none', padding: 0, margin: '20px 0 0', cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left', flexShrink: 0 }}>
+                  <Micro color={rush ? C.ink : C.muted}>Rush hour {rush ? 'on' : 'off'} · 7–9 am · 5–7 pm</Micro>
+                </button>
+
+                {/* Beep card — adjusts fare display, doesn't change routing */}
+                <button onClick={toggleHasBeep} style={{ background: 'none', border: 'none', padding: 0, margin: '14px 0 0', cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left', flexShrink: 0 }}>
+                  <Micro color={hasBeep ? C.ink : C.muted}>
+                    {hasBeep ? '✓ I have a Beep card' : 'Paying cash / no Beep card'}
+                  </Micro>
+                </button>
+
+                {/* Language — English / Taglish, key strings only */}
+                <button onClick={toggleLang} style={{ background: 'none', border: 'none', padding: 0, margin: '14px 0 0', cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left', flexShrink: 0 }}>
+                  <Micro color={C.muted}>{lang === 'tl' ? 'Wika: Taglish' : 'Language: English'} · {lang === 'tl' ? 'Switch to English' : 'Switch sa Taglish'}</Micro>
+                </button>
+
+                {/* Fare reference — plain text */}
+                <div style={{ margin: '28px 0 0', flexShrink: 0 }}>
+                  <Micro>2026 fare rates</Micro>
+                  <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    {FARE_REF.map(([mode, ref]) => (
+                      <div key={mode} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14 }}>
+                        <span style={{ fontWeight: 700, color: C.ink }}>{mode}</span>
+                        <span className="tnum" style={{ color: C.body }}>{ref}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <p style={{ margin: '12px 0 0', fontSize: 11, color: C.muted, lineHeight: 1.6 }}>
+                    LTFRB/DOTr-approved · per boarding, not per segment ·
+                    MRT-3 &amp; LRT-2 include the 50% DOTr discount (since Mar 23, 2026; LRT-1 not covered)
+                  </p>
+                </div>
               </div>
-            </div>
-          </Sheet>
+            </Sheet>
+          )}
         </>
       )}
 
@@ -703,11 +990,17 @@ export default function Planner() {
                     <p style={{ fontSize: 13, color: C.muted }}>Try a different filter or stops farther apart.</p>
                   </div>
                 ) : filtered.map((itin, idx) => {
+                  const displayFare = beepAdjustedTotalFare(itin.legs.filter(l => l.type === 'ride') as RideLeg[], hasBeep);
                   // Don't claim "cheapest" when another shown route is cheaper
-                  const minFare = Math.min(...filtered.map(x => x.totalFare));
-                  const objLabel = itin.objective === 'cheapest' && itin.totalFare > minFare
-                    ? 'Alternative'
-                    : OBJ_LABEL[itin.objective] ?? itin.objective;
+                  const minFare = Math.min(...filtered.map(x => beepAdjustedTotalFare(x.legs.filter(l => l.type === 'ride') as RideLeg[], hasBeep)));
+                  // An alternative is a different way to make the trip, not the
+                  // winner of an objective — labelling it "Fastest" would be a lie.
+                  const objLabel = itin.alternative
+                    ? 'Another way'
+                    : itin.objective === 'cheapest' && displayFare > minFare
+                      ? 'Alternative'
+                      : OBJ_LABEL[itin.objective] ?? itin.objective;
+                  const worstRail = worstLastTrainCheck(checkLastTrain(itin.legs));
                   return (
                   <button key={idx} onClick={() => { setSelected(itin); setScreen('detail'); }}
                     style={{ display: 'block', width: '100%', background: C.card, border: `1px solid ${C.border}`, borderRadius: 20, padding: '16px 18px', marginBottom: 12, cursor: 'pointer', textAlign: 'left', fontFamily: 'inherit' }}
@@ -718,7 +1011,7 @@ export default function Planner() {
                         {itin.totalDurationMin}<span style={{ fontFamily: 'inherit', fontSize: 15, fontWeight: 600, color: C.muted }}> min</span>
                       </span>
                       <span className="tnum" style={{ fontFamily: DISPLAY, fontSize: 24, fontWeight: 800, color: C.accent, letterSpacing: '-0.02em' }}>
-                        ₱{itin.totalFare.toFixed(2)}
+                        ₱{displayFare.toFixed(2)}
                       </span>
                     </div>
                     <p className="tnum" style={{ margin: '6px 0 0', fontSize: 14, color: C.body }}>
@@ -728,6 +1021,16 @@ export default function Planner() {
                       {comboLabel(itin)}
                     </p>
                     <JourneyBar itin={itin} />
+                    {worstRail && (
+                      <p style={{
+                        margin: '10px 0 0', fontSize: 12, fontWeight: 700,
+                        color: worstRail.status === 'closed' ? C.error : C.accent,
+                      }}>
+                        {worstRail.status === 'closed'
+                          ? `⚠ Last train has left — ${worstRail.lineName} closed at ${formatClockTime(worstRail.closesAt)}`
+                          : `⏰ You'll just make the last train — ${worstRail.lineName} boards ~${formatClockTime(worstRail.boardsAt)}`}
+                      </p>
+                    )}
                   </button>
                   );
                 })}
@@ -748,6 +1051,9 @@ export default function Planner() {
         const wazeUrl = destCoords
           ? `https://waze.com/ul?ll=${destCoords[0]},${destCoords[1]}&navigate=yes&utm_source=parapo`
           : `https://waze.com/ul?q=${encodeURIComponent(destName + ' Metro Manila')}&navigate=yes&utm_source=parapo`;
+        const worstRailCheck = worstLastTrainCheck(checkLastTrain(selected.legs));
+        const selectedRideLegs = selected.legs.filter(l => l.type === 'ride') as RideLeg[];
+        const selectedDisplayFare = beepAdjustedTotalFare(selectedRideLegs, hasBeep);
 
         return (
           <>
@@ -756,7 +1062,7 @@ export default function Planner() {
                 ← Routes
               </button>
               <span style={{ background: C.accent, borderRadius: 999, padding: '9px 16px', fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#FFFFFF' }}>
-                {OBJ_LABEL[selected.objective] ?? selected.objective}
+                {selected.alternative ? 'Another way' : OBJ_LABEL[selected.objective] ?? selected.objective}
               </span>
             </div>
 
@@ -773,40 +1079,84 @@ export default function Planner() {
                     </p>
                   </div>
                   <div style={{ textAlign: 'right' }}>
-                    <span className="tnum" style={{ fontFamily: DISPLAY, fontSize: 30, fontWeight: 800, color: C.accent, letterSpacing: '-0.02em' }}>₱{selected.totalFare.toFixed(2)}</span>
-                    <p style={{ margin: '4px 0 0', fontSize: 12, color: C.muted }}>per person</p>
+                    <span className="tnum" style={{ fontFamily: DISPLAY, fontSize: 30, fontWeight: 800, color: C.accent, letterSpacing: '-0.02em' }}>₱{selectedDisplayFare.toFixed(2)}</span>
+                    <p style={{ margin: '4px 0 0', fontSize: 12, color: C.muted }}>per person{hasBeep ? ' · Beep' : ' · cash'}</p>
                   </div>
                 </div>
 
                 <div style={{ margin: '10px 0 26px' }}><JourneyBar itin={selected} /></div>
 
+                {worstRailCheck && (
+                  <div style={{
+                    margin: '0 0 20px', padding: '12px 14px', borderRadius: 14,
+                    background: worstRailCheck.status === 'closed' ? C.error : C.accent,
+                    color: '#FFFFFF',
+                  }}>
+                    <p style={{ margin: 0, fontSize: 13, fontWeight: 700, lineHeight: 1.5 }}>
+                      {worstRailCheck.status === 'closed'
+                        ? `⚠ Last train has left — ${worstRailCheck.lineName} closed at ${formatClockTime(worstRailCheck.closesAt)}. This route won't work right now.`
+                        : `⏰ You'll just make the last train — ${worstRailCheck.lineName} boards ~${formatClockTime(worstRailCheck.boardsAt)} (closes ${formatClockTime(worstRailCheck.closesAt)}).`}
+                    </p>
+                  </div>
+                )}
+
                 {/* Step by step */}
-                <Micro>Step by step</Micro>
+                <Micro>{t(lang, 'step_by_step')}</Micro>
                 <div style={{ margin: '14px 0 28px', display: 'flex', flexDirection: 'column', gap: 20 }}>
                   {selected.legs.map((leg, i) => {
-                    if (leg.type === 'walk') return (
-                      <div key={i} style={{ display: 'flex', gap: 14 }}>
-                        <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: '0.1em', color: C.muted, width: 38, flexShrink: 0, paddingTop: 3 }}>WALK</span>
-                        <div style={{ flex: 1 }}>
-                          <p style={{ margin: 0, fontSize: 15, fontWeight: 600, color: C.ink }}>Walk to {leg.toName}</p>
-                          <p className="tnum" style={{ margin: '2px 0 0', fontSize: 12, color: C.muted }}>{leg.durationMin} min · {leg.distKm.toFixed(2)} km</p>
+                    if (leg.type === 'walk') {
+                      const jeep = suggestJeepneyCorridor(leg.fromLat, leg.fromLng, leg.toLat, leg.toLng);
+                      const isFinalLeg = i === selected.legs.length - 1;
+                      const entrance = isFinalLeg ? nearestStationEntrance(leg.fromName, leg.toLat, leg.toLng) : null;
+                      return (
+                      <div key={i}>
+                        <div style={{ display: 'flex', gap: 14 }}>
+                          <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: '0.1em', color: C.muted, width: 38, flexShrink: 0, paddingTop: 3 }}>WALK</span>
+                          <div style={{ flex: 1 }}>
+                            <p style={{ margin: 0, fontSize: 15, fontWeight: 600, color: C.ink }}>{t(lang, 'walk_to', { stop: leg.toName })}</p>
+                            <p className="tnum" style={{ margin: '2px 0 0', fontSize: 12, color: C.muted }}>{leg.durationMin} min · {leg.distKm.toFixed(2)} km</p>
+                            {entrance && (
+                              <p style={{ margin: '4px 0 0', fontSize: 12, color: C.accent, fontWeight: 600 }}>
+                                Exit via the {entrance.label} — closer to your destination
+                              </p>
+                            )}
+                          </div>
+                          <span style={{ fontSize: 13, fontWeight: 600, color: C.muted }}>Free</span>
                         </div>
-                        <span style={{ fontSize: 13, fontWeight: 600, color: C.muted }}>Free</span>
+                        {jeep && (
+                          <div style={{
+                            marginLeft: 52, marginTop: 8, padding: '10px 12px', borderRadius: 12,
+                            border: `1.5px dashed ${C.border}`, background: C.surface,
+                          }}>
+                            <p style={{ margin: 0, fontSize: 12, fontWeight: 700, color: C.body }}>
+                              Suggested — ask a jeepney toward {jeep.towardLabel}
+                            </p>
+                            <p className="tnum" style={{ margin: '3px 0 0', fontSize: 11, color: C.muted }}>
+                              {jeep.corridorName} · ~₱{jeep.fareLow.toFixed(0)}–{jeep.fareHigh.toFixed(0)} · not a tracked route, no schedule
+                            </p>
+                          </div>
+                        )}
                       </div>
-                    );
+                      );
+                    }
                     const ride = leg as RideLeg;
                     const meta = MODE_META[ride.mode] ?? { label: ride.mode.toUpperCase(), shade: C.muted };
                     // Jeepneys have no fixed schedule, so a per-leg minute figure
                     // is misleading — show board/alight stops instead. The leg's
                     // travel time still rolls into the overall trip ETA above.
                     const noSchedule = ride.mode === 'jeepney';
+                    const beepFare = beepAdjustedFare(ride, hasBeep);
+                    const outages = ride.mode === 'mrt'
+                      ? [...(accessibilityByStop[ride.from.id] ?? []), ...(accessibilityByStop[ride.to.id] ?? [])]
+                          .filter(a => a.status === 'out_of_service')
+                      : [];
                     return (
                       <div key={i} style={{ display: 'flex', gap: 14 }}>
                         <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: '0.1em', color: C.ink, width: 38, flexShrink: 0, paddingTop: 3 }}>{meta.label}</span>
                         <div style={{ flex: 1 }}>
                           <p style={{ margin: 0, fontSize: 15, fontWeight: 700, color: C.ink, letterSpacing: '-0.01em' }}>{ride.line.name}</p>
                           <p style={{ margin: '2px 0 0', fontSize: 13, color: C.body }}>
-                            {noSchedule ? 'Board' : ''} {ride.from.name} → {ride.to.name}
+                            {noSchedule ? t(lang, 'board_here') : ''} {ride.from.name} → {ride.to.name}
                           </p>
                           <p className="tnum" style={{ margin: '2px 0 0', fontSize: 12, color: C.muted }}>
                             {ride.stops.length} stop{ride.stops.length !== 1 ? 's' : ''} · {ride.distKm.toFixed(1)} km
@@ -814,7 +1164,7 @@ export default function Planner() {
                           </p>
                           {noSchedule && (
                             <p style={{ margin: '2px 0 0', fontSize: 12, color: C.muted, fontStyle: 'italic' }}>
-                              No fixed schedule — ride until your stop
+                              {t(lang, 'no_fixed_schedule')}
                             </p>
                           )}
                           {ride.stops.length > 2 && (
@@ -822,15 +1172,24 @@ export default function Planner() {
                               {ride.stops.map(s => s.name).join(' → ')}
                             </p>
                           )}
+                          {beepFare.note && (
+                            <p style={{ margin: '6px 0 0', fontSize: 11, color: C.accent, fontWeight: 600 }}>{beepFare.note}</p>
+                          )}
+                          {outages.map((a, oi) => (
+                            <p key={oi} style={{ margin: '4px 0 0', fontSize: 11, color: C.error, fontWeight: 600 }}>
+                              ⚠ {a.feature === 'elevator' ? 'Elevator' : 'Escalator'} reported out of service
+                              {a.note ? ` — ${a.note}` : ''}
+                            </p>
+                          ))}
                         </div>
-                        <span className="tnum" style={{ fontSize: 15, fontWeight: 700, color: C.ink }}>₱{ride.fare.toFixed(2)}</span>
+                        <span className="tnum" style={{ fontSize: 15, fontWeight: 700, color: C.ink }}>₱{beepFare.displayFare.toFixed(2)}</span>
                       </div>
                     );
                   })}
                 </div>
 
                 {/* Fare breakdown — receipt typography */}
-                <Micro>Fare breakdown</Micro>
+                <Micro>{t(lang, 'fare_breakdown')}{!hasBeep ? ' (cash / no Beep card)' : ''}</Micro>
                 <div style={{ margin: '14px 0 0', display: 'flex', flexDirection: 'column', gap: 12 }}>
                   {selected.legs.map((leg, i) => {
                     if (leg.type === 'walk') return (
@@ -841,19 +1200,21 @@ export default function Planner() {
                     );
                     const ride = leg as RideLeg;
                     const formula = fareFormula(ride);
+                    const beepFare = beepAdjustedFare(ride, hasBeep);
                     return (
                       <div key={i}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14 }}>
                           <span style={{ fontWeight: 700, color: C.ink }}>{ride.line.name} <span className="tnum" style={{ fontWeight: 400, color: C.muted }}>{ride.distKm.toFixed(1)} km</span></span>
-                          <span className="tnum" style={{ fontWeight: 700, color: C.ink }}>₱{ride.fare.toFixed(2)}</span>
+                          <span className="tnum" style={{ fontWeight: 700, color: C.ink }}>₱{beepFare.displayFare.toFixed(2)}</span>
                         </div>
                         {formula && <p className="tnum" style={{ margin: '2px 0 0', fontSize: 12, color: C.muted }}>{formula}</p>}
+                        {beepFare.note && <p style={{ margin: '2px 0 0', fontSize: 11, color: C.accent, fontWeight: 600 }}>{beepFare.note}</p>}
                       </div>
                     );
                   })}
                   <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: 12, borderTop: `1px solid ${C.border}` }}>
-                    <span style={{ fontSize: 15, fontWeight: 800, color: C.ink }}>Total per person</span>
-                    <span className="tnum" style={{ fontSize: 18, fontWeight: 800, color: C.ink }}>₱{selected.totalFare.toFixed(2)}</span>
+                    <span style={{ fontSize: 15, fontWeight: 800, color: C.ink }}>{t(lang, 'total_per_person')}</span>
+                    <span className="tnum" style={{ fontSize: 18, fontWeight: 800, color: C.ink }}>₱{selectedDisplayFare.toFixed(2)}</span>
                   </div>
                 </div>
 
@@ -868,7 +1229,7 @@ export default function Planner() {
                     background: 'var(--gradient-primary)', color: C.onPrimary, letterSpacing: '0.01em',
                     boxShadow: '0 6px 18px rgba(41,71,222,0.25)',
                   }}>
-                    Start trip — track live
+                    {t(lang, 'start_trip')}
                   </button>
                   <a href={wazeUrl} target="_blank" rel="noopener noreferrer" style={{
                     display: 'block', textAlign: 'center', border: `1.5px solid ${C.accent}`, borderRadius: 999,
@@ -877,27 +1238,51 @@ export default function Planner() {
                   }}>
                     Open in Waze
                   </a>
-                  <button
-                    onClick={saveCommute}
-                    disabled={commuteSave === 'saving' || commuteSave === 'saved'}
-                    style={{
-                      width: '100%', background: 'transparent', color: commuteSave === 'saved' ? C.accent : C.ink,
-                      border: `1.5px solid ${commuteSave === 'saved' ? C.accent : C.ink}`, borderRadius: 999,
-                      padding: '14px', fontSize: 14, fontWeight: 700,
-                      cursor: commuteSave === 'idle' || commuteSave === 'failed' ? 'pointer' : 'default', fontFamily: 'inherit',
-                    }}
-                  >
-                    {commuteSave === 'saved' ? '✓ Commute saved — see My trips'
-                      : commuteSave === 'saving' ? 'Saving…'
-                      : commuteSave === 'failed' ? 'Save failed — tap to retry'
-                      : '☆ Save commute'}
-                  </button>
+
+                  {addingStop ? (
+                    <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 16, padding: 14 }}>
+                      <StopRow label="Add another stop" value={nextStop} onChange={setNextStop} placeholder={t(lang, 'choose_a_stop')} stops={stopNames} />
+                      {chainError && <p style={{ margin: '8px 0 0', fontSize: 12, color: C.error }}>{chainError}</p>}
+                      <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+                        <button
+                          onClick={addAnotherStop}
+                          disabled={!nextStop || nextStop === to || chainBusy}
+                          style={{
+                            flex: 1, cursor: nextStop && nextStop !== to ? 'pointer' : 'default', fontFamily: 'inherit',
+                            fontSize: 13, fontWeight: 700, padding: '10px', borderRadius: 999, border: 'none',
+                            background: nextStop && nextStop !== to ? C.accent : C.cardEl,
+                            color: nextStop && nextStop !== to ? C.onPrimary : C.muted,
+                          }}
+                        >
+                          {chainBusy ? 'Adding…' : 'Add to trip'}
+                        </button>
+                        <button
+                          onClick={() => { setAddingStop(false); setNextStop(''); setChainError(null); }}
+                          style={{ fontSize: 13, fontWeight: 600, padding: '10px 16px', borderRadius: 999, border: 'none', background: 'none', color: C.muted, cursor: 'pointer', fontFamily: 'inherit' }}
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <button onClick={() => setAddingStop(true)} style={{
+                      width: '100%', background: 'transparent', color: C.ink,
+                      border: `1.5px solid ${C.border}`, borderRadius: 999,
+                      padding: '14px', fontSize: 14, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit',
+                    }}>
+                      + Add another stop
+                    </button>
+                  )}
+
                   <button onClick={() => { setFrom(''); setTo(''); setSelected(null); setItineraries([]); setScreen('home'); }} style={{
                     width: '100%', background: 'none', border: 'none', padding: '12px',
                     fontSize: 14, fontWeight: 600, color: C.muted, cursor: 'pointer', fontFamily: 'inherit',
                   }}>
-                    Plan another trip
+                    {t(lang, 'plan_another_trip')}
                   </button>
+                  <div style={{ textAlign: 'center', padding: '4px 0 0' }}>
+                    <ReportIssueButton routeId={selectedRideLegs[0]?.line.id} contextLabel={comboLabel(selected)} />
+                  </div>
                 </div>
               </div>
             </Sheet>

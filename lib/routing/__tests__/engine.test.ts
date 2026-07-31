@@ -74,7 +74,11 @@ describe('planRoute', () => {
       destLat:   stopE.lat, destLng:   stopE.lng,
       preference: 'fastest',
     });
-    expect(results).toHaveLength(1);
+    // A single preference yields one optimal route, which is always first.
+    // Mode-diverse alternatives may follow it (see alternatives.test.ts), so
+    // this asserts on the winner rather than on the total count.
+    expect(results.length).toBeGreaterThanOrEqual(1);
+    expect(results[0].alternative).toBeUndefined();
     const rideLegs = results[0].legs.filter(l => l.type === 'ride');
     const modes = rideLegs.map(l => (l as { mode: string }).mode);
     expect(modes).toContain('mrt');

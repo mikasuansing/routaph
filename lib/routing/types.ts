@@ -94,6 +94,14 @@ export type Itinerary = {
   totalFare: number;
   transfers: number;
   objective: Objective;
+  /**
+   * True when this itinerary was surfaced as a different way to make the
+   * trip rather than as the winner of an objective. A commuter picks a
+   * route for reasons the cost function never sees — queue length at the
+   * turnstile, wanting a seat, aircon, or just knowing the road — so the
+   * planner offers the runner-up modes instead of insisting on one answer.
+   */
+  alternative?: true;
 };
 
 export type PlanQuery = {

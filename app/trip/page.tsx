@@ -2,11 +2,21 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { supabaseBrowser } from '@/lib/supabase/browser';
 import { TripProvider, useTripContext } from '@/lib/trip/context';
 import type { Itinerary, RideLeg, WalkLeg } from '@/lib/routing/types';
-import { TRIP_STORAGE_KEY } from '@/lib/trip/types';
+import { TRIP_PROGRESS_KEY, TRIP_STORAGE_KEY } from '@/lib/trip/types';
 import { distToNextStop, etaToNextStop } from '@/lib/trip/geo';
+import { ReportIssueButton } from '@/app/components/ReportIssueSheet';
+import { notificationPermission, requestNotificationPermission } from '@/lib/trip/notify';
+import { nearestStationEntrance } from '@/lib/routing/stationEntrances';
+import { t, loadLang } from '@/lib/i18n';
+import { useTheme } from '@/app/providers';
+
+// Voyager (light) / Dark Matter (dark). Swapped live on theme change, not
+// just picked once at init — see the theme effect below.
+const TILE_URL = (isDark: boolean) => isDark
+  ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
+  : 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png';
 
 /*
  * Trip Companion — live tracking screen.
@@ -68,11 +78,24 @@ function legLabel(leg: RideLeg | WalkLeg | undefined): string {
 function TripScreen() {
   const router = useRouter();
   const trip = useTripContext();
-  const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'failed'>('idle');
+  const { theme } = useTheme();
   const [geoPerm, setGeoPerm] = useState<'granted' | 'prompt' | 'denied' | 'unknown'>('unknown');
+  const [notifPerm, setNotifPerm] = useState<NotificationPermission | 'unsupported'>(notificationPermission);
+  const [lang] = useState(loadLang);
+  const [nowTick, setNowTick] = useState(() => Date.now());
+
+  // Ticks while a trip is active so the "last known position" staleness
+  // check below re-evaluates even when no new GPS fix is coming in
+  // (exactly the MRT-tunnel case: GPS goes quiet but the clock doesn't).
+  useEffect(() => {
+    if (trip.status !== 'active') return;
+    const id = setInterval(() => setNowTick(Date.now()), 5000);
+    return () => clearInterval(id);
+  }, [trip.status]);
 
   const mapElRef  = useRef<HTMLDivElement>(null);
   const mapRef    = useRef<unknown>(null);
+  const tileRef   = useRef<unknown>(null);
   const posMarker = useRef<unknown>(null);
 
   // Track browser geolocation permission so the UI can explain itself
@@ -90,23 +113,24 @@ function TripScreen() {
     return () => { active = false; if (status) status.onchange = null; };
   }, []);
 
-  // Login required: no session → back to /auth
-  useEffect(() => {
-    let active = true;
-    supabaseBrowser.auth.getSession().then(({ data }) => {
-      if (active && !data.session) router.replace('/auth?next=/planner');
-    });
-    return () => { active = false; };
-  }, [router]);
-
-  // On mount: restore itinerary from sessionStorage and start trip
+  // On mount: restore itinerary from sessionStorage. If leg progress was
+  // also saved (a prior tab session got this far before reload/eviction —
+  // the exact failure mode a signal-loss tunnel causes), resume there
+  // instead of silently restarting the trip from leg 0.
   useEffect(() => {
     if (trip.status !== 'idle') return;
     try {
       const raw = sessionStorage.getItem(TRIP_STORAGE_KEY);
       if (!raw) { router.replace('/planner'); return; }
       const itinerary = JSON.parse(raw) as Itinerary;
-      trip.startTrip(itinerary);
+
+      const progressRaw = sessionStorage.getItem(TRIP_PROGRESS_KEY);
+      const legIndex = progressRaw ? (JSON.parse(progressRaw) as { legIndex: number }).legIndex : 0;
+      if (typeof legIndex === 'number' && legIndex > 0 && legIndex < itinerary.legs.length) {
+        trip.resumeTrip(itinerary, legIndex);
+      } else {
+        trip.startTrip(itinerary);
+      }
     } catch {
       router.replace('/planner');
     }
@@ -172,10 +196,8 @@ function TripScreen() {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const map = (L as any).map(mapElRef.current, { zoomControl: false, attributionControl: false });
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (L as any).tileLayer(
-        isDark
-          ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
-          : 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
+      tileRef.current = (L as any).tileLayer(
+        TILE_URL(isDark),
         { subdomains: 'abcd', maxZoom: 19 },
       ).addTo(map);
 
@@ -217,10 +239,19 @@ function TripScreen() {
     return () => { cancelled = true; };
   }, [trip.status, trip.itinerary]);
 
+  // Keep the basemap in step with the theme toggle — a dark basemap left
+  // under a cream page makes the whole screen look broken.
+  useEffect(() => {
+    if (!tileRef.current) return;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (tileRef.current as any).setUrl(TILE_URL(theme === 'dark'));
+  }, [theme]);
+
   // Tear the map down when leaving the active screen
   useEffect(() => {
     if (trip.status === 'active' || trip.status === 'rerouting') return;
     if (mapRef.current) {
+      tileRef.current = null;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (mapRef.current as any).remove();
       mapRef.current = null;
@@ -279,32 +310,28 @@ function TripScreen() {
         >
           Plan another trip
         </button>
-        {/* Explicit save only (BASELINE §7.7) — nothing is stored unless tapped */}
-        <button
-          disabled={saveState === 'saving' || saveState === 'saved'}
-          style={{ marginTop: 12, padding: '15px', background: 'transparent', color: saveState === 'saved' ? C.accent : C.ink, border: `1.5px solid ${saveState === 'saved' ? C.accent : C.ink}`, borderRadius: 999, fontSize: 14, fontWeight: 700, cursor: saveState === 'idle' || saveState === 'failed' ? 'pointer' : 'default', fontFamily: 'inherit', width: '100%' }}
-          onClick={async () => {
-            setSaveState('saving');
-            setSaveState(await trip.saveTrip() ? 'saved' : 'failed');
-          }}
-        >
-          {saveState === 'saved' ? '✓ Saved to trip history'
-            : saveState === 'saving' ? 'Saving…'
-            : saveState === 'failed' ? 'Save failed — tap to retry'
-            : 'Save trip to history'}
-        </button>
       </div>
     );
   }
 
   if (trip.status === 'ended') return null;
 
-  const { itinerary, currentLegIndex, position, gpsDenied, status, reroutes, rideOptions, activeDisruption, originalDest } = trip;
+  const { itinerary, currentLegIndex, position, gpsDenied, status, reroutes, rideOptions, activeDisruption, originalDest, sharingPosition, setSharingPosition } = trip;
   if (!itinerary) return null;
 
   const currentLeg = itinerary.legs[currentLegIndex];
   const nextLeg    = itinerary.legs[currentLegIndex + 1];
   const isLastLeg  = currentLegIndex >= itinerary.legs.length - 1;
+
+  // A GPS fix that's gone quiet for a while (MRT tunnel, no signal) still
+  // shows the LAST KNOWN position/ETA below rather than blanking — but
+  // labeled as last-known so it's not mistaken for a live reading.
+  const SIGNAL_STALE_MS = 20_000;
+  const signalStale = position !== null && nowTick - position.timestamp > SIGNAL_STALE_MS;
+
+  const finalEntrance = isLastLeg && currentLeg?.type === 'walk'
+    ? nearestStationEntrance(currentLeg.fromName, currentLeg.toLat, currentLeg.toLng)
+    : null;
 
   const distKm = position ? distToNextStop(position, itinerary, currentLegIndex) : null;
   // Jeepneys have no fixed schedule — show distance only, never a minute ETA.
@@ -329,10 +356,10 @@ function TripScreen() {
           {/* Live status — the single accent marks a live GPS fix */}
           <p style={{ margin: '6px 0 0', fontSize: 12, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: position ? C.accent : C.muted }}>
             {position
-              ? '● Live — GPS tracking'
+              ? '● Live location'
               : gpsDenied
-                ? '○ Location off — manual mode'
-                : <span style={{ animation: 'pulse 1.6s ease-in-out infinite' }}>○ Waiting for GPS</span>}
+                ? '○ Location unavailable — manual mode'
+                : <span style={{ animation: 'pulse 1.6s ease-in-out infinite' }}>○ Finding your location</span>}
           </p>
         </div>
         <button
@@ -345,14 +372,16 @@ function TripScreen() {
 
       {/* Active disruption — bold type, no color theatre */}
       {activeDisruption && status !== 'rerouting' && (
-        <div style={{ padding: '14px 24px', borderTop: `1px solid ${C.border}`, borderBottom: `1px solid ${C.border}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-          <p style={{ margin: 0, fontSize: 14, fontWeight: 700, color: C.ink }}>▲ {activeDisruption.description}</p>
-          <button
-            style={{ background: 'none', border: 'none', fontSize: 13, fontWeight: 800, color: C.ink, textDecoration: 'underline', cursor: 'pointer', fontFamily: 'inherit', flexShrink: 0 }}
-            onClick={() => trip.triggerReroute()}
-          >
-            Reroute
-          </button>
+        <div style={{ padding: '14px 24px', borderTop: `1px solid ${C.border}`, borderBottom: `1px solid ${C.border}` }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+            <p style={{ margin: 0, fontSize: 14, fontWeight: 700, color: C.ink }}>▲ {activeDisruption.description}</p>
+            <button
+              style={{ background: 'none', border: 'none', fontSize: 13, fontWeight: 800, color: C.ink, textDecoration: 'underline', cursor: 'pointer', fontFamily: 'inherit', flexShrink: 0 }}
+              onClick={() => trip.triggerReroute()}
+            >
+              Reroute
+            </button>
+          </div>
         </div>
       )}
 
@@ -363,7 +392,7 @@ function TripScreen() {
         {/* GPS state — explain, and offer a way in, instead of failing silently */}
         {!position && (gpsDenied || geoPerm === 'denied') && (
           <div style={{ marginBottom: 22, background: C.card, border: `1px solid ${C.border}`, borderRadius: 20, padding: 16 }}>
-            <Micro>Location is blocked</Micro>
+            <Micro>Location access is blocked</Micro>
             <p style={{ margin: '8px 0 0', fontSize: 13, color: C.body, lineHeight: 1.7 }}>
               Your browser is blocking location for this site, so the map can&apos;t follow
               you and legs won&apos;t advance automatically. To enable: tap the
@@ -377,7 +406,7 @@ function TripScreen() {
         {!position && !gpsDenied && geoPerm !== 'denied' && (
           <div style={{ marginBottom: 22, background: C.card, border: `1px solid ${C.border}`, borderRadius: 20, padding: 16, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
             <p style={{ margin: 0, fontSize: 13, color: C.body, animation: 'pulse 1.6s ease-in-out infinite' }}>
-              Waiting for a GPS fix…
+              Finding your location…
             </p>
             <button
               onClick={() => {
@@ -392,10 +421,57 @@ function TripScreen() {
           </div>
         )}
 
+        {notifPerm === 'default' && status === 'active' && (
+          <div style={{ marginBottom: 22, background: C.card, border: `1px solid ${C.border}`, borderRadius: 20, padding: 16, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+            <p style={{ margin: 0, fontSize: 13, color: C.body }}>
+              Get an alert + buzz when your stop is close.
+            </p>
+            <button
+              onClick={() => { requestNotificationPermission().then(setNotifPerm); }}
+              style={{ padding: '9px 16px', borderRadius: 999, border: 'none', background: C.accent, color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', flexShrink: 0, whiteSpace: 'nowrap' }}
+            >
+              Enable stop alerts
+            </button>
+          </div>
+        )}
+
+        {/* Crowdsourced live map opt-in. Deliberately phrased as a give,
+            not a get: it does nothing for this rider's own trip, so the
+            copy has to be honest that it's for everyone else. */}
+        {status === 'active' && position && (
+          <div style={{ marginBottom: 22, background: C.card, border: `1px solid ${C.border}`, borderRadius: 20, padding: 16 }}>
+            <Micro color={sharingPosition ? C.accent : undefined}>
+              {sharingPosition ? 'Helping the live map' : 'Help the live map'}
+            </Micro>
+            <p style={{ margin: '8px 0 14px', fontSize: 13, color: C.body, lineHeight: 1.7 }}>
+              {sharingPosition
+                ? 'Other commuters can see roughly where this vehicle is. Your position is anonymous, kept for 3 minutes, and never saved to our database.'
+                : 'No operator publishes live train or bus positions here. Share your position anonymously while you ride and others can see where this vehicle is.'}
+            </p>
+            {/* Full-width below the copy rather than beside it — at 375 px a
+                side-by-side button starves the explanation into a column
+                barely six words wide, and this is text people should read
+                before opting in. */}
+            <button
+              onClick={() => setSharingPosition(!sharingPosition)}
+              aria-pressed={sharingPosition}
+              style={{
+                width: '100%', padding: '11px 16px', borderRadius: 999,
+                border: sharingPosition ? `1.5px solid ${C.border}` : 'none',
+                background: sharingPosition ? 'transparent' : C.accent,
+                color: sharingPosition ? C.body : '#fff',
+                fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit',
+              }}
+            >
+              {sharingPosition ? 'Stop sharing' : 'Share position'}
+            </button>
+          </div>
+        )}
+
         {/* Current leg — the glance */}
         {currentLeg && (
           <section style={{ marginBottom: 28, background: C.card, border: `1px solid ${C.border}`, borderRadius: 20, padding: 18 }}>
-            <Micro color={C.accent}>Now · {modeTag(currentLeg)}</Micro>
+            <Micro color={C.accent}>{t(lang, 'now')} · {modeTag(currentLeg)}</Micro>
             <p style={{ margin: '8px 0 0', fontFamily: DISPLAY, fontSize: 24, fontWeight: 800, color: C.ink, letterSpacing: '-0.02em', lineHeight: 1.25 }}>
               {legLabel(currentLeg)}
             </p>
@@ -403,6 +479,21 @@ function TripScreen() {
               <p className="tnum" style={{ margin: '8px 0 0', fontSize: 16, color: C.body }}>
                 {distKm < 1 ? `${Math.round(distKm * 1000)} m` : `${distKm.toFixed(1)} km`}
                 {eta !== null && ` · ~${eta} min`} to next stop
+              </p>
+            )}
+            {currentLeg.type === 'ride' && (
+              <p style={{ margin: '4px 0 0', fontSize: 13, color: C.muted }}>
+                {t(lang, 'get_off_at', { stop: (currentLeg as RideLeg).to.name })}
+              </p>
+            )}
+            {signalStale && (
+              <p style={{ margin: '6px 0 0', fontSize: 12, fontWeight: 700, color: C.muted }}>
+                Signal lost — showing last known position ({Math.round((nowTick - position!.timestamp) / 1000)}s ago)
+              </p>
+            )}
+            {isLastLeg && currentLeg.type === 'walk' && finalEntrance && (
+              <p style={{ margin: '6px 0 0', fontSize: 13, fontWeight: 700, color: C.accent }}>
+                Exit via the {finalEntrance.label} — closer to your destination
               </p>
             )}
             {status === 'active' && (
@@ -426,23 +517,30 @@ function TripScreen() {
                   trip.advanceLeg();
                 }}
               >
-                {isLastLeg ? '✓ Mark as done — I’ve arrived' : '✓ Mark leg done — I’m here'}
+                {isLastLeg ? `✓ ${t(lang, 'mark_arrived')}` : `✓ ${t(lang, 'mark_leg_done')}`}
               </button>
             )}
+            <div style={{ marginTop: 14, textAlign: 'center' }}>
+              <ReportIssueButton
+                routeId={currentLeg.type === 'ride' ? (currentLeg as RideLeg).line.id : undefined}
+                stopId={currentLeg.type === 'ride' ? (currentLeg as RideLeg).to.id : undefined}
+                contextLabel={legLabel(currentLeg)}
+              />
+            </div>
           </section>
         )}
 
         {/* Next leg */}
         {nextLeg && !isLastLeg && (
           <section style={{ marginBottom: 28 }}>
-            <Micro>Next · {modeTag(nextLeg)}</Micro>
+            <Micro>{t(lang, 'next')} · {modeTag(nextLeg)}</Micro>
             <p style={{ margin: '6px 0 0', fontSize: 15, color: C.body }}>{legLabel(nextLeg)}</p>
           </section>
         )}
 
         {isLastLeg && (
           <p style={{ margin: '0 0 28px', fontSize: 13, fontWeight: 700, color: C.accent, letterSpacing: '0.02em' }}>
-            Almost there — this is the last leg.
+            {t(lang, 'almost_there')}
           </p>
         )}
 
