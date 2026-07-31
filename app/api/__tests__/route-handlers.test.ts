@@ -179,39 +179,11 @@ describe('GET /api/v1/transport/options (guest access)', () => {
   });
 });
 
-// ── POST /api/v1/geo/isochrone ─────────────────────────────────────────────
-
-describe('POST /api/v1/geo/isochrone', () => {
-  let POST: (req: NextRequest) => Promise<Response>;
-
-  beforeEach(async () => {
-    vi.resetModules();
-    ({ POST } = await import('../v1/geo/isochrone/route'));
-  });
-
-  it('returns 401 when unauthenticated', async () => {
-    const req = makeRequest('POST', { lat: 14.55, lng: 121.0, minutes: 20 });
-    const res = await POST(req);
-    expect(res.status).toBe(401);
-  });
-});
-
-// ── GET /api/v1/accessibility/score ────────────────────────────────────────
-
-describe('GET /api/v1/accessibility/score', () => {
-  let GET: (req: NextRequest) => Promise<Response>;
-
-  beforeEach(async () => {
-    vi.resetModules();
-    ({ GET } = await import('../v1/accessibility/score/route'));
-  });
-
-  it('returns 401 when unauthenticated', async () => {
-    const req = new NextRequest('http://localhost:3000/api/v1/accessibility/score?stopId=1');
-    const res = await GET(req);
-    expect(res.status).toBe(401);
-  });
-});
+// /api/v1/geo/isochrone and /api/v1/accessibility/score were deleted along
+// with the account system. Both were auth-gated stubs — permanently 401 in
+// an app with no login — and neither was ever called by the UI. The
+// accessibility one also returned a hardcoded score of 82, which is exactly
+// the kind of invented figure this project refuses to ship.
 
 // ── POST /api/v1/me/* — deleted with saved commutes / trip history (no auth
 // model in the app any more, see BASELINE.md scope note)
