@@ -9,6 +9,7 @@ import { nearestStationEntrance } from '@/lib/routing/stationEntrances';
 import { ReportIssueButton } from '@/app/components/ReportIssueSheet';
 import { t, loadLang, LANG_STORAGE_KEY, type Lang } from '@/lib/i18n';
 import { useTheme } from '@/app/providers';
+import { PinPickerSheet, type PickedLocation } from '@/app/components/PinPickerSheet';
 
 const BEEP_STORAGE_KEY = 'parapo:has_beep';
 
@@ -292,6 +293,11 @@ export default function Planner() {
   const [error, setError]         = useState<string | null>(null);
   const [jeepneyFallback, setJeepneyFallback] = useState<ReturnType<typeof suggestJeepneyCorridor>>(null);
   const [liveVehicles, setLiveVehicles] = useState<LiveVehicle[]>([]);
+  // Locations dropped on the map, keyed by the label shown in the picker.
+  // They live alongside catalog stops so the rest of the planner — search,
+  // map drawing, swap — treats a pinned address exactly like a named stop.
+  const [pinned, setPinned] = useState<Record<string, [number, number]>>({});
+  const [pinningFor, setPinningFor] = useState<'from' | 'to' | null>(null);
   const [stopCoords, setStopCoords] = useState<Record<string, [number, number]>>({});
   const [myLoc, setMyLoc]         = useState<[number, number] | null>(null);
   const [locBusy, setLocBusy]     = useState(false);
@@ -411,7 +417,11 @@ export default function Planner() {
   }
 
   const originCoords = (name: string): [number, number] | undefined =>
-    name === MY_LOCATION ? myLoc ?? undefined : stopCoords[name];
+    name === MY_LOCATION ? myLoc ?? undefined : stopCoords[name] ?? pinned[name];
+  // Destination resolution has to know about pins too, or a pinned address
+  // would render as a valid choice and then fail to route.
+  const resolveStop = (name: string): [number, number] | undefined =>
+    stopCoords[name] ?? pinned[name];
 
   /* ── Leaflet map ──────────────────────────────────────────────────────── */
   const mapElRef    = useRef<HTMLDivElement>(null);
@@ -502,7 +512,7 @@ export default function Planner() {
         }
       }
 
-      const originC = originCoords(from), destC = stopCoords[to];
+      const originC = originCoords(from), destC = resolveStop(to);
       if (originC) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (L as any).circleMarker(originC, { radius: 7, fillColor: accent, fillOpacity: 1, color: isDark ? '#000' : '#fff', weight: 2.5 }).addTo(group);
@@ -599,7 +609,7 @@ export default function Planner() {
 
   /* ── Search ──────────────────────────────────────────────────────────── */
   async function search() {
-    const origin = originCoords(from), dest = stopCoords[to];
+    const origin = originCoords(from), dest = resolveStop(to);
     if (!origin || !dest) return;
     const excludeModes = MODE_GROUPS.filter(g => !enabledModes[g.key]).flatMap(g => g.engineModes);
     setError(null); setJeepneyFallback(null); setModeFilter('all'); setFormOpen(false); setScreen('loading');
@@ -690,7 +700,7 @@ export default function Planner() {
     .leaflet-control-attribution{font-size:9px!important;opacity:0.4!important;background:transparent!important;color:inherit!important;}
   `;
 
-  const canSearch = Boolean(from && to && from !== to && originCoords(from) && stopCoords[to] && Object.values(enabledModes).some(Boolean));
+  const canSearch = Boolean(from && to && from !== to && originCoords(from) && resolveStop(to) && Object.values(enabledModes).some(Boolean));
 
   /* Service status detail — shown as a banner under the top pill when there are alerts */
   const statusDetail = disruptions && disruptions.length > 0
@@ -820,12 +830,22 @@ export default function Planner() {
                 {/* From / To — typography only */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 18, flexShrink: 0 }}>
                   <div>
-                    <StopRow label="From" value={from} onChange={setFrom} placeholder={t(lang, 'choose_a_stop')} stops={stopNames} extraOption={myLoc ? MY_LOCATION : undefined} />
-                    <button onClick={useMyLocation} disabled={locBusy} style={{ background: 'none', border: 'none', padding: '8px 0 0', fontSize: 13, fontWeight: 700, color: C.accent, cursor: 'pointer', fontFamily: 'inherit', letterSpacing: '0.02em' }}>
-                      {locBusy ? 'Locating…' : from === MY_LOCATION ? `● ${t(lang, 'use_current_location')}` : `◉ ${t(lang, 'use_current_location')}`}
+                    <StopRow label="From" value={from} onChange={setFrom} placeholder={t(lang, 'choose_a_stop')} stops={[...stopNames, ...Object.keys(pinned)]} extraOption={myLoc ? MY_LOCATION : undefined} />
+                    <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+                      <button onClick={useMyLocation} disabled={locBusy} style={{ background: 'none', border: 'none', padding: '8px 0 0', fontSize: 13, fontWeight: 700, color: C.accent, cursor: 'pointer', fontFamily: 'inherit', letterSpacing: '0.02em' }}>
+                        {locBusy ? 'Locating…' : from === MY_LOCATION ? `● ${t(lang, 'use_current_location')}` : `◉ ${t(lang, 'use_current_location')}`}
+                      </button>
+                      <button onClick={() => setPinningFor('from')} style={{ background: 'none', border: 'none', padding: '8px 0 0', fontSize: 13, fontWeight: 700, color: C.accent, cursor: 'pointer', fontFamily: 'inherit', letterSpacing: '0.02em' }}>
+                        📍 Drop a pin
+                      </button>
+                    </div>
+                  </div>
+                  <div>
+                    <StopRow label="To" value={to} onChange={setTo} placeholder={t(lang, 'choose_a_stop')} stops={[...stopNames, ...Object.keys(pinned)]} />
+                    <button onClick={() => setPinningFor('to')} style={{ background: 'none', border: 'none', padding: '8px 0 0', fontSize: 13, fontWeight: 700, color: C.accent, cursor: 'pointer', fontFamily: 'inherit', letterSpacing: '0.02em' }}>
+                      📍 Drop a pin on the map
                     </button>
                   </div>
-                  <StopRow label="To" value={to} onChange={setTo} placeholder={t(lang, 'choose_a_stop')} stops={stopNames} />
                   <button onClick={() => { if (from !== MY_LOCATION) { const t = from; setFrom(to); setTo(t); } }} style={{ alignSelf: 'flex-end', background: 'none', border: 'none', fontSize: 13, fontWeight: 700, color: from === MY_LOCATION ? C.border : C.muted, cursor: 'pointer', fontFamily: 'inherit', marginTop: -8 }}>
                     ⇅ Swap
                   </button>
@@ -1289,6 +1309,29 @@ export default function Planner() {
           </>
         );
       })()}
+
+      {/* Drop-a-pin picker. A confirmed pin is registered under its address
+          so it behaves like any other stop from here on — searchable in the
+          row, routable, swappable. */}
+      {pinningFor && (
+        <PinPickerSheet
+          title={pinningFor === 'from' ? 'Set your starting point' : 'Set your destination'}
+          initial={
+            pinningFor === 'from'
+              ? originCoords(from) ?? myLoc
+              : resolveStop(to) ?? myLoc
+          }
+          onCancel={() => setPinningFor(null)}
+          onConfirm={(loc: PickedLocation) => {
+            // The note distinguishes two pins that reverse-geocode to the
+            // same street, which is common along a long address.
+            const name = loc.note ? `${loc.label} (${loc.note})` : loc.label;
+            setPinned(prev => ({ ...prev, [name]: [loc.lat, loc.lng] }));
+            if (pinningFor === 'from') setFrom(name); else setTo(name);
+            setPinningFor(null);
+          }}
+        />
+      )}
     </div>
   );
 }

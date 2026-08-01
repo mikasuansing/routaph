@@ -29,10 +29,22 @@ function lineNames(it: Itinerary): string[] {
 describe('mode-diverse alternatives', () => {
   it('offers the road corridor alongside the train for Santolan to Recto', () => {
     // The trip that exposed the problem: LRT-2 and the Aurora Blvd bus both
-    // serve it, but only the train was ever shown.
-    const its = plan(SANTOLAN, RECTO);
+    // serve it, but only the train was ever shown. `rush` is pinned because
+    // the engine falls back to the wall clock, which made this assertion
+    // pass off-peak and fail during the evening commute.
+    const its = plan(SANTOLAN, RECTO, { rush: false });
     expect(its.length).toBeGreaterThan(1);
     expect(lineNames(its[0])).toContain('LRT-2');
+    const alt = its.find(i => i.alternative);
+    expect(alt).toBeDefined();
+    expect(lineNames(alt!)).toContain('Route 3 (Aurora Blvd)');
+  });
+
+  it('still offers the road alternative during rush hour', () => {
+    // Peak slows roads (x1.6) far more than rail (x1.15), so a fixed ratio
+    // cap would hide road options exactly when the queue at the turnstile
+    // makes them most worth knowing about.
+    const its = plan(SANTOLAN, RECTO, { rush: true });
     const alt = its.find(i => i.alternative);
     expect(alt).toBeDefined();
     expect(lineNames(alt!)).toContain('Route 3 (Aurora Blvd)');
@@ -57,7 +69,7 @@ describe('mode-diverse alternatives', () => {
 
   it('never returns an alternative more than 3x the primary duration', () => {
     for (const [o, d] of [[SANTOLAN, RECTO], [KATIPUNAN, { lat: 14.6229, lng: 121.0530 }]] as const) {
-      const its = plan(o, d);
+      const its = plan(o, d, { rush: false });
       const primary = its[0];
       for (const alt of its.filter(i => i.alternative)) {
         expect(alt.totalDurationMin).toBeLessThanOrEqual(primary.totalDurationMin * 3);

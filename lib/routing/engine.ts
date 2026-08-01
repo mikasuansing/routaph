@@ -499,6 +499,16 @@ export function planRoute(graph: TransitGraph, query: PlanQuery): Itinerary[] {
     for (const lineId of primaryLineIds) {
       if (results.length >= MAX_ITINERARIES) break;
 
+      // At peak, roads slow by RUSH_MULT_ROAD while rail slows by only
+      // RUSH_MULT_RAIL, so an unchanged ratio would quietly disqualify road
+      // alternatives during the commute — the exact hours a rider most wants
+      // to know there is another way. Widening the cap by that same
+      // disparity makes "is this a real alternative" mean the same thing at
+      // 6pm as it does at 2pm.
+      const altRatioCap = rush
+        ? ALT_MAX_DURATION_RATIO * (RUSH_MULT_ROAD / RUSH_MULT_RAIL)
+        : ALT_MAX_DURATION_RATIO;
+
       const without = new Set(excludeLineSet ?? []);
       without.add(lineId);
 
@@ -532,7 +542,7 @@ export function planRoute(graph: TransitGraph, query: PlanQuery): Itinerary[] {
       );
 
       // A detour several times longer isn't a real choice, it's a warning.
-      if (alt.totalDurationMin > results[0].totalDurationMin * ALT_MAX_DURATION_RATIO) continue;
+      if (alt.totalDurationMin > results[0].totalDurationMin * altRatioCap) continue;
 
       const key = alt.legs
         .filter(l => l.type === 'ride')
