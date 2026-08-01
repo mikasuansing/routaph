@@ -387,58 +387,87 @@ function TripScreen() {
     : null;
 
   return (
-    <div style={{ minHeight: '100vh', background: C.bg, color: C.ink, display: 'flex', flexDirection: 'column', fontFamily: 'Inter,system-ui,sans-serif' }}>
+    <div style={{ position: 'fixed', inset: 0, background: C.bg, color: C.ink, fontFamily: 'Inter,system-ui,sans-serif', overflow: 'hidden' }}>
       <style>{GLOBAL}</style>
 
-      {/* Header */}
-      <header style={{ padding: '52px 24px 18px', display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between' }}>
-        <div>
-          <span style={{ fontFamily: DISPLAY, fontSize: 16, fontWeight: 800, letterSpacing: '-0.02em', color: C.accent }}>
+      {/* Full-bleed map, same shell as the planner. A trip is a navigation
+          task, so the map should be the screen rather than a panel at the
+          top of a scrolling document — everything else floats over it.
+          `zIndex: 0` contains Leaflet's internal panes (they run 400-800)
+          so they can't paint over the controls. */}
+      <div ref={mapElRef} style={{ position: 'absolute', inset: 0, zIndex: 0 }} />
+
+      {/* Floating status pill + End trip */}
+      <div style={{
+        position: 'absolute', top: 0, left: 0, right: 0, zIndex: 10,
+        padding: 'calc(14px + env(safe-area-inset-top)) 16px 0',
+        display: 'flex', alignItems: 'center', gap: 10,
+      }}>
+        <div style={{
+          flex: 1, minWidth: 0, background: C.card, border: `1px solid ${C.border}`,
+          borderRadius: 22, padding: '10px 16px', boxShadow: '0 2px 12px rgba(0,0,0,0.12)',
+        }}>
+          <span style={{ fontFamily: DISPLAY, fontSize: 15, fontWeight: 800, letterSpacing: '-0.02em', color: C.accent }}>
             ParaPo<span style={{ color: C.ink }}>.</span>
           </span>
-          <h1 style={{ margin: '4px 0 0', fontFamily: DISPLAY, fontSize: 28, fontWeight: 800, letterSpacing: '-0.02em' }}>Trip in progress</h1>
-          {/* Live status — the single accent marks a live GPS fix */}
-          <p style={{ margin: '6px 0 0', fontSize: 12, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: position ? C.accent : C.muted }}>
-            {/* `gpsDenied` is set only on PERMISSION_DENIED — a genuinely
-                unavailable fix or a timeout keeps the watcher alive and
-                stays on "Finding your location". So this state is "blocked",
-                and calling it "unavailable" sent people looking for a signal
-                problem instead of a permission they can grant. Matches the
-                "Location access is blocked" banner below. */}
+          {/* `gpsDenied` is set only on PERMISSION_DENIED — a genuinely
+              unavailable fix or a timeout keeps the watcher alive and stays
+              on "Finding your location". So this state is "blocked", and
+              calling it "unavailable" sent people looking for a signal
+              problem instead of a permission they can grant. */}
+          <p style={{ margin: '2px 0 0', fontSize: 11, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: position ? C.accent : C.muted }}>
             {position
               ? '● Live location'
               : gpsDenied
-                ? '○ Location blocked — tap Done as you go'
-                : <span style={{ animation: 'pulse 1.6s ease-in-out infinite' }}>○ Finding your location</span>}
+                ? '○ Location blocked'
+                : <span style={{ animation: 'pulse 1.6s ease-in-out infinite' }}>○ Finding you</span>}
           </p>
         </div>
         <button
-          style={{ background: 'none', border: 'none', padding: 0, fontSize: 13, fontWeight: 700, color: C.muted, cursor: 'pointer', fontFamily: 'inherit', textDecoration: 'underline' }}
+          style={{
+            flexShrink: 0, background: C.card, border: `1px solid ${C.border}`,
+            borderRadius: 999, padding: '11px 16px', fontSize: 13, fontWeight: 700,
+            color: C.body, cursor: 'pointer', fontFamily: 'inherit',
+            boxShadow: '0 2px 12px rgba(0,0,0,0.12)',
+          }}
           onClick={() => { trip.endTrip(); router.replace('/planner'); }}
         >
           End trip
         </button>
-      </header>
+      </div>
 
-      {/* Active disruption — bold type, no color theatre */}
+      {/* Active disruption — floats under the pill so it can't be missed */}
       {activeDisruption && status !== 'rerouting' && (
-        <div style={{ padding: '14px 24px', borderTop: `1px solid ${C.border}`, borderBottom: `1px solid ${C.border}` }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-            <p style={{ margin: 0, fontSize: 14, fontWeight: 700, color: C.ink }}>▲ {activeDisruption.description}</p>
-            <button
-              style={{ background: 'none', border: 'none', fontSize: 13, fontWeight: 800, color: C.ink, textDecoration: 'underline', cursor: 'pointer', fontFamily: 'inherit', flexShrink: 0 }}
-              onClick={() => trip.triggerReroute()}
-            >
-              Reroute
-            </button>
-          </div>
+        <div style={{
+          position: 'absolute', top: 'calc(76px + env(safe-area-inset-top))', left: 16, right: 16, zIndex: 10,
+          background: C.card, border: `1px solid ${C.border}`, borderRadius: 16,
+          padding: '12px 14px', boxShadow: '0 2px 12px rgba(0,0,0,0.12)',
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
+        }}>
+          <p style={{ margin: 0, fontSize: 13, fontWeight: 700, color: C.ink }}>▲ {activeDisruption.description}</p>
+          <button
+            style={{ background: 'none', border: 'none', fontSize: 13, fontWeight: 800, color: C.accent, textDecoration: 'underline', cursor: 'pointer', fontFamily: 'inherit', flexShrink: 0 }}
+            onClick={() => trip.triggerReroute()}
+          >
+            Reroute
+          </button>
         </div>
       )}
 
-      <main style={{ flex: 1, overflowY: 'auto', padding: '20px 24px 24px' }}>
-        {/* Live map — the route, and your position once GPS locks */}
-        <div ref={mapElRef} style={{ height: '34vh', minHeight: 200, borderRadius: 20, border: `1px solid ${C.border}`, overflow: 'hidden', marginBottom: 16 }} />
+      {/* Everything else lives in a sheet over the map. It starts tall
+          enough to show the current step and its Done button without a
+          scroll, and the rest is reachable by scrolling inside it. */}
+      <div style={{
+        position: 'absolute', left: 0, right: 0, bottom: 0, zIndex: 20,
+        height: '58vh', background: C.bg,
+        borderTop: `1px solid ${C.border}`, borderRadius: '28px 28px 0 0',
+        boxShadow: '0 -8px 32px rgba(0,0,0,0.14)',
+        display: 'flex', flexDirection: 'column',
+        paddingBottom: 'env(safe-area-inset-bottom)',
+      }}>
+        <div style={{ width: 32, height: 4, borderRadius: 2, background: C.border, margin: '10px auto 0', flexShrink: 0 }} />
 
+      <main style={{ flex: 1, overflowY: 'auto', padding: '14px 24px 24px' }}>
         {/* GPS state — explain, and offer a way in, instead of failing silently */}
         {!position && (gpsDenied || geoPerm === 'denied') && (
           <div style={{ marginBottom: 22, background: C.card, border: `1px solid ${C.border}`, borderRadius: 20, padding: 16 }}>
@@ -724,9 +753,9 @@ function TripScreen() {
         )}
       </main>
 
-      {/* Sticky action bar */}
+      {/* Action bar, pinned to the bottom of the sheet */}
       {status === 'active' && (
-        <div style={{ position: 'sticky', bottom: 0, padding: '14px 24px calc(14px + env(safe-area-inset-bottom))', background: C.bg, borderTop: `1px solid ${C.border}`, display: 'flex', gap: 10 }}>
+        <div style={{ flexShrink: 0, padding: '12px 24px calc(12px + env(safe-area-inset-bottom))', background: C.bg, borderTop: `1px solid ${C.border}`, display: 'flex', gap: 10 }}>
           <button
             style={{
               flex: 1, padding: '15px', borderRadius: 999, fontSize: 14, fontWeight: 700,
@@ -749,6 +778,7 @@ function TripScreen() {
           )}
         </div>
       )}
+      </div>
     </div>
   );
 }
