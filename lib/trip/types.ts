@@ -8,6 +8,15 @@ export type GeoPosition = {
   accuracyM: number;
   timestamp: number;
   speedMps?: number; // from GeolocationCoordinates.speed — drives ride-leg ETAs
+  /**
+   * Compass heading in degrees, 0 = north, clockwise. Turns the map so the
+   * way you're travelling points up.
+   *
+   * `GeolocationCoordinates.heading` is null whenever the device is still,
+   * and null on most desktop browsers entirely, so the trip screen falls
+   * back to the bearing between consecutive fixes.
+   */
+  headingDeg?: number;
 };
 
 export type RideOption = {

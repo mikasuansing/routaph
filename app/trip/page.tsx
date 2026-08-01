@@ -1,22 +1,41 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { TripProvider, useTripContext } from '@/lib/trip/context';
 import type { Itinerary, RideLeg, WalkLeg } from '@/lib/routing/types';
 import { TRIP_PROGRESS_KEY, TRIP_STORAGE_KEY } from '@/lib/trip/types';
-import { distToNextStop, etaToNextStop } from '@/lib/trip/geo';
+import { bearingDelta, distToNextStop, etaToNextStop } from '@/lib/trip/geo';
 import { ReportIssueButton } from '@/app/components/ReportIssueSheet';
 import { notificationPermission, requestNotificationPermission } from '@/lib/trip/notify';
 import { nearestStationEntrance } from '@/lib/routing/stationEntrances';
 import { t, loadLang, type Lang } from '@/lib/i18n';
 import { useTheme } from '@/app/providers';
 
-// Voyager (light) / Dark Matter (dark). Swapped live on theme change, not
-// just picked once at init — see the theme effect below.
+// Voyager (light) / Dark Matter (dark). Only used by the flat fallback map.
 const TILE_URL = (isDark: boolean) => isDark
   ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
   : 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png';
+
+/** Keyless OpenMapTiles vector tiles (ODbL) — see ADR 0004. */
+const VECTOR_STYLE = 'https://tiles.openfreemap.org/styles/liberty';
+
+/** Camera while navigating: tilted forward and zoomed to street level. */
+const NAV_PITCH = 60;
+const NAV_ZOOM  = 16.5;
+
+/** MapLibre needs WebGL; without it the trip map falls back to flat Leaflet. */
+function hasWebGL(): boolean {
+  try {
+    const canvas = document.createElement('canvas');
+    return Boolean(
+      window.WebGLRenderingContext &&
+      (canvas.getContext('webgl') || canvas.getContext('experimental-webgl')),
+    );
+  } catch {
+    return false;
+  }
+}
 
 /*
  * Trip Companion — live tracking screen.
@@ -127,6 +146,11 @@ function TripScreen() {
   const [notifPerm, setNotifPerm] = useState<NotificationPermission | 'unsupported'>(notificationPermission);
   const [lang] = useState(loadLang);
   const [nowTick, setNowTick] = useState(() => Date.now());
+  // True once the WebGL navigation map is live; false on the flat fallback.
+  const [navMap, setNavMap] = useState(false);
+  // Camera locked to the rider. Dragging the map releases it, the way a
+  // navigation app stops fighting you the moment you pan.
+  const [following, setFollowing] = useState(true);
 
   // Ticks while a trip is active so the "last known position" staleness
   // check below re-evaluates even when no new GPS fix is coming in
@@ -216,12 +240,12 @@ function TripScreen() {
     };
   }, [trip.status]);
 
-  // Live map: route polyline + stops, initialised once the trip is active
-  useEffect(() => {
-    if ((trip.status !== 'active' && trip.status !== 'rerouting') || !trip.itinerary) return;
-    if (!mapElRef.current || mapRef.current) return;
-    let cancelled = false;
-
+  /**
+   * Flat raster map, used when WebGL is missing or the vector style can't
+   * load. No tilt or rotation, but a working map beats a blank canvas.
+   */
+  const buildLeafletTripMap = useCallback(() => {
+    if (!mapElRef.current || mapRef.current || !trip.itinerary) return;
     if (!document.getElementById('leaflet-css')) {
       const link = document.createElement('link');
       link.id = 'leaflet-css';
@@ -229,67 +253,166 @@ function TripScreen() {
       link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
       document.head.appendChild(link);
     }
-
     import('leaflet').then(mod => {
-      if (cancelled || !mapElRef.current || mapRef.current) return;
-      const L = mod.default ?? mod;
+      if (!mapElRef.current || mapRef.current || !trip.itinerary) return;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const L = (mod.default ?? mod) as any;
       const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
-      const accent = isDark ? '#7A90FF' : '#2947DE';
       const walkLine = isDark ? '#A5988A' : '#8D8672';
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const map = (L as any).map(mapElRef.current, { zoomControl: false, attributionControl: false });
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      tileRef.current = (L as any).tileLayer(
-        TILE_URL(isDark),
-        { subdomains: 'abcd', maxZoom: 19 },
-      ).addTo(map);
+      const map = L.map(mapElRef.current, { zoomControl: false, attributionControl: false });
+      tileRef.current = L.tileLayer(TILE_URL(isDark), { subdomains: 'abcd', maxZoom: 19 }).addTo(map);
 
       const all: [number, number][] = [];
-      for (const leg of trip.itinerary!.legs) {
+      for (const leg of trip.itinerary.legs) {
         if (leg.type === 'walk') {
           const a: [number, number] = [leg.fromLat, leg.fromLng];
           const b: [number, number] = [leg.toLat, leg.toLng];
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          (L as any).polyline([a, b], { color: walkLine, weight: 2, dashArray: '4,7', opacity: 0.8 }).addTo(map);
+          L.polyline([a, b], { color: walkLine, weight: 2, dashArray: '4,7', opacity: 0.8 }).addTo(map);
           all.push(a, b);
         } else {
           const coords = (leg as RideLeg).stops.map(s => [s.lat, s.lng] as [number, number]);
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          (L as any).polyline(coords, { color: accent, weight: 4, opacity: 0.95, lineCap: 'round', lineJoin: 'round' }).addTo(map);
+          L.polyline(coords, { color: leg.line.color || '#2947DE', weight: 4, opacity: 0.95, lineCap: 'round', lineJoin: 'round' }).addTo(map);
           all.push(...coords);
         }
       }
       mapRef.current = map;
+      setNavMap(false);
 
-      // The container often has no measured size on first paint (flex/scroll
-      // layout hasn't settled), so an immediate fitBounds anchors to a 0×0
-      // viewport and zooms to max over one point. Recompute size, then fit —
-      // and once more on the next frame to catch the settled layout.
+      // The container often has no measured size on first paint, so an
+      // immediate fit anchors to a 0x0 viewport; recompute, then refit.
       const fit = () => {
-        if (cancelled) return;
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (map as any).invalidateSize(false);
-        if (all.length >= 2) {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          map.fitBounds((L as any).latLngBounds(all), { padding: [28, 28], maxZoom: 16 });
-        }
+        map.invalidateSize(false);
+        if (all.length >= 2) map.fitBounds(L.latLngBounds(all), { padding: [28, 28], maxZoom: 16 });
       };
       fit();
       requestAnimationFrame(fit);
       setTimeout(fit, 250);
     });
+  }, [trip.itinerary]);
 
-    return () => { cancelled = true; };
-  }, [trip.status, trip.itinerary]);
-
-  // Keep the basemap in step with the theme toggle — a dark basemap left
-  // under a cream page makes the whole screen look broken.
+  // Keep the FALLBACK basemap in step with the theme toggle. The navigation
+  // map uses one vector style for both themes, so this only applies to the
+  // raster map — but leaving it out stranded a dark basemap under a cream
+  // page, which is what the toggle looked broken as before.
   useEffect(() => {
     if (!tileRef.current) return;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (tileRef.current as any).setUrl(TILE_URL(theme === 'dark'));
   }, [theme]);
+
+  /*
+   * Navigation map — MapLibre, so the camera can tilt and turn.
+   *
+   * A trip screen is a navigation view: the useful question is "what is in
+   * front of me", which a flat north-up map answers badly. Leaflet cannot
+   * pitch or rotate at all, so this is the surface that resolves ADR 0004
+   * toward MapLibre.
+   *
+   * The whole route is drawn as GeoJSON — ride legs solid in the line's own
+   * colour, walk legs dashed — and the camera then locks onto the rider.
+   */
+  useEffect(() => {
+    if ((trip.status !== 'active' && trip.status !== 'rerouting') || !trip.itinerary) return;
+    if (!mapElRef.current || mapRef.current) return;
+    let cancelled = false;
+
+    const legs = trip.itinerary.legs;
+    const rideFeatures = legs
+      .filter((l): l is RideLeg => l.type === 'ride')
+      .map(l => ({
+        type: 'Feature' as const,
+        properties: { color: l.line.color || '#2947DE' },
+        geometry: { type: 'LineString' as const, coordinates: l.stops.map(s => [s.lng, s.lat]) },
+      }))
+      .filter(f => f.geometry.coordinates.length >= 2);
+
+    const walkFeatures = legs
+      .filter((l): l is WalkLeg => l.type === 'walk')
+      .map(l => ({
+        type: 'Feature' as const,
+        properties: {},
+        geometry: { type: 'LineString' as const, coordinates: [[l.fromLng, l.fromLat], [l.toLng, l.toLat]] },
+      }));
+
+    const allCoords = [
+      ...rideFeatures.flatMap(f => f.geometry.coordinates),
+      ...walkFeatures.flatMap(f => f.geometry.coordinates),
+    ];
+    if (allCoords.length === 0) return;
+
+    if (!hasWebGL()) { buildLeafletTripMap(); return; }
+
+    import('maplibre-gl').then(maplibregl => {
+      if (cancelled || !mapElRef.current || mapRef.current) return;
+
+      const lats = allCoords.map(c => c[1]);
+      const lngs = allCoords.map(c => c[0]);
+      const map = new maplibregl.Map({
+        container: mapElRef.current,
+        style: VECTOR_STYLE,
+        center: [(Math.min(...lngs) + Math.max(...lngs)) / 2, (Math.min(...lats) + Math.max(...lats)) / 2],
+        zoom: 12,
+        pitch: NAV_PITCH,
+        attributionControl: false,
+      });
+
+      let settled = false;
+      const giveUp = () => {
+        if (settled || cancelled) return;
+        settled = true;
+        map.remove();
+        mapRef.current = null;
+        setNavMap(false);
+        buildLeafletTripMap();
+      };
+      const styleTimer = setTimeout(giveUp, 6000);
+
+      map.on('error', () => { if (!settled && !map.isStyleLoaded()) { clearTimeout(styleTimer); giveUp(); } });
+
+      map.on('load', () => {
+        if (cancelled) return;
+        settled = true;
+        clearTimeout(styleTimer);
+        setNavMap(true);
+
+        map.addSource('trip-ride', { type: 'geojson', data: { type: 'FeatureCollection', features: rideFeatures } });
+        map.addSource('trip-walk', { type: 'geojson', data: { type: 'FeatureCollection', features: walkFeatures } });
+
+        // A casing under the route reads as a road at a tilt, the way a
+        // navigation app's line does, rather than a flat drawn stroke.
+        map.addLayer({
+          id: 'trip-ride-casing', type: 'line', source: 'trip-ride',
+          layout: { 'line-cap': 'round', 'line-join': 'round' },
+          paint: { 'line-color': '#00000055', 'line-width': 12 },
+        });
+        map.addLayer({
+          id: 'trip-ride-line', type: 'line', source: 'trip-ride',
+          layout: { 'line-cap': 'round', 'line-join': 'round' },
+          paint: { 'line-color': ['get', 'color'], 'line-width': 7 },
+        });
+        map.addLayer({
+          id: 'trip-walk-line', type: 'line', source: 'trip-walk',
+          layout: { 'line-cap': 'round' },
+          paint: { 'line-color': '#8D8672', 'line-width': 4, 'line-dasharray': [1.5, 1.5] },
+        });
+
+        map.fitBounds(
+          [[Math.min(...lngs), Math.min(...lats)], [Math.max(...lngs), Math.max(...lats)]],
+          { padding: { top: 90, bottom: 380, left: 40, right: 40 }, duration: 0, maxZoom: 15 },
+        );
+      });
+
+      // Panning away hands control back to the rider, the way a navigation
+      // app stops fighting you the moment you drag the map.
+      map.on('dragstart', () => setFollowing(false));
+
+      mapRef.current = map;
+    }).catch(buildLeafletTripMap);
+
+    return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [trip.status, trip.itinerary]);
 
   // Tear the map down when leaving the active screen
   useEffect(() => {
@@ -303,11 +426,72 @@ function TripScreen() {
     }
   }, [trip.status]);
 
-  // Live position marker follows the GPS fix
+  /*
+   * The rider's own marker, and the camera that follows it.
+   *
+   * On the navigation map this is the Waze behaviour: an arrow that points
+   * where you're going, with the camera locked behind it and the whole map
+   * turned so your direction of travel is up. Rotation is the part that
+   * makes a tilted map legible — without it you're reading a 3D scene
+   * facing an arbitrary way.
+   */
   useEffect(() => {
-    if (!mapRef.current || !trip.position) return;
+    const map = mapRef.current;
+    const pos = trip.position;
+    if (!map || !pos) return;
+
+    if (navMap) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const m = map as any;
+      const here: [number, number] = [pos.lng, pos.lat];
+
+      if (!posMarker.current) {
+        const el = document.createElement('div');
+        el.className = 'parapo-nav-arrow';
+        el.innerHTML =
+          '<svg width="34" height="34" viewBox="0 0 34 34">' +
+          '<circle cx="17" cy="17" r="15" fill="rgba(41,71,222,0.18)"/>' +
+          '<path d="M17 5 L26 27 L17 21 L8 27 Z" fill="#2947DE" stroke="#fff" stroke-width="2" stroke-linejoin="round"/>' +
+          '</svg>';
+        import('maplibre-gl').then(maplibregl => {
+          if (!mapRef.current) return;
+          posMarker.current = new maplibregl.Marker({ element: el, rotationAlignment: 'map' })
+            .setLngLat(here)
+            .addTo(m);
+        });
+      } else {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const mk = posMarker.current as any;
+        mk.setLngLat(here);
+        // The arrow points along the heading; the camera cancels it out, so
+        // on screen the arrow stays upright and the world turns instead.
+        if (pos.headingDeg !== undefined) mk.setRotation(pos.headingDeg);
+      }
+
+      if (following) {
+        // Only turn the camera when there's a heading worth trusting —
+        // otherwise a stationary phone would spin the map on the platform.
+        const bearing = pos.headingDeg;
+        const turn = bearing !== undefined && Math.abs(bearingDelta(m.getBearing(), bearing)) > 3;
+        m.easeTo({
+          center: here,
+          bearing: turn ? bearing : m.getBearing(),
+          pitch: NAV_PITCH,
+          zoom: Math.max(m.getZoom(), NAV_ZOOM),
+          duration: 900,
+          // Sit the rider low on screen so most of the map shows what's
+          // ahead rather than what's already behind — the standard
+          // navigation framing.
+          padding: { top: 0, bottom: Math.round(window.innerHeight * 0.28), left: 0, right: 0 },
+        });
+      }
+      return;
+    }
+
+    // Flat fallback map.
     import('leaflet').then(mod => {
-      const L = mod.default ?? mod;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const L = (mod.default ?? mod) as any;
       if (!mapRef.current || !trip.position) return;
       const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
       const here: [number, number] = [trip.position.lat, trip.position.lng];
@@ -315,16 +499,15 @@ function TripScreen() {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (posMarker.current as any).setLatLng(here);
       } else {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        posMarker.current = (L as any).circleMarker(here, {
+        posMarker.current = L.circleMarker(here, {
           radius: 9, fillColor: isDark ? '#7A90FF' : '#2947DE', fillOpacity: 1,
           color: isDark ? '#000' : '#fff', weight: 3,
         }).addTo(mapRef.current);
       }
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (mapRef.current as any).panTo(here, { animate: true });
+      if (following) (mapRef.current as any).panTo(here, { animate: true });
     });
-  }, [trip.position]);
+  }, [trip.position, navMap, following]);
 
   if (trip.status === 'idle') {
     return (
@@ -387,58 +570,149 @@ function TripScreen() {
     : null;
 
   return (
-    <div style={{ minHeight: '100vh', background: C.bg, color: C.ink, display: 'flex', flexDirection: 'column', fontFamily: 'Inter,system-ui,sans-serif' }}>
+    <div style={{ position: 'fixed', inset: 0, background: C.bg, color: C.ink, fontFamily: 'Inter,system-ui,sans-serif', overflow: 'hidden' }}>
       <style>{GLOBAL}</style>
 
-      {/* Header */}
-      <header style={{ padding: '52px 24px 18px', display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between' }}>
-        <div>
-          <span style={{ fontFamily: DISPLAY, fontSize: 16, fontWeight: 800, letterSpacing: '-0.02em', color: C.accent }}>
+      {/* Full-bleed map, same shell as the planner. A trip is a navigation
+          task, so the map should be the screen rather than a panel at the
+          top of a scrolling document — everything else floats over it.
+          `zIndex: 0` contains Leaflet's internal panes (they run 400-800)
+          so they can't paint over the controls. */}
+      <div ref={mapElRef} style={{ position: 'absolute', inset: 0, zIndex: 0 }} />
+
+      {/* Floating status pill + End trip */}
+      <div style={{
+        position: 'absolute', top: 0, left: 0, right: 0, zIndex: 10,
+        padding: 'calc(14px + env(safe-area-inset-top)) 16px 0',
+        display: 'flex', alignItems: 'center', gap: 10,
+      }}>
+        <div style={{
+          flex: 1, minWidth: 0, background: C.card, border: `1px solid ${C.border}`,
+          borderRadius: 22, padding: '10px 16px', boxShadow: '0 2px 12px rgba(0,0,0,0.12)',
+        }}>
+          <span style={{ fontFamily: DISPLAY, fontSize: 15, fontWeight: 800, letterSpacing: '-0.02em', color: C.accent }}>
             ParaPo<span style={{ color: C.ink }}>.</span>
           </span>
-          <h1 style={{ margin: '4px 0 0', fontFamily: DISPLAY, fontSize: 28, fontWeight: 800, letterSpacing: '-0.02em' }}>Trip in progress</h1>
-          {/* Live status — the single accent marks a live GPS fix */}
-          <p style={{ margin: '6px 0 0', fontSize: 12, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: position ? C.accent : C.muted }}>
-            {/* `gpsDenied` is set only on PERMISSION_DENIED — a genuinely
-                unavailable fix or a timeout keeps the watcher alive and
-                stays on "Finding your location". So this state is "blocked",
-                and calling it "unavailable" sent people looking for a signal
-                problem instead of a permission they can grant. Matches the
-                "Location access is blocked" banner below. */}
+          {/* `gpsDenied` is set only on PERMISSION_DENIED — a genuinely
+              unavailable fix or a timeout keeps the watcher alive and stays
+              on "Finding your location". So this state is "blocked", and
+              calling it "unavailable" sent people looking for a signal
+              problem instead of a permission they can grant. */}
+          <p style={{ margin: '2px 0 0', fontSize: 11, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: position ? C.accent : C.muted }}>
             {position
               ? '● Live location'
               : gpsDenied
-                ? '○ Location blocked — tap Done as you go'
-                : <span style={{ animation: 'pulse 1.6s ease-in-out infinite' }}>○ Finding your location</span>}
+                ? '○ Location blocked'
+                : <span style={{ animation: 'pulse 1.6s ease-in-out infinite' }}>○ Finding you</span>}
           </p>
         </div>
         <button
-          style={{ background: 'none', border: 'none', padding: 0, fontSize: 13, fontWeight: 700, color: C.muted, cursor: 'pointer', fontFamily: 'inherit', textDecoration: 'underline' }}
+          style={{
+            flexShrink: 0, background: C.card, border: `1px solid ${C.border}`,
+            borderRadius: 999, padding: '11px 16px', fontSize: 13, fontWeight: 700,
+            color: C.body, cursor: 'pointer', fontFamily: 'inherit',
+            boxShadow: '0 2px 12px rgba(0,0,0,0.12)',
+          }}
           onClick={() => { trip.endTrip(); router.replace('/planner'); }}
         >
           End trip
         </button>
-      </header>
+      </div>
 
-      {/* Active disruption — bold type, no color theatre */}
+      {/* Active disruption — floats under the pill so it can't be missed */}
       {activeDisruption && status !== 'rerouting' && (
-        <div style={{ padding: '14px 24px', borderTop: `1px solid ${C.border}`, borderBottom: `1px solid ${C.border}` }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-            <p style={{ margin: 0, fontSize: 14, fontWeight: 700, color: C.ink }}>▲ {activeDisruption.description}</p>
-            <button
-              style={{ background: 'none', border: 'none', fontSize: 13, fontWeight: 800, color: C.ink, textDecoration: 'underline', cursor: 'pointer', fontFamily: 'inherit', flexShrink: 0 }}
-              onClick={() => trip.triggerReroute()}
-            >
-              Reroute
-            </button>
+        <div style={{
+          position: 'absolute', top: 'calc(76px + env(safe-area-inset-top))', left: 16, right: 16, zIndex: 10,
+          background: C.card, border: `1px solid ${C.border}`, borderRadius: 16,
+          padding: '12px 14px', boxShadow: '0 2px 12px rgba(0,0,0,0.12)',
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
+        }}>
+          <p style={{ margin: 0, fontSize: 13, fontWeight: 700, color: C.ink }}>▲ {activeDisruption.description}</p>
+          <button
+            style={{ background: 'none', border: 'none', fontSize: 13, fontWeight: 800, color: C.accent, textDecoration: 'underline', cursor: 'pointer', fontFamily: 'inherit', flexShrink: 0 }}
+            onClick={() => trip.triggerReroute()}
+          >
+            Reroute
+          </button>
+        </div>
+      )}
+
+      {/* The instruction, on the map — a navigation app's turn banner.
+          For a passenger the equivalent of "turn right in 300 m" is where
+          to get off and how far away it is; that is the one thing worth
+          reading at a glance, so it sits over the map rather than in the
+          sheet. The sheet keeps the action button and the full checklist. */}
+      {currentLeg && status === 'active' && (
+        <div style={{
+          position: 'absolute',
+          top: activeDisruption ? 'calc(140px + env(safe-area-inset-top))' : 'calc(76px + env(safe-area-inset-top))',
+          left: 16, right: 16, zIndex: 12,
+          background: C.accent, borderRadius: 20, padding: '14px 16px',
+          boxShadow: '0 6px 22px rgba(41,71,222,0.35)',
+          display: 'flex', alignItems: 'center', gap: 13,
+        }}>
+          <span style={{
+            flexShrink: 0, width: 42, height: 42, borderRadius: 14,
+            background: 'rgba(255,255,255,0.2)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: 10, fontWeight: 800, letterSpacing: '0.04em', color: C.onPrimary,
+          }}>
+            {modeTag(currentLeg)}
+          </span>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <p style={{
+              margin: 0, fontFamily: DISPLAY, fontSize: 19, fontWeight: 800,
+              letterSpacing: '-0.01em', color: C.onPrimary, lineHeight: 1.25,
+              whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+            }}>
+              {currentLeg.type === 'ride'
+                ? t(lang, 'get_off_at', { stop: (currentLeg as RideLeg).to.name })
+                : legAction(currentLeg, lang)}
+            </p>
+            <p className="tnum" style={{ margin: '2px 0 0', fontSize: 13, fontWeight: 600, color: 'rgba(255,255,255,0.85)' }}>
+              {distKm !== null
+                ? `${distKm < 1 ? `${Math.round(distKm * 1000)} m` : `${distKm.toFixed(1)} km`}${eta !== null ? ` · ~${eta} min` : ''}`
+                : currentLeg.type === 'ride'
+                  ? t(lang, 'ride_stops', { count: String((currentLeg as RideLeg).stops.length) })
+                  : `${Math.round((currentLeg as WalkLeg).distKm * 1000)} m`}
+              {' · '}{t(lang, 'step_of', { n: String(currentLegIndex + 1), total: String(itinerary.legs.length) })}
+            </p>
           </div>
         </div>
       )}
 
-      <main style={{ flex: 1, overflowY: 'auto', padding: '20px 24px 24px' }}>
-        {/* Live map — the route, and your position once GPS locks */}
-        <div ref={mapElRef} style={{ height: '34vh', minHeight: 200, borderRadius: 20, border: `1px solid ${C.border}`, overflow: 'hidden', marginBottom: 16 }} />
+      {/* Recenter — appears only after panning away, like a navigation app.
+          Sits just above the sheet so a thumb can reach it. */}
+      {status === 'active' && !following && (
+        <button
+          onClick={() => setFollowing(true)}
+          style={{
+            position: 'absolute', bottom: 'calc(58vh + 14px)', right: 16, zIndex: 15,
+            display: 'flex', alignItems: 'center', gap: 7,
+            background: C.accent, border: 'none', borderRadius: 999,
+            padding: '11px 18px', fontSize: 13, fontWeight: 700,
+            color: C.onPrimary, cursor: 'pointer', fontFamily: 'inherit',
+            boxShadow: '0 4px 16px rgba(41,71,222,0.4)',
+          }}
+        >
+          ◎ Recenter
+        </button>
+      )}
 
+      {/* Everything else lives in a sheet over the map. It starts tall
+          enough to show the current step and its Done button without a
+          scroll, and the rest is reachable by scrolling inside it. */}
+      <div style={{
+        position: 'absolute', left: 0, right: 0, bottom: 0, zIndex: 20,
+        height: '58vh', background: C.bg,
+        borderTop: `1px solid ${C.border}`, borderRadius: '28px 28px 0 0',
+        boxShadow: '0 -8px 32px rgba(0,0,0,0.14)',
+        display: 'flex', flexDirection: 'column',
+        paddingBottom: 'env(safe-area-inset-bottom)',
+      }}>
+        <div style={{ width: 32, height: 4, borderRadius: 2, background: C.border, margin: '10px auto 0', flexShrink: 0 }} />
+
+      <main style={{ flex: 1, overflowY: 'auto', padding: '14px 24px 24px' }}>
         {/* GPS state — explain, and offer a way in, instead of failing silently */}
         {!position && (gpsDenied || geoPerm === 'denied') && (
           <div style={{ marginBottom: 22, background: C.card, border: `1px solid ${C.border}`, borderRadius: 20, padding: 16 }}>
@@ -522,39 +796,15 @@ function TripScreen() {
         {/* Current leg — the glance */}
         {currentLeg && (
           <section style={{ marginBottom: 28, background: C.card, border: `1px solid ${C.border}`, borderRadius: 20, padding: 18 }}>
-            <Micro color={C.accent}>
-              {t(lang, 'step_of', { n: String(currentLegIndex + 1), total: String(itinerary.legs.length) })} · {modeTag(currentLeg)}
-            </Micro>
-
-            {/* The instruction, as an instruction — "Take the LRT-2 train",
-                not "LRT-2 → Buendia (9 stops)". */}
-            <p style={{ margin: '8px 0 0', fontFamily: DISPLAY, fontSize: 24, fontWeight: 800, color: C.ink, letterSpacing: '-0.02em', lineHeight: 1.25 }}>
+            {/* Which vehicle you're on. Where to get off, how far and which
+                step lives in the banner over the map — repeating it here
+                just made the rider read the same sentence twice. */}
+            <p style={{ margin: 0, fontFamily: DISPLAY, fontSize: 22, fontWeight: 800, color: C.ink, letterSpacing: '-0.02em', lineHeight: 1.25 }}>
               {legAction(currentLeg, lang)}
             </p>
-
-            {/* Where to get off is the one thing a rider must not miss, so it
-                gets its own line at full contrast rather than a muted aside. */}
-            {currentLeg.type === 'ride' && (
-              <p style={{ margin: '10px 0 0', fontSize: 17, fontWeight: 700, color: C.ink, lineHeight: 1.35 }}>
-                {t(lang, 'get_off_at', { stop: (currentLeg as RideLeg).to.name })}
-                <span style={{ fontWeight: 500, color: C.muted }}>
-                  {' · '}{t(lang, 'ride_stops', { count: String((currentLeg as RideLeg).stops.length) })}
-                </span>
-              </p>
-            )}
             {currentLeg.type === 'walk' && (
-              <p className="tnum" style={{ margin: '10px 0 0', fontSize: 17, fontWeight: 700, color: C.ink }}>
-                {Math.round((currentLeg as WalkLeg).distKm * 1000)} m
-                <span style={{ fontWeight: 500, color: C.muted }}>
-                  {' · '}{t(lang, 'about_min', { n: String(Math.max(1, Math.round((currentLeg as WalkLeg).durationMin))) })}
-                </span>
-              </p>
-            )}
-
-            {distKm !== null && (
               <p className="tnum" style={{ margin: '6px 0 0', fontSize: 14, color: C.muted }}>
-                {distKm < 1 ? `${Math.round(distKm * 1000)} m` : `${distKm.toFixed(1)} km`}
-                {eta !== null && ` · ~${eta} min`} to next stop
+                {t(lang, 'about_min', { n: String(Math.max(1, Math.round((currentLeg as WalkLeg).durationMin))) })}
               </p>
             )}
             {signalStale && (
@@ -724,9 +974,9 @@ function TripScreen() {
         )}
       </main>
 
-      {/* Sticky action bar */}
+      {/* Action bar, pinned to the bottom of the sheet */}
       {status === 'active' && (
-        <div style={{ position: 'sticky', bottom: 0, padding: '14px 24px calc(14px + env(safe-area-inset-bottom))', background: C.bg, borderTop: `1px solid ${C.border}`, display: 'flex', gap: 10 }}>
+        <div style={{ flexShrink: 0, padding: '12px 24px calc(12px + env(safe-area-inset-bottom))', background: C.bg, borderTop: `1px solid ${C.border}`, display: 'flex', gap: 10 }}>
           <button
             style={{
               flex: 1, padding: '15px', borderRadius: 999, fontSize: 14, fontWeight: 700,
@@ -749,6 +999,7 @@ function TripScreen() {
           )}
         </div>
       )}
+      </div>
     </div>
   );
 }

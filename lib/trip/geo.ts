@@ -7,6 +7,44 @@ import { getLegArrivalStop } from './types';
 export const ADVANCE_THRESHOLD_KM = 0.15; // 150 m
 
 /**
+ * Below this speed a heading is noise, not direction — a phone sitting
+ * still produces wildly swinging bearings, and rotating the map to them
+ * would make the screen spin while the rider stands on a platform.
+ * ~1.4 m/s is a slow walk.
+ */
+export const MIN_HEADING_SPEED_MPS = 1.4;
+
+/**
+ * Initial bearing from one point to another, in degrees clockwise from
+ * north. Used to turn the map so the direction of travel points up, for
+ * the many devices where `GeolocationCoordinates.heading` is always null.
+ */
+export function bearingBetween(
+  fromLat: number, fromLng: number,
+  toLat: number, toLng: number,
+): number {
+  const toRad = (d: number) => (d * Math.PI) / 180;
+  const φ1 = toRad(fromLat);
+  const φ2 = toRad(toLat);
+  const Δλ = toRad(toLng - fromLng);
+
+  const y = Math.sin(Δλ) * Math.cos(φ2);
+  const x = Math.cos(φ1) * Math.sin(φ2) - Math.sin(φ1) * Math.cos(φ2) * Math.cos(Δλ);
+  const deg = (Math.atan2(y, x) * 180) / Math.PI;
+  return (deg + 360) % 360;
+}
+
+/**
+ * Shortest signed difference between two bearings, in [-180, 180].
+ *
+ * Rotating from 350° to 10° should be +20°, not -340° — without this the
+ * camera swings the long way round every time the heading crosses north.
+ */
+export function bearingDelta(from: number, to: number): number {
+  return ((((to - from) % 360) + 540) % 360) - 180;
+}
+
+/**
  * Returns true when the user's current position is close enough to the
  * arrival point of `legIndex` to auto-advance to the next leg.
  */
