@@ -121,9 +121,21 @@ function worstLastTrainCheck(checks: LastTrainCheck[]): LastTrainCheck | null {
 }
 
 /* Transport combination, e.g. "MRT-3 → EDSA Carousel" */
+/*
+ * "LRT-2" already tells you it's a train, but "Route 3 (Aurora Blvd)" or
+ * "EDSA Carousel" don't say BUS anywhere in the name — so on the results
+ * list, before anyone taps in, a bus route read exactly like a train one.
+ * Prefixing the mode only when the line's own name doesn't already carry
+ * it keeps "LRT-2" clean while making "BUS · Route 3 (Aurora Blvd)"
+ * unambiguous at a glance.
+ */
 function comboLabel(itin: Itinerary): string {
   const rides = rideLegs(itin);
-  return rides.length ? rides.map(r => r.line.name).join(' → ') : 'Walk only';
+  if (!rides.length) return 'Walk only';
+  return rides.map(r => {
+    const tag = MODE_META[r.mode]?.label ?? r.mode.toUpperCase();
+    return r.line.name.toUpperCase().includes(tag) ? r.line.name : `${tag} · ${r.line.name}`;
+  }).join(' → ');
 }
 
 /* Human-readable fare computation from the rule the engine actually applied */
