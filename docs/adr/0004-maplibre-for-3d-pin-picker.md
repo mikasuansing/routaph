@@ -1,7 +1,33 @@
 # ADR 0004 — MapLibre GL for the 3D pin picker
 
 **Date:** 2026-07-31
-**Status:** Accepted (scoped to the pin picker)
+**Status:** Accepted — **extended 2026-08-01 to the trip screen**
+
+> **Update, 2026-08-01.** The scoped exception below asked to be revisited
+> once the picker had been used. It was, and the answer arrived from the
+> product side: the trip screen should navigate like a driving app — camera
+> locked to the rider, tilted forward, and the map turned so the direction
+> of travel points up. Leaflet has no camera at all, so this was not
+> reachable by adjusting it.
+>
+> The trip map is therefore MapLibre too. The route is drawn as GeoJSON
+> (ride legs solid in the line's own colour over a casing, walk legs
+> dashed), the rider is an arrow that rotates to their heading, and the
+> camera eases to follow. Dragging the map releases the camera and offers a
+> Recenter button, the way a navigation app stops fighting you the moment
+> you pan.
+>
+> Heading comes from `GeolocationCoordinates.heading` where the device
+> provides it, and otherwise from the bearing between consecutive fixes —
+> but only above a walking pace, since a stationary phone produces bearings
+> that swing wildly and would spin the map while a rider stands on a
+> platform. See `bearingBetween` / `bearingDelta` in `lib/trip/geo.ts`.
+>
+> **The planner map is still Leaflet.** It is a flat overview where tilt
+> buys nothing, and it is the first thing that paints on load, so it is the
+> worst place to spend 200 KB. Both libraries now ship, which the original
+> decision called unacceptable as a permanent state — that remains true,
+> and migrating the planner is the outstanding work that closes it.
 
 ## Context
 

@@ -22,7 +22,8 @@ import {
   TRIP_PROGRESS_KEY,
   TRIP_STORAGE_KEY,
 } from './types';
-import { distToNextStop, shouldAdvanceLeg } from './geo';
+import { MIN_HEADING_SPEED_MPS, bearingBetween, distToNextStop, shouldAdvanceLeg } from './geo';
+import { haversineKm } from '@/lib/routing/utils';
 import { notifyApproachingStop } from './notify';
 
 // ── Reducer ───────────────────────────────────────────────────────────────────
@@ -216,12 +217,33 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
 
     watchIdRef.current = navigator.geolocation.watchPosition(
       (pos) => {
+        const prev = latestStateRef.current.position;
+        const speed = pos.coords.speed ?? undefined;
+
+        // Prefer the device's own compass heading. It is null whenever the
+        // phone is still and null on most desktop browsers, so fall back to
+        // the bearing between this fix and the last — but only while
+        // actually moving, since a stationary phone produces bearings that
+        // swing wildly and would spin the map on the platform.
+        let headingDeg = pos.coords.heading ?? undefined;
+        if (headingDeg === undefined && prev) {
+          const movedKm = haversineKm(prev.lat, prev.lng, pos.coords.latitude, pos.coords.longitude);
+          const movingFast = (speed ?? 0) >= MIN_HEADING_SPEED_MPS;
+          // A fix can jitter by metres while stationary; require real travel.
+          if (movingFast || movedKm > 0.02) {
+            headingDeg = bearingBetween(prev.lat, prev.lng, pos.coords.latitude, pos.coords.longitude);
+          } else {
+            headingDeg = prev.headingDeg;
+          }
+        }
+
         const gp: GeoPosition = {
           lat:       pos.coords.latitude,
           lng:       pos.coords.longitude,
           accuracyM: pos.coords.accuracy,
           timestamp: pos.timestamp,
-          speedMps:  pos.coords.speed ?? undefined,
+          speedMps:  speed,
+          headingDeg,
         };
         dispatch({ type: 'SET_POS', position: gp });
 
