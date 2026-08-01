@@ -97,7 +97,10 @@ export function ThemeToggle() {
       onClick={toggle}
       aria-label={`Switch to ${theme === 'light' ? 'dark' : 'light'} mode`}
       style={{
-        position: 'fixed', bottom: 'calc(24px + env(safe-area-inset-bottom))', right: 'calc(24px + env(safe-area-inset-right))', zIndex: 1000,
+        // Clear of the bottom bar. At 24px it sat on top of the planner's
+        // search bar and the trip screen's action row, covering the corner
+        // of whichever one was showing.
+        position: 'fixed', bottom: 'calc(104px + env(safe-area-inset-bottom))', right: 'calc(16px + env(safe-area-inset-right))', zIndex: 1000,
         width: 44, height: 44, borderRadius: '50%',
         background: 'var(--color-surface)',
         border: '1.5px solid var(--color-border)',

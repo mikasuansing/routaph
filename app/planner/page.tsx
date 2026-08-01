@@ -256,6 +256,12 @@ function StopRow({ label, value, onChange, placeholder, stops, extraOption }: {
 function Sheet({ children, height, style }: { children: React.ReactNode; height: string | number; style?: React.CSSProperties }) {
   return (
     <div style={{
+      // Heights come in as PERCENTAGES, not `vh`. On mobile `vh` is locked
+      // to the viewport with the browser toolbar hidden, so a vh-sized sheet
+      // hangs below the screen while the toolbar shows and shifts as it
+      // hides on scroll — taking anything pinned to its bottom with it. The
+      // root here is `fixed; inset: 0`, so a percentage tracks the viewport
+      // that is actually visible.
       position: 'absolute', left: 0, right: 0, bottom: 0, zIndex: 20,
       height, background: C.surface,
       borderTop: `1px solid ${C.border}`,
@@ -293,6 +299,9 @@ export default function Planner() {
   const [error, setError]         = useState<string | null>(null);
   const [jeepneyFallback, setJeepneyFallback] = useState<ReturnType<typeof suggestJeepneyCorridor>>(null);
   const [liveVehicles, setLiveVehicles] = useState<LiveVehicle[]>([]);
+  // The map builds asynchronously, so effects that draw onto it have to wait
+  // for it rather than run once against a null layer group and never retry.
+  const [mapReady, setMapReady] = useState(false);
   // Locations dropped on the map, keyed by the label shown in the picker.
   // They live alongside catalog stops so the rest of the planner — search,
   // map drawing, swap — treats a pinned address exactly like a named stop.
@@ -428,6 +437,7 @@ export default function Planner() {
   const mapRef      = useRef<unknown>(null);
   const routeGroup  = useRef<unknown>(null);
   const liveGroup   = useRef<unknown>(null);
+  const networkGroup = useRef<unknown>(null);
   const tileRef     = useRef<unknown>(null);
 
   useEffect(() => {
@@ -471,7 +481,11 @@ export default function Planner() {
       // Separate layer so live vehicles survive a route redraw and vice versa.
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       liveGroup.current = (L as any).layerGroup().addTo(map);
+      // The transit network, drawn under everything else on the home screen.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      networkGroup.current = (L as any).layerGroup().addTo(map);
       mapRef.current = map;
+      setMapReady(true);
     });
 
     return () => { cancelled = true; };
@@ -542,6 +556,58 @@ export default function Planner() {
       }
     }
   }, [screen]);
+
+  /* ── The network itself, on the home screen ───────────────────────────────
+   * The home map used to be an empty basemap: nothing on it belonged to
+   * ParaPo, so the app's whole subject — the lines you can actually ride —
+   * was invisible until you searched. Drawing the network gives the screen
+   * something to be, and orients you before you type anything.
+   * Dimmed while a route is selected so the chosen itinerary reads clearly. */
+  useEffect(() => {
+    if (!networkGroup.current) return;
+    let cancelled = false;
+
+    fetch('/api/v1/catalog/lines')
+      .then(r => r.json())
+      .then((json: { data?: Array<{ id: number; name: string; color: string; stops: CatalogStop[] }> }) => {
+        if (cancelled || !networkGroup.current) return;
+        return import('leaflet').then(mod => {
+          if (cancelled || !networkGroup.current) return;
+          const L = mod.default ?? mod;
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const group = networkGroup.current as any;
+          group.clearLayers();
+
+          const faded = screen !== 'home';
+          for (const line of json.data ?? []) {
+            const coords = line.stops.map(st => [st.lat, st.lng] as [number, number]);
+            if (coords.length < 2) continue;
+            const color = line.color || '#8D8672';
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            (L as any).polyline(coords, {
+              color, weight: faded ? 2 : 3.5,
+              opacity: faded ? 0.18 : 0.55,
+              lineCap: 'round', lineJoin: 'round',
+            }).addTo(group);
+
+            // Stations only at rest — during a search they'd compete with
+            // the itinerary's own origin and destination markers.
+            if (!faded) {
+              for (const st of line.stops) {
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                (L as any).circleMarker([st.lat, st.lng], {
+                  radius: 2.6, fillColor: color, fillOpacity: 0.85,
+                  color, weight: 0, interactive: false,
+                }).addTo(group);
+              }
+            }
+          }
+        });
+      })
+      .catch(() => { /* the network overview is decoration; never block the map */ });
+
+    return () => { cancelled = true; };
+  }, [screen, mapReady]);
 
   /* ── Keep the basemap in step with the theme toggle ───────────────────── */
   useEffect(() => {
@@ -788,15 +854,43 @@ export default function Planner() {
                 boxShadow: '0 4px 20px rgba(0,0,0,0.12)',
               }}
             >
-              <span style={{ fontSize: 17 }}>🔍</span>
-              <span style={{ fontSize: 15, fontWeight: from && to ? 700 : 500, color: from && to ? C.ink : C.muted }}>
-                {from && to ? `${from} → ${to}` : t(lang, 'choose_a_stop')}
+              {/* The one thing this screen is for, so it reads as an
+                  invitation rather than a form label — "Choose a stop"
+                  described a control, not what the app does for you. */}
+              <span style={{
+                flexShrink: 0, width: 34, height: 34, borderRadius: '50%',
+                background: C.accent, color: '#FFFFFF',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: 16, fontWeight: 800,
+              }}>
+                ↗
+              </span>
+              <span style={{ flex: 1, minWidth: 0 }}>
+                {from && to ? (
+                  <>
+                    <span style={{ display: 'block', fontSize: 15, fontWeight: 700, color: C.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      {from} → {to}
+                    </span>
+                    <span style={{ display: 'block', fontSize: 12, color: C.muted, marginTop: 1 }}>
+                      Tap to change
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    <span style={{ display: 'block', fontFamily: DISPLAY, fontSize: 18, fontWeight: 800, color: C.ink, letterSpacing: '-0.01em' }}>
+                      {t(lang, 'where_to')}
+                    </span>
+                    <span style={{ display: 'block', fontSize: 12, color: C.muted, marginTop: 1 }}>
+                      {t(lang, 'plan_tagline')}
+                    </span>
+                  </>
+                )}
               </span>
             </button>
           ) : (
             /* ── Expanded: the plan form ── */
-            <Sheet height="auto" style={{ maxHeight: '62vh' }}>
-              <div style={{ overflowY: 'auto', padding: '14px 24px 28px', display: 'flex', flexDirection: 'column' }}>
+            <Sheet height="auto" style={{ maxHeight: '62%' }}>
+              <div style={{ overflowY: 'auto', overscrollBehavior: 'contain', WebkitOverflowScrolling: 'touch', padding: '14px 24px 28px', display: 'flex', flexDirection: 'column' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
                   <Micro>Plan a trip</Micro>
                   <button onClick={() => setFormOpen(false)} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: 13, fontWeight: 700, color: C.muted, fontFamily: 'inherit' }}>
@@ -879,8 +973,8 @@ export default function Planner() {
 
           {/* ── Settings overlay: transport modes, rush hour, Beep, language, fares ── */}
           {settingsOpen && (
-            <Sheet height="auto" style={{ maxHeight: '78vh' }}>
-              <div style={{ overflowY: 'auto', padding: '14px 24px 28px', display: 'flex', flexDirection: 'column' }}>
+            <Sheet height="auto" style={{ maxHeight: '78%' }}>
+              <div style={{ overflowY: 'auto', overscrollBehavior: 'contain', WebkitOverflowScrolling: 'touch', padding: '14px 24px 28px', display: 'flex', flexDirection: 'column' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 }}>
                   <Micro>Settings</Micro>
                   <button onClick={() => setSettingsOpen(false)} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: 13, fontWeight: 700, color: C.muted, fontFamily: 'inherit' }}>
@@ -984,7 +1078,7 @@ export default function Planner() {
               </div>
             </div>
 
-            <Sheet height="64vh">
+            <Sheet height="64%">
               {/* filter row — text only */}
               <div style={{ display: 'flex', gap: 8, padding: '12px 24px', flexShrink: 0 }}>
                 {modeFilters.map(f => {
@@ -1003,7 +1097,7 @@ export default function Planner() {
               </div>
 
               {/* route list — typography rows, whitespace separation */}
-              <div style={{ flex: 1, overflowY: 'auto', padding: '10px 24px 32px' }}>
+              <div style={{ flex: 1, overflowY: 'auto', overscrollBehavior: 'contain', WebkitOverflowScrolling: 'touch', padding: '10px 24px 32px' }}>
                 {filtered.length === 0 ? (
                   <div style={{ padding: '48px 0', textAlign: 'center' }}>
                     <p style={{ fontSize: 15, fontWeight: 700, color: C.ink, marginBottom: 6 }}>No {modeFilter === 'all' ? '' : modeFilter + ' '}routes</p>
@@ -1086,8 +1180,8 @@ export default function Planner() {
               </span>
             </div>
 
-            <Sheet height="70vh">
-              <div style={{ flex: 1, overflowY: 'auto', padding: '10px 24px 32px' }}>
+            <Sheet height="70%">
+              <div style={{ flex: 1, overflowY: 'auto', overscrollBehavior: 'contain', WebkitOverflowScrolling: 'touch', padding: '10px 24px 32px' }}>
                 {/* Headline numbers */}
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', padding: '10px 0 6px' }}>
                   <div>

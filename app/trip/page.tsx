@@ -687,7 +687,7 @@ function TripScreen() {
         <button
           onClick={() => setFollowing(true)}
           style={{
-            position: 'absolute', bottom: 'calc(58vh + 14px)', right: 16, zIndex: 15,
+            position: 'absolute', bottom: 'calc(58% + 14px)', right: 16, zIndex: 15,
             display: 'flex', alignItems: 'center', gap: 7,
             background: C.accent, border: 'none', borderRadius: 999,
             padding: '11px 18px', fontSize: 13, fontWeight: 700,
@@ -703,8 +703,15 @@ function TripScreen() {
           enough to show the current step and its Done button without a
           scroll, and the rest is reachable by scrolling inside it. */}
       <div style={{
-        position: 'absolute', left: 0, right: 0, bottom: 0, zIndex: 20,
-        height: '58vh', background: C.bg,
+        // Anchored top-and-bottom rather than given a `vh` height. On
+        // mobile `vh` is locked to the viewport with the browser toolbar
+        // HIDDEN, so while the toolbar is showing a vh-sized sheet hangs
+        // below the screen — taking the action bar pinned to its bottom
+        // with it, and shifting as the toolbar hides and reappears on
+        // scroll. The parent is `fixed; inset: 0`, so a percentage here
+        // resolves against the viewport that is actually visible.
+        position: 'absolute', left: 0, right: 0, top: '42%', bottom: 0, zIndex: 20,
+        background: C.bg,
         borderTop: `1px solid ${C.border}`, borderRadius: '28px 28px 0 0',
         boxShadow: '0 -8px 32px rgba(0,0,0,0.14)',
         display: 'flex', flexDirection: 'column',
@@ -712,7 +719,7 @@ function TripScreen() {
       }}>
         <div style={{ width: 32, height: 4, borderRadius: 2, background: C.border, margin: '10px auto 0', flexShrink: 0 }} />
 
-      <main style={{ flex: 1, overflowY: 'auto', padding: '14px 24px 24px' }}>
+      <main style={{ flex: 1, overflowY: 'auto', overscrollBehavior: 'contain', WebkitOverflowScrolling: 'touch', padding: '14px 24px 24px' }}>
         {/* GPS state — explain, and offer a way in, instead of failing silently */}
         {!position && (gpsDenied || geoPerm === 'denied') && (
           <div style={{ marginBottom: 22, background: C.card, border: `1px solid ${C.border}`, borderRadius: 20, padding: 16 }}>
