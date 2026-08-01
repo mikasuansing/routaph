@@ -339,6 +339,42 @@ VehicleEstimate {
 
 ---
 
+## GET /api/v1/geo/reverse
+
+**Auth:** None
+**Query:** `lat` (-90..90, required), `lng` (-180..180, required)
+**Returns:** `{ "data": ReverseGeocode }`
+
+```typescript
+ReverseGeocode {
+  label:     string;        // "2296 Chino Roces Ave, Makati City"
+  fullLabel: string;        // the complete address line as returned
+  lat:       number;        // echoed back, rounded to the cache grid
+  lng:       number;
+  source:    "osm" | "coords";
+}
+```
+
+**Status codes:** 200, 400 (validation), 429
+**Notes:**
+- Backs the drop-a-pin location picker: a rider chooses a point on the map
+  and needs to see a street address rather than a decimal pair.
+- Server-side only, so the Nominatim usage policy can actually be honoured:
+  a real identifying `User-Agent` (`GEOCODER_USER_AGENT`), one request per
+  second at most, and no bulk querying. A browser-side call could satisfy
+  none of that, and it would also breach the single-API-boundary rule.
+- Results are cached in Redis for 30 days keyed to a ~11 m coordinate grid
+  (5 decimal places). Street addresses effectively never change, and the
+  cache is what keeps us inside the rate limit.
+- **Never errors on a geocoding failure.** If Nominatim is unreachable,
+  rate-limited, or has nothing at the point, it returns
+  `source: "coords"` with the coordinates formatted as the label. A rider
+  who dropped a pin still gets a usable, if unlovely, destination.
+- Attribution: address data © OpenStreetMap contributors (ODbL). The picker
+  UI carries the credit, matching the existing map attribution.
+
+---
+
 ## Planned (not yet implemented)
 
 | Method | Path | Auth | Description |

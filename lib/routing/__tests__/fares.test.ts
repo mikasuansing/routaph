@@ -39,3 +39,45 @@ describe('fare rules', () => {
     expect(computeFare('walk', 5, 999, rules)).toBe(0);
   });
 });
+
+/*
+ * Rail fares are published as a matrix with a ceiling, not as an open-ended
+ * per-km rate. `base + rate x km` approximates the middle of that matrix and
+ * runs past the end of it: before capping, the full length of LRT-1 priced
+ * at ₱51 against a published ₱15-30 matrix.
+ */
+describe('fare ceilings', () => {
+  const CAPPED_LRT1: FareRule = {
+    lineId: 5, mode: 'lrt', baseFare: 16.25, perKmRate: 1.47, flagDistanceKm: 0, maxFare: 30,
+  };
+  const capped: FareRule[] = [CAPPED_LRT1, ...DEFAULT_FARE_RULES];
+
+  it('clamps a long journey to the published maximum', () => {
+    // 23.6 km is the real end-to-end length of LRT-1 including the Cavite
+    // Extension; uncapped this is ₱50.94.
+    expect(computeFare('lrt', 23.6, 5, capped)).toBe(30);
+  });
+
+  it('leaves fares below the ceiling untouched', () => {
+    expect(computeFare('lrt', 5, 5, capped)).toBeCloseTo(16.25 + 5 * 1.47, 2);
+  });
+
+  it('never returns less than the base fare for a short hop', () => {
+    expect(computeFare('lrt', 0.4, 5, capped)).toBeGreaterThanOrEqual(16.25);
+  });
+
+  it('caps the discounted rail defaults at their matrix maximums', () => {
+    // MRT-3 ₱6-14 and LRT-2 ₱8-18 per the 2026 DOTr discount.
+    expect(computeFare('mrt', 100, 999, DEFAULT_FARE_RULES)).toBe(14);
+    expect(computeFare('lrt', 100, 999, DEFAULT_FARE_RULES)).toBe(18);
+  });
+
+  it('leaves road modes uncapped', () => {
+    // LTFRB publishes a per-km rate for jeepney and bus with no ceiling, so
+    // there is no honest number to clamp to — inventing one would be a
+    // bigger error than the overshoot on a very long ride.
+    const far = computeFare('bus', 40, 999, DEFAULT_FARE_RULES);
+    expect(far).toBeCloseTo(18 + 35 * 2.98, 2);
+    expect(computeFare('jeepney', 30, 999, DEFAULT_FARE_RULES)).toBeCloseTo(14 + 26 * 2.0, 2);
+  });
+});

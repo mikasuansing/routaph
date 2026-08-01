@@ -81,6 +81,19 @@ export async function loadTransitGraph(): Promise<TransitGraph> {
     // Flag distances: rail charges per-km from 0; road modes have a free-km window
     const FLAG_KM: Partial<Record<string, number>> = { mrt: 0, lrt: 0, bus: 5, jeepney: 4 };
 
+    // Published single-journey ceilings, keyed by route id (see
+    // supabase/migrations/006_2026_fare_rates.sql). Rail fares are matrices
+    // with a maximum, so the per-km approximation has to be clamped or it
+    // runs past what the operator can actually charge — LRT-1 end to end
+    // came out at P51 against its P15-30 matrix before this existed.
+    // Road modes are left uncapped: LTFRB publishes a per-km rate for them
+    // with no ceiling, so inventing one would be worse than the overshoot.
+    const MAX_FARE: Partial<Record<number, number>> = {
+      3: 14,  // MRT-3, P6-14 matrix
+      4: 18,  // LRT-2, P8-18 matrix
+      5: 30,  // LRT-1, P15-30 matrix
+    };
+
     // Per-LINE fare rules (lineId = route id, which is the engine's line id).
     // Never average across a mode: LRT-1 (LRMC, undiscounted) and LRT-2
     // (DOTr 50% discount since 2026-03-23) are both mode 'lrt' but priced
@@ -102,6 +115,7 @@ export async function loadTransitGraph(): Promise<TransitGraph> {
         baseFare:       Number(fare.base_fare),
         perKmRate:      Number(fare.per_km),
         flagDistanceKm: FLAG_KM[mode] ?? 4,
+        maxFare:        MAX_FARE[route.id],
       });
     }
     // Mode-level fallbacks for any line without a DB fare row
