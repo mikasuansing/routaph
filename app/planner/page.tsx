@@ -1059,11 +1059,16 @@ export default function Planner() {
       {/* ════════ RESULTS ════════ */}
       {screen === 'results' && (() => {
         const filtered = itineraries.filter(itin => matchesFilter(itin, modeFilter));
+        // No standalone "Jeepney" filter: the network has exactly one real
+        // jeepney corridor (Katipunan, 4 stops), so filtering to it returns
+        // empty almost every time — a chip that reads as broken by default
+        // rather than occasionally. Jeepney legs still surface inside mixed
+        // routes, and the untracked-corridor suggestion card still fires
+        // when nothing else matches; only the always-empty filter is gone.
         const modeFilters: { key: ModeFilter; label: string }[] = [
           { key: 'all', label: 'All' },
           { key: 'train', label: 'Train' },
           { key: 'bus', label: 'Bus' },
-          { key: 'jeepney', label: 'Jeepney' },
         ];
         return (
           <>
