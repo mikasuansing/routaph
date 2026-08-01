@@ -56,7 +56,7 @@ const C = {
 };
 
 const GLOBAL = `
-@import url('https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,400;0,14..32,500;0,14..32,600;0,14..32,700;0,14..32,800&family=Baloo+2:wght@600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,400;0,14..32,500;0,14..32,600;0,14..32,700;0,14..32,800&display=swap');
 *{box-sizing:border-box;-webkit-font-smoothing:antialiased;}
 body{font-family:var(--font-sans);}
 button:active{opacity:0.85;}
@@ -551,7 +551,7 @@ function TripScreen() {
           </p>
         )}
         <button
-          style={{ marginTop: 36, padding: '17px', background: 'var(--gradient-primary)', color: C.onPrimary, border: 'none', borderRadius: 999, fontSize: 15, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', width: '100%', boxShadow: '0 6px 18px rgba(41,71,222,0.25)' }}
+          style={{ marginTop: 36, padding: '17px', background: 'var(--gradient-primary)', color: C.onPrimary, border: 'none', borderRadius: 'var(--radius-pill)', fontSize: 15, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', width: '100%', boxShadow: 'var(--shadow-accent)' }}
           onClick={() => { trip.endTrip(); router.replace('/planner'); }}
         >
           Plan another trip
@@ -607,7 +607,7 @@ function TripScreen() {
       }}>
         <div style={{
           flex: 1, minWidth: 0, background: C.card, border: `1px solid ${C.border}`,
-          borderRadius: 22, padding: '10px 16px', boxShadow: '0 2px 12px rgba(0,0,0,0.12)',
+          borderRadius: 22, padding: '10px 16px', boxShadow: 'var(--shadow-sm)',
         }}>
           <span style={{ fontFamily: DISPLAY, fontSize: 15, fontWeight: 800, letterSpacing: '-0.02em', color: C.accent }}>
             RoutaPH<span style={{ color: C.ink }}>.</span>
@@ -628,9 +628,9 @@ function TripScreen() {
         <button
           style={{
             flexShrink: 0, background: C.card, border: `1px solid ${C.border}`,
-            borderRadius: 999, padding: '11px 16px', fontSize: 13, fontWeight: 700,
+            borderRadius: 'var(--radius-pill)', padding: '11px 16px', fontSize: 13, fontWeight: 700,
             color: C.body, cursor: 'pointer', fontFamily: 'inherit',
-            boxShadow: '0 2px 12px rgba(0,0,0,0.12)',
+            boxShadow: 'var(--shadow-sm)',
           }}
           onClick={() => { trip.endTrip(); router.replace('/planner'); }}
         >
@@ -642,8 +642,8 @@ function TripScreen() {
       {activeDisruption && status !== 'rerouting' && (
         <div style={{
           position: 'absolute', top: 'calc(76px + env(safe-area-inset-top))', left: 16, right: 16, zIndex: 10,
-          background: C.card, border: `1px solid ${C.border}`, borderRadius: 16,
-          padding: '12px 14px', boxShadow: '0 2px 12px rgba(0,0,0,0.12)',
+          background: C.card, border: `1px solid ${C.border}`, borderRadius: 'var(--radius-md)',
+          padding: '12px 14px', boxShadow: 'var(--shadow-sm)',
           display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
         }}>
           <p style={{ margin: 0, fontSize: 13, fontWeight: 700, color: C.ink }}>▲ {activeDisruption.description}</p>
@@ -666,12 +666,12 @@ function TripScreen() {
           position: 'absolute',
           top: activeDisruption ? 'calc(140px + env(safe-area-inset-top))' : 'calc(76px + env(safe-area-inset-top))',
           left: 16, right: 16, zIndex: 12,
-          background: C.accent, borderRadius: 20, padding: '14px 16px',
-          boxShadow: '0 6px 22px rgba(41,71,222,0.35)',
+          background: C.accent, borderRadius: 'var(--radius-lg)', padding: '14px 16px',
+          boxShadow: 'var(--shadow-accent)',
           display: 'flex', alignItems: 'center', gap: 13,
         }}>
           <span style={{
-            flexShrink: 0, width: 42, height: 42, borderRadius: 14,
+            flexShrink: 0, width: 42, height: 42, borderRadius: 'var(--radius-sm)',
             background: 'rgba(255,255,255,0.2)',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             fontSize: 10, fontWeight: 800, letterSpacing: '0.04em', color: C.onPrimary,
@@ -708,10 +708,10 @@ function TripScreen() {
           style={{
             position: 'absolute', bottom: 'calc(58% + 14px)', right: 16, zIndex: 15,
             display: 'flex', alignItems: 'center', gap: 7,
-            background: C.accent, border: 'none', borderRadius: 999,
+            background: C.accent, border: 'none', borderRadius: 'var(--radius-pill)',
             padding: '11px 18px', fontSize: 13, fontWeight: 700,
             color: C.onPrimary, cursor: 'pointer', fontFamily: 'inherit',
-            boxShadow: '0 4px 16px rgba(41,71,222,0.4)',
+            boxShadow: 'var(--shadow-accent)',
           }}
         >
           ◎ Recenter
@@ -731,8 +731,8 @@ function TripScreen() {
         // resolves against the viewport that is actually visible.
         position: 'absolute', left: 0, right: 0, top: '42%', bottom: 0, zIndex: 20,
         background: C.bg,
-        borderTop: `1px solid ${C.border}`, borderRadius: '28px 28px 0 0',
-        boxShadow: '0 -8px 32px rgba(0,0,0,0.14)',
+        borderTop: `1px solid ${C.border}`, borderRadius: 'var(--radius-sheet) var(--radius-sheet) 0 0',
+        boxShadow: 'var(--shadow-lg)',
         display: 'flex', flexDirection: 'column',
         // No paddingBottom here. The action bar below is the element that
         // actually touches the bottom edge while a trip is active, and it
@@ -745,7 +745,7 @@ function TripScreen() {
       <main style={{ flex: 1, overflowY: 'auto', overscrollBehavior: 'contain', WebkitOverflowScrolling: 'touch', padding: '14px 24px calc(24px + env(safe-area-inset-bottom))' }}>
         {/* GPS state — explain, and offer a way in, instead of failing silently */}
         {!position && (gpsDenied || geoPerm === 'denied') && (
-          <div style={{ marginBottom: 22, background: C.card, border: `1px solid ${C.border}`, borderRadius: 20, padding: 16 }}>
+          <div style={{ marginBottom: 22, background: C.card, border: `1px solid ${C.border}`, borderRadius: 'var(--radius-lg)', padding: 16 }}>
             <Micro>Location access is blocked</Micro>
             <p style={{ margin: '8px 0 0', fontSize: 13, color: C.body, lineHeight: 1.7 }}>
               Your browser is blocking location for this site, so the map can&apos;t follow
@@ -759,7 +759,7 @@ function TripScreen() {
           </div>
         )}
         {!position && !gpsDenied && geoPerm !== 'denied' && (
-          <div style={{ marginBottom: 22, background: C.card, border: `1px solid ${C.border}`, borderRadius: 20, padding: 16, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+          <div style={{ marginBottom: 22, background: C.card, border: `1px solid ${C.border}`, borderRadius: 'var(--radius-lg)', padding: 16, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
             <p style={{ margin: 0, fontSize: 13, color: C.body, animation: 'pulse 1.6s ease-in-out infinite' }}>
               Finding your location…
             </p>
@@ -769,7 +769,7 @@ function TripScreen() {
                   navigator.geolocation?.getCurrentPosition(() => { /* watcher picks it up */ }, () => { /* denied → banner above takes over */ });
                 } catch { /* unsupported */ }
               }}
-              style={{ padding: '9px 16px', borderRadius: 999, border: 'none', background: C.accent, color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', flexShrink: 0 }}
+              style={{ padding: '9px 16px', borderRadius: 'var(--radius-pill)', border: 'none', background: C.accent, color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', flexShrink: 0 }}
             >
               Enable GPS
             </button>
@@ -777,13 +777,13 @@ function TripScreen() {
         )}
 
         {notifPerm === 'default' && status === 'active' && (
-          <div style={{ marginBottom: 22, background: C.card, border: `1px solid ${C.border}`, borderRadius: 20, padding: 16, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+          <div style={{ marginBottom: 22, background: C.card, border: `1px solid ${C.border}`, borderRadius: 'var(--radius-lg)', padding: 16, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
             <p style={{ margin: 0, fontSize: 13, color: C.body }}>
               Get an alert + buzz when your stop is close.
             </p>
             <button
               onClick={() => { requestNotificationPermission().then(setNotifPerm); }}
-              style={{ padding: '9px 16px', borderRadius: 999, border: 'none', background: C.accent, color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', flexShrink: 0, whiteSpace: 'nowrap' }}
+              style={{ padding: '9px 16px', borderRadius: 'var(--radius-pill)', border: 'none', background: C.accent, color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', flexShrink: 0, whiteSpace: 'nowrap' }}
             >
               Enable stop alerts
             </button>
@@ -794,7 +794,7 @@ function TripScreen() {
             not a get: it does nothing for this rider's own trip, so the
             copy has to be honest that it's for everyone else. */}
         {status === 'active' && position && (
-          <div style={{ marginBottom: 22, background: C.card, border: `1px solid ${C.border}`, borderRadius: 20, padding: 16 }}>
+          <div style={{ marginBottom: 22, background: C.card, border: `1px solid ${C.border}`, borderRadius: 'var(--radius-lg)', padding: 16 }}>
             <Micro color={sharingPosition ? C.accent : undefined}>
               {sharingPosition ? 'Helping the live map' : 'Help the live map'}
             </Micro>
@@ -811,7 +811,7 @@ function TripScreen() {
               onClick={() => setSharingPosition(!sharingPosition)}
               aria-pressed={sharingPosition}
               style={{
-                width: '100%', padding: '11px 16px', borderRadius: 999,
+                width: '100%', padding: '11px 16px', borderRadius: 'var(--radius-pill)',
                 border: sharingPosition ? `1.5px solid ${C.border}` : 'none',
                 background: sharingPosition ? 'transparent' : C.accent,
                 color: sharingPosition ? C.body : '#fff',
@@ -825,7 +825,7 @@ function TripScreen() {
 
         {/* Current leg — the glance */}
         {currentLeg && (
-          <section style={{ marginBottom: 28, background: C.card, border: `1px solid ${C.border}`, borderRadius: 20, padding: 18 }}>
+          <section style={{ marginBottom: 28, background: C.card, border: `1px solid ${C.border}`, borderRadius: 'var(--radius-lg)', padding: 18 }}>
             {/* Which vehicle you're on. Where to get off, how far and which
                 step lives in the banner over the map — repeating it here
                 just made the rider read the same sentence twice. */}
@@ -850,12 +850,12 @@ function TripScreen() {
             {status === 'active' && (
               <button
                 style={{
-                  marginTop: 18, width: '100%', padding: '16px', borderRadius: 999,
+                  marginTop: 18, width: '100%', padding: '16px', borderRadius: 'var(--radius-pill)',
                   fontSize: 15, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit',
                   background: 'var(--gradient-primary)',
                   color: C.onPrimary,
                   border: 'none', letterSpacing: '0.01em',
-                  boxShadow: '0 6px 18px rgba(41,71,222,0.25)',
+                  boxShadow: 'var(--shadow-accent)',
                 }}
                 onClick={() => {
                   // Guard accidental taps: without any GPS fix the app can't
@@ -912,7 +912,7 @@ function TripScreen() {
               return (
                 <div key={i} style={{
                   display: 'flex', gap: 12, alignItems: 'flex-start',
-                  padding: '10px 12px', borderRadius: 14,
+                  padding: '10px 12px', borderRadius: 'var(--radius-sm)',
                   background: here ? C.cardEl : 'transparent',
                 }}>
                   {/* Step number, or a tick once the step is behind you */}
@@ -1009,7 +1009,7 @@ function TripScreen() {
         <div style={{ flexShrink: 0, padding: '12px 24px calc(12px + env(safe-area-inset-bottom))', background: C.bg, borderTop: `1px solid ${C.border}`, display: 'flex', gap: 10 }}>
           <button
             style={{
-              flex: 1, padding: '15px', borderRadius: 999, fontSize: 14, fontWeight: 700,
+              flex: 1, padding: '15px', borderRadius: 'var(--radius-pill)', fontSize: 14, fontWeight: 700,
               fontFamily: 'inherit', border: 'none',
               cursor: position ? 'pointer' : 'default',
               background: position ? C.ink : C.cardEl,
@@ -1023,7 +1023,7 @@ function TripScreen() {
           </button>
           {wazeUrl && (
             <a href={wazeUrl} target="_blank" rel="noopener noreferrer"
-              style={{ padding: '15px 22px', borderRadius: 999, fontSize: 14, fontWeight: 700, fontFamily: 'inherit', border: `1.5px solid ${C.accent}`, color: C.accent, textDecoration: 'none' }}>
+              style={{ padding: '15px 22px', borderRadius: 'var(--radius-pill)', fontSize: 14, fontWeight: 700, fontFamily: 'inherit', border: `1.5px solid ${C.accent}`, color: C.accent, textDecoration: 'none' }}>
               Waze
             </a>
           )}

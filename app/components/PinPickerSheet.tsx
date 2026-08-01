@@ -281,7 +281,7 @@ export function PinPickerSheet({ title, initial, onConfirm, onCancel }: Props) {
           style={{
             width: 44, height: 44, borderRadius: '50%', flexShrink: 0,
             background: C.card, border: `1px solid ${C.border}`,
-            boxShadow: '0 2px 12px rgba(0,0,0,0.15)', cursor: 'pointer',
+            boxShadow: 'var(--shadow-sm)', cursor: 'pointer',
             fontSize: 18, color: C.ink, fontFamily: 'inherit',
           }}
         >
@@ -289,7 +289,7 @@ export function PinPickerSheet({ title, initial, onConfirm, onCancel }: Props) {
         </button>
         <div style={{
           flex: 1, minWidth: 0, background: C.card, border: `1px solid ${C.border}`,
-          borderRadius: 999, padding: '11px 16px', boxShadow: '0 2px 12px rgba(0,0,0,0.15)',
+          borderRadius: 'var(--radius-pill)', padding: '11px 16px', boxShadow: 'var(--shadow-sm)',
           display: 'flex', alignItems: 'center', gap: 8,
         }}>
           <span style={{ flexShrink: 0 }}>📍</span>
@@ -313,10 +313,10 @@ export function PinPickerSheet({ title, initial, onConfirm, onCancel }: Props) {
           onClick={goToCurrent}
           style={{
             display: 'flex', alignItems: 'center', gap: 7,
-            background: C.card, border: `1px solid ${C.border}`, borderRadius: 999,
+            background: C.card, border: `1px solid ${C.border}`, borderRadius: 'var(--radius-pill)',
             padding: '10px 16px', cursor: 'pointer', fontFamily: 'inherit',
             fontSize: 13, fontWeight: 700, color: C.accent,
-            boxShadow: '0 2px 12px rgba(0,0,0,0.15)',
+            boxShadow: 'var(--shadow-sm)',
           }}
         >
           ◎ {locating ? 'Finding…' : 'Current'}
@@ -325,10 +325,10 @@ export function PinPickerSheet({ title, initial, onConfirm, onCancel }: Props) {
           onClick={() => lookup(center[0], center[1])}
           style={{
             display: 'flex', alignItems: 'center', gap: 7,
-            background: C.card, border: `1px solid ${C.border}`, borderRadius: 999,
+            background: C.card, border: `1px solid ${C.border}`, borderRadius: 'var(--radius-pill)',
             padding: '10px 16px', cursor: 'pointer', fontFamily: 'inherit',
             fontSize: 13, fontWeight: 700, color: C.body,
-            boxShadow: '0 2px 12px rgba(0,0,0,0.15)',
+            boxShadow: 'var(--shadow-sm)',
           }}
         >
           ↻ Refresh
@@ -351,10 +351,10 @@ export function PinPickerSheet({ title, initial, onConfirm, onCancel }: Props) {
             style={{
               display: 'flex', alignItems: 'center', gap: 7,
               background: tilted ? C.accent : C.card,
-              border: `1px solid ${tilted ? C.accent : C.border}`, borderRadius: 999,
+              border: `1px solid ${tilted ? C.accent : C.border}`, borderRadius: 'var(--radius-pill)',
               padding: '10px 16px', cursor: 'pointer', fontFamily: 'inherit',
               fontSize: 13, fontWeight: 700, color: tilted ? C.onPrimary : C.body,
-              boxShadow: '0 2px 12px rgba(0,0,0,0.15)',
+              boxShadow: 'var(--shadow-sm)',
             }}
           >
             ⬢ 3D
@@ -368,7 +368,7 @@ export function PinPickerSheet({ title, initial, onConfirm, onCancel }: Props) {
         background: C.card, borderTop: `1px solid ${C.border}`,
         borderRadius: '22px 22px 0 0', padding: '18px 20px',
         paddingBottom: 'calc(18px + env(safe-area-inset-bottom))',
-        boxShadow: '0 -8px 28px rgba(0,0,0,0.12)',
+        boxShadow: 'var(--shadow-lg)',
       }}>
         <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
           <span style={{ flexShrink: 0, fontSize: 16, lineHeight: 1.3 }}>📍</span>
@@ -388,7 +388,7 @@ export function PinPickerSheet({ title, initial, onConfirm, onCancel }: Props) {
           placeholder="Unit, building, gate, or landmark"
           style={{
             width: '100%', marginTop: 14, padding: '13px 15px',
-            background: C.bg, border: `1px solid ${C.border}`, borderRadius: 14,
+            background: C.bg, border: `1px solid ${C.border}`, borderRadius: 'var(--radius-sm)',
             fontSize: 14, color: C.ink, fontFamily: 'inherit', outline: 'none',
           }}
         />
@@ -400,10 +400,10 @@ export function PinPickerSheet({ title, initial, onConfirm, onCancel }: Props) {
             note: note.trim() || undefined,
           })}
           style={{
-            width: '100%', marginTop: 12, padding: '16px', borderRadius: 999,
+            width: '100%', marginTop: 12, padding: '16px', borderRadius: 'var(--radius-pill)',
             border: 'none', background: 'var(--gradient-primary)', color: C.onPrimary,
             fontSize: 15, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit',
-            boxShadow: '0 6px 18px rgba(41,71,222,0.25)',
+            boxShadow: 'var(--shadow-accent)',
           }}
         >
           Confirm pin

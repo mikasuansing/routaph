@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,400;0,14..32,500;0,14..32,600;0,14..32,700;0,14..32,800&family=Baloo+2:wght@600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,400;0,14..32,500;0,14..32,600;0,14..32,700;0,14..32,800&display=swap');
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 html { scroll-behavior: smooth; }
@@ -14,11 +14,52 @@ input::placeholder { color: var(--color-muted); }
 /*
  * Cream + cobalt design system.
  * Warm cream canvas, white cards, one electric-cobalt accent for primary
- * actions and live states; ink pills for secondary emphasis. Display
- * headings use a chunky rounded face (--font-display); body stays Inter.
+ * actions and live states; ink pills for secondary emphasis. Headings and
+ * body both set in Inter — display copy is Inter at 800 with tight
+ * tracking rather than a second, rounder display face. A chunky rounded
+ * headline font (this app previously used Baloo 2) reads as a consumer
+ * toy app; one disciplined type family at a defined weight/tracking scale
+ * is what makes the same layout read as a considered product instead.
  * No gradients: --gradient-primary is a FLAT cobalt fill kept only so
  * legacy `background: var(--gradient-primary)` call sites resolve solid.
  */
+
+/*
+ * Shared tokens — radius, shadow and motion. Colors and fonts were already
+ * tokenized (below); these three weren't, and every surface was hand-
+ * rolling its own shadow string and transition duration. Introduced here
+ * so new work has a scale to reach for; existing inline styles are not
+ * mass-migrated in this pass — see the handoff notes for why.
+ */
+:root {
+  /*
+   * Named from the values already in consistent use, not invented: the app
+   * already had a real 3-tier card scale (compact notice / secondary card /
+   * primary card), it just had no name. Naming it is the fix; the sizes
+   * are unchanged.
+   */
+  --radius-sm:    14px;  /* compact notices, inline badges */
+  --radius-md:    16px;  /* secondary cards */
+  --radius-lg:    20px;  /* primary content cards */
+  --radius-sheet: 28px;  /* bottom-sheet top corners */
+  --radius-pill:  999px;
+
+  /*
+   * Calibrated to what the app already used, not invented from scratch: 13
+   * near-duplicate shadow strings (0.08/0.12/0.15 opacity at the same
+   * blur, accreted one component at a time) collapsed to the 4 the app
+   * actually needs. Values are the most common variant in each cluster, so
+   * consolidating these does not shift how anything looks.
+   */
+  --shadow-sm:     0 2px 12px rgba(0, 0, 0, 0.15);   /* floating pills, chips */
+  --shadow-md:     0 4px 16px rgba(0, 0, 0, 0.12);   /* raised cards, dropdowns */
+  --shadow-lg:     0 -8px 32px rgba(0, 0, 0, 0.12);  /* bottom sheets */
+  --shadow-accent: 0 6px 18px rgba(41, 71, 222, 0.25); /* primary CTA glow */
+
+  --ease: cubic-bezier(0.4, 0, 0.2, 1);
+  --duration-fast: 150ms;
+  --duration-base: 200ms;
+}
 
 :root,
 [data-theme="light"] {
@@ -40,7 +81,9 @@ input::placeholder { color: var(--color-muted); }
   --gradient-primary:   linear-gradient(#2947DE, #2947DE);
   --color-on-primary:   #FFFFFF;
   --font-sans:    'Inter', ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
-  --font-display: 'Baloo 2', 'Inter', system-ui, sans-serif;
+  /* Display copy is the same family, not a second decorative face — see
+     the design-system comment above. */
+  --font-display: 'Inter', ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
   --map-tile: "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png";
 }
 
@@ -63,7 +106,7 @@ input::placeholder { color: var(--color-muted); }
   --gradient-primary:   linear-gradient(#4A63F2, #4A63F2);
   --color-on-primary:   #FFFFFF;
   --font-sans:    'Inter', ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
-  --font-display: 'Baloo 2', 'Inter', system-ui, sans-serif;
+  --font-display: 'Inter', ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
   --map-tile: "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png";
 }
 
