@@ -488,22 +488,41 @@ function TripScreen() {
       return;
     }
 
-    // Flat fallback map.
+    // Flat fallback map. Leaflet itself never tilts or rotates, but the
+    // rider can still get a Waze-style directional arrow: a divIcon whose
+    // inner element is rotated by CSS transform to the current heading, the
+    // same technique Google/Waze use under a 2D camera.
     import('leaflet').then(mod => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const L = (mod.default ?? mod) as any;
       if (!mapRef.current || !trip.position) return;
-      const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
       const here: [number, number] = [trip.position.lat, trip.position.lng];
-      if (posMarker.current) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (posMarker.current as any).setLatLng(here);
+      const heading = trip.position.headingDeg ?? 0;
+
+      if (!posMarker.current) {
+        const icon = L.divIcon({
+          className: 'parapo-leaflet-arrow',
+          html:
+            '<div style="width:34px;height:34px;transform:rotate(' + heading + 'deg);transition:transform .3s ease;">' +
+            '<svg width="34" height="34" viewBox="0 0 34 34">' +
+            '<circle cx="17" cy="17" r="15" fill="rgba(41,71,222,0.18)"/>' +
+            '<path d="M17 5 L26 27 L17 21 L8 27 Z" fill="#2947DE" stroke="#fff" stroke-width="2" stroke-linejoin="round"/>' +
+            '</svg></div>',
+          iconSize: [34, 34],
+          iconAnchor: [17, 17],
+        });
+        posMarker.current = L.marker(here, { icon }).addTo(mapRef.current);
       } else {
-        posMarker.current = L.circleMarker(here, {
-          radius: 9, fillColor: isDark ? '#7A90FF' : '#2947DE', fillOpacity: 1,
-          color: isDark ? '#000' : '#fff', weight: 3,
-        }).addTo(mapRef.current);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const marker = posMarker.current as any;
+        marker.setLatLng(here);
+        // Rotate the existing DOM node directly rather than recreating the
+        // icon on every fix — swapping divIcons re-adds the element and
+        // makes the arrow flicker on each GPS update.
+        const el = marker.getElement()?.firstChild as HTMLElement | undefined;
+        if (el) el.style.transform = `rotate(${heading}deg)`;
       }
+
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       if (following) (mapRef.current as any).panTo(here, { animate: true });
     });
@@ -591,7 +610,7 @@ function TripScreen() {
           borderRadius: 22, padding: '10px 16px', boxShadow: '0 2px 12px rgba(0,0,0,0.12)',
         }}>
           <span style={{ fontFamily: DISPLAY, fontSize: 15, fontWeight: 800, letterSpacing: '-0.02em', color: C.accent }}>
-            ParaPo<span style={{ color: C.ink }}>.</span>
+            RoutaPH<span style={{ color: C.ink }}>.</span>
           </span>
           {/* `gpsDenied` is set only on PERMISSION_DENIED — a genuinely
               unavailable fix or a timeout keeps the watcher alive and stays
@@ -715,11 +734,15 @@ function TripScreen() {
         borderTop: `1px solid ${C.border}`, borderRadius: '28px 28px 0 0',
         boxShadow: '0 -8px 32px rgba(0,0,0,0.14)',
         display: 'flex', flexDirection: 'column',
-        paddingBottom: 'env(safe-area-inset-bottom)',
+        // No paddingBottom here. The action bar below is the element that
+        // actually touches the bottom edge while a trip is active, and it
+        // already carries the safe-area inset on its own padding — adding
+        // it here too stacked both, leaving dead space under the buttons on
+        // any iPhone with a home indicator.
       }}>
         <div style={{ width: 32, height: 4, borderRadius: 2, background: C.border, margin: '10px auto 0', flexShrink: 0 }} />
 
-      <main style={{ flex: 1, overflowY: 'auto', overscrollBehavior: 'contain', WebkitOverflowScrolling: 'touch', padding: '14px 24px 24px' }}>
+      <main style={{ flex: 1, overflowY: 'auto', overscrollBehavior: 'contain', WebkitOverflowScrolling: 'touch', padding: '14px 24px calc(24px + env(safe-area-inset-bottom))' }}>
         {/* GPS state — explain, and offer a way in, instead of failing silently */}
         {!position && (gpsDenied || geoPerm === 'denied') && (
           <div style={{ marginBottom: 22, background: C.card, border: `1px solid ${C.border}`, borderRadius: 20, padding: 16 }}>

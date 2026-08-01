@@ -1,6 +1,6 @@
 import Link from 'next/link';
 
-export const metadata = { title: 'Privacy Policy — ParaPo' };
+export const metadata = { title: 'Privacy Policy — RoutaPH' };
 
 const C = {
   bg:      'var(--color-bg)',
@@ -17,8 +17,8 @@ export default function PrivacyPage() {
       <div style={{ maxWidth: 680, margin: '0 auto', padding: '48px 24px 80px' }}>
         {/* Header */}
         <Link href="/" style={{ display: 'inline-flex', alignItems: 'baseline', gap: 0, textDecoration: 'none', marginBottom: 40 }}>
-          <span style={{ fontSize: 20, fontWeight: 700, color: C.ink, letterSpacing: '-0.03em' }}>Para</span>
-          <span style={{ fontSize: 20, fontWeight: 700, color: C.accent, letterSpacing: '-0.03em' }}>Po</span>
+          <span style={{ fontSize: 20, fontWeight: 700, color: C.ink, letterSpacing: '-0.03em' }}>Routa</span>
+          <span style={{ fontSize: 20, fontWeight: 700, color: C.accent, letterSpacing: '-0.03em' }}>PH</span>
         </Link>
 
         <h1 style={{ fontSize: 28, fontWeight: 700, color: C.ink, letterSpacing: '-0.02em', marginBottom: 8 }}>Privacy Policy</h1>
@@ -31,7 +31,7 @@ export default function PrivacyPage() {
             title: '1. There is no account',
             body: (
               <p>
-                ParaPo has no sign-up, no login, and no user profile. We never ask for
+                RoutaPH has no sign-up, no login, and no user profile. We never ask for
                 your name, email, or phone number, and there is nothing in our database
                 that identifies you. Everything below describes the small amount of data
                 the app handles anyway &mdash; none of it is attached to a person.
@@ -100,7 +100,7 @@ export default function PrivacyPage() {
             body: (
               <p>
                 The Philippine Data Privacy Act gives you the right to access, correct,
-                and erase personal data held about you. Because ParaPo has no accounts and
+                and erase personal data held about you. Because RoutaPH has no accounts and
                 stores nothing that identifies you, there is no personal record for us to
                 look up, correct, or delete &mdash; and no way for us to link any stored
                 row back to you even if you asked. If you would still like to raise a
@@ -117,7 +117,7 @@ export default function PrivacyPage() {
                 <li><strong>Vercel</strong> &mdash; hosting. Request logs are retained per Vercel&apos;s default policy. <a href="https://vercel.com/legal/privacy-policy" style={{ color: C.accent }}>Vercel Privacy Policy</a>.</li>
                 <li><strong>OpenStreetMap / CARTO</strong> &mdash; map tiles. They may log your IP address when tiles load.</li>
                 <li><strong>Open-Meteo</strong> &mdash; rain advisories, requested for one fixed Metro Manila point, never your location.</li>
-                <li><strong>Waze / Grab deep links</strong> &mdash; if you tap one, your destination coordinate is passed to that app. ParaPo receives nothing back.</li>
+                <li><strong>Waze / Grab deep links</strong> &mdash; if you tap one, your destination coordinate is passed to that app. RoutaPH receives nothing back.</li>
                 <li><strong>Google Fonts</strong> &mdash; loaded at runtime; Google may log your IP per their terms.</li>
               </ul>
             ),
@@ -139,7 +139,7 @@ export default function PrivacyPage() {
         ))}
 
         <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: 24, marginTop: 8 }}>
-          <Link href="/" style={{ fontSize: 13, color: C.accent }}>&#8592; Back to ParaPo</Link>
+          <Link href="/" style={{ fontSize: 13, color: C.accent }}>&#8592; Back to RoutaPH</Link>
         </div>
       </div>
     </div>

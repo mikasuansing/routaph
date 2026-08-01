@@ -3,11 +3,11 @@ import { ThemeProvider, ThemeToggle } from './providers';
 import { ServiceWorker } from './components/ServiceWorker';
 
 export const metadata = {
-  title: 'ParaPo — Metro Manila Commute Intelligence',
+  title: 'RoutaPH — Metro Manila Commute Intelligence',
   description: 'Plan Metro Manila commutes across MRT, LRT, bus, and jeepney — fares, ETAs, and live trip tracking.',
   manifest: '/manifest.webmanifest',
   icons: { icon: '/icon.svg', apple: '/apple-touch-icon.png' },
-  appleWebApp: { title: 'ParaPo', statusBarStyle: 'black-translucent' },
+  appleWebApp: { title: 'RoutaPH', statusBarStyle: 'black-translucent' },
 };
 
 export const viewport = {
