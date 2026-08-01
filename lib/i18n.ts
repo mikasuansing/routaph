@@ -44,6 +44,8 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     up_next:              'Up next',
     trip_finished:        'Trip finished',
     about_min:            'about {n} min',
+    where_to:             'Where to?',
+    plan_tagline:         'Fares, ETAs and live tracking',
   },
   tl: {
     find_routes:        'Hanapin ang ruta',
@@ -77,6 +79,8 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     up_next:              'Susunod na hakbang',
     trip_finished:        'Tapos na ang biyahe',
     about_min:            'mga {n} minuto',
+    where_to:             'Saan ka papunta?',
+    plan_tagline:         'Pamasahe, ETA at live na pagsubaybay',
   },
 };
 
