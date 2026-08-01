@@ -7,7 +7,7 @@ export const dynamic = 'force-dynamic';
 
 const DISCLAIMER =
   'Estimated fare only — not an official or live quote. Subject to surge pricing and availability. ' +
-  'ParaPo does not process payment or guarantee accuracy.';
+  'RoutaPH does not process payment or guarantee accuracy.';
 
 const STATIC_PROVIDERS = [
   {

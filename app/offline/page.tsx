@@ -1,6 +1,6 @@
 import Link from 'next/link';
 
-export const metadata = { title: 'Offline — ParaPo' };
+export const metadata = { title: 'Offline — RoutaPH' };
 
 const C = {
   bg:     'var(--color-bg)',
@@ -32,7 +32,7 @@ export default function OfflinePage() {
           fontFamily: 'var(--font-display)', fontSize: 22, fontWeight: 800,
           letterSpacing: '-0.02em', color: C.accent,
         }}>
-          ParaPo<span style={{ color: C.ink }}>.</span>
+          RoutaPH<span style={{ color: C.ink }}>.</span>
         </span>
 
         <h1 style={{

@@ -807,7 +807,7 @@ export default function Planner() {
               boxShadow: '0 2px 12px rgba(0,0,0,0.08)',
             }}>
               <span style={{ fontFamily: DISPLAY, fontSize: 16, fontWeight: 800, letterSpacing: '-0.02em', color: C.accent }}>
-                ParaPo<span style={{ color: C.ink }}>.</span>
+                RoutaPH<span style={{ color: C.ink }}>.</span>
               </span>
               <div style={{ width: 1, height: 14, background: C.border }} />
               {disruptions === null ? (
