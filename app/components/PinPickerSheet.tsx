@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import 'maplibre-gl/dist/maplibre-gl.css';
 
 /*
  * Drop-a-pin location picker.
@@ -30,6 +31,30 @@ const C = {
 const TILE_URL = (isDark: boolean) => isDark
   ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
   : 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png';
+
+/**
+ * Keyless OpenMapTiles-schema vector tiles (ODbL). Carries a `building-3d`
+ * fill-extrusion layer, which is what makes the tilted view readable —
+ * see docs/adr/0004-maplibre-for-3d-pin-picker.md.
+ */
+const VECTOR_STYLE = 'https://tiles.openfreemap.org/styles/liberty';
+
+/** Tilt and zoom at which street-level buildings actually read as solid. */
+const PITCH = 55;
+const PIN_ZOOM = 17;
+
+/** MapLibre needs WebGL; without it the picker falls back to flat Leaflet. */
+function hasWebGL(): boolean {
+  try {
+    const canvas = document.createElement('canvas');
+    return Boolean(
+      window.WebGLRenderingContext &&
+      (canvas.getContext('webgl') || canvas.getContext('experimental-webgl')),
+    );
+  } catch {
+    return false;
+  }
+}
 
 /** Metro Manila centre — only used when there's no fix and no start point. */
 const FALLBACK: [number, number] = [14.5850, 121.0100];
@@ -62,6 +87,8 @@ export function PinPickerSheet({ title, initial, onConfirm, onCancel }: Props) {
   const [busy, setBusy]     = useState(false);
   const [note, setNote]     = useState('');
   const [locating, setLocating] = useState(false);
+  const [is3D, setIs3D] = useState(false);
+  const [tilted, setTilted] = useState(true);
 
   // Ask the server what's under the pin.
   const lookup = useCallback(async (lat: number, lng: number) => {
@@ -77,55 +104,121 @@ export function PinPickerSheet({ title, initial, onConfirm, onCancel }: Props) {
     }
   }, []);
 
-  // Build the map once.
+  // Build the map once. MapLibre when WebGL is there (3D), Leaflet when not.
   useEffect(() => {
     if (!mapElRef.current || mapRef.current) return;
     let cancelled = false;
+    const start = initial ?? FALLBACK;
 
-    if (!document.getElementById('leaflet-css')) {
-      const link = document.createElement('link');
-      link.id = 'leaflet-css';
-      link.rel = 'stylesheet';
-      link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
-      document.head.appendChild(link);
+    // Shared by both renderers: the pin is a fixed DOM element over the
+    // map's centre, so the address always describes what the crosshair
+    // covers. `move` tracks live; the lookup waits for the map to settle so
+    // dragging across the city doesn't fire a request per frame.
+    const onMove = (lat: number, lng: number) => setCenter([lat, lng]);
+    const onSettle = (lat: number, lng: number) => {
+      if (settleRef.current) clearTimeout(settleRef.current);
+      settleRef.current = setTimeout(() => lookup(lat, lng), SETTLE_MS);
+    };
+
+    // Flat raster map. Also the safety net when the 3D path can't run.
+    const buildLeaflet = () => {
+      if (!document.getElementById('leaflet-css')) {
+        const link = document.createElement('link');
+        link.id = 'leaflet-css';
+        link.rel = 'stylesheet';
+        link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
+        document.head.appendChild(link);
+      }
+
+      import('leaflet').then(mod => {
+        if (cancelled || !mapElRef.current || mapRef.current) return;
+        const L = mod.default ?? mod;
+        const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const map = (L as any).map(mapElRef.current, {
+          center: start,
+          zoom: initial ? PIN_ZOOM : 12,
+          zoomControl: false,
+          attributionControl: false,
+        });
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (L as any).tileLayer(TILE_URL(isDark), { subdomains: 'abcd', maxZoom: 19 }).addTo(map);
+
+        map.on('move', () => { const c = map.getCenter(); onMove(c.lat, c.lng); });
+        map.on('moveend', () => { const c = map.getCenter(); onSettle(c.lat, c.lng); });
+
+        mapRef.current = map;
+        // Leaflet mis-measures a container that was hidden when created.
+        setTimeout(() => map.invalidateSize(false), 60);
+        lookup(start[0], start[1]);
+      });
+    };
+
+    if (hasWebGL()) {
+      import('maplibre-gl').then(mod => {
+        if (cancelled || !mapElRef.current) return;
+        const maplibregl = mod;
+
+        const map = new maplibregl.Map({
+          container: mapElRef.current,
+          style: VECTOR_STYLE,
+          center: [start[1], start[0]],   // MapLibre takes [lng, lat]
+          zoom: initial ? PIN_ZOOM : 12,
+          pitch: PITCH,
+          bearing: -18,
+          attributionControl: false,
+        });
+
+        // The style is a network resource on a host with no SLA. If it never
+        // arrives the canvas just stays blank, which looks like a broken
+        // app — so give up on 3D and put the raster map back instead. Only
+        // announce 3D once the style has actually loaded, so the tilt
+        // control never appears on a map that cannot tilt.
+        let settled = false;
+        const giveUp = () => {
+          if (settled || cancelled) return;
+          settled = true;
+          map.remove();
+          mapRef.current = null;
+          setIs3D(false);
+          buildLeaflet();
+        };
+        const styleTimer = setTimeout(giveUp, 6000);
+
+        map.on('load', () => {
+          if (cancelled) return;
+          settled = true;
+          clearTimeout(styleTimer);
+          setIs3D(true);
+        });
+        // MapLibre reports missing tiles as errors too; only a failure to
+        // load the style itself is fatal to the whole map.
+        map.on('error', (e: { error?: { status?: number } }) => {
+          if (!settled && !map.isStyleLoaded()) {
+            clearTimeout(styleTimer);
+            giveUp();
+          }
+          void e;
+        });
+
+        map.on('move', () => { const c = map.getCenter(); onMove(c.lat, c.lng); });
+        map.on('moveend', () => { const c = map.getCenter(); onSettle(c.lat, c.lng); });
+
+        mapRef.current = map;
+        lookup(start[0], start[1]);
+      }).catch(buildLeaflet);
+    } else {
+      buildLeaflet();
     }
-
-    import('leaflet').then(mod => {
-      if (cancelled || !mapElRef.current) return;
-      const L = mod.default ?? mod;
-      const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
-
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const map = (L as any).map(mapElRef.current, {
-        center: initial ?? FALLBACK,
-        zoom: initial ? 17 : 12,
-        zoomControl: false,
-        attributionControl: false,
-      });
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (L as any).tileLayer(TILE_URL(isDark), { subdomains: 'abcd', maxZoom: 19 }).addTo(map);
-
-      // The pin is a fixed DOM element over the map's centre, so the address
-      // always describes exactly what the crosshair covers.
-      map.on('move', () => {
-        const c = map.getCenter();
-        setCenter([c.lat, c.lng]);
-      });
-      map.on('moveend', () => {
-        const c = map.getCenter();
-        if (settleRef.current) clearTimeout(settleRef.current);
-        settleRef.current = setTimeout(() => lookup(c.lat, c.lng), SETTLE_MS);
-      });
-
-      mapRef.current = map;
-      // Leaflet mis-measures a container that was hidden when created.
-      setTimeout(() => map.invalidateSize(false), 60);
-      lookup((initial ?? FALLBACK)[0], (initial ?? FALLBACK)[1]);
-    });
 
     return () => {
       cancelled = true;
       if (settleRef.current) clearTimeout(settleRef.current);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const m = mapRef.current as any;
+      if (m?.remove) m.remove();
+      mapRef.current = null;
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -139,7 +232,12 @@ export function PinPickerSheet({ title, initial, onConfirm, onCancel }: Props) {
         setLocating(false);
         const here: [number, number] = [pos.coords.latitude, pos.coords.longitude];
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (mapRef.current as any)?.setView(here, 17, { animate: true });
+        const m = mapRef.current as any;
+        if (!m) return;
+        // MapLibre takes [lng, lat] and flies with a pitch; Leaflet takes
+        // [lat, lng] and has no camera to speak of.
+        if (m.flyTo && m.getBearing) m.flyTo({ center: [here[1], here[0]], zoom: PIN_ZOOM, pitch: PITCH });
+        else m.setView(here, PIN_ZOOM, { animate: true });
       },
       () => setLocating(false),
       { enableHighAccuracy: true, timeout: 10000 },
@@ -235,6 +333,33 @@ export function PinPickerSheet({ title, initial, onConfirm, onCancel }: Props) {
         >
           ↻ Refresh
         </button>
+
+        {/* Tilt only exists on the WebGL renderer. Looking straight down is
+            better for judging which side of a road a pin is on, so this is
+            a toggle rather than a fixed camera. */}
+        {is3D && (
+          <button
+            onClick={() => {
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              const m = mapRef.current as any;
+              if (!m?.easeTo) return;
+              const flat = m.getPitch() < 10;
+              m.easeTo({ pitch: flat ? PITCH : 0, bearing: flat ? -18 : 0, duration: 450 });
+              setTilted(flat);
+            }}
+            aria-pressed={tilted}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 7,
+              background: tilted ? C.accent : C.card,
+              border: `1px solid ${tilted ? C.accent : C.border}`, borderRadius: 999,
+              padding: '10px 16px', cursor: 'pointer', fontFamily: 'inherit',
+              fontSize: 13, fontWeight: 700, color: tilted ? C.onPrimary : C.body,
+              boxShadow: '0 2px 12px rgba(0,0,0,0.15)',
+            }}
+          >
+            ⬢ 3D
+          </button>
+        )}
       </div>
 
       {/* Address card */}
