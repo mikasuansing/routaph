@@ -32,14 +32,29 @@ input::placeholder { color: var(--color-muted); }
  * mass-migrated in this pass — see the handoff notes for why.
  */
 :root {
-  --radius-sm: 12px;
-  --radius-md: 16px;
-  --radius-lg: 22px;
-  --radius-pill: 999px;
+  /*
+   * Named from the values already in consistent use, not invented: the app
+   * already had a real 3-tier card scale (compact notice / secondary card /
+   * primary card), it just had no name. Naming it is the fix; the sizes
+   * are unchanged.
+   */
+  --radius-sm:    14px;  /* compact notices, inline badges */
+  --radius-md:    16px;  /* secondary cards */
+  --radius-lg:    20px;  /* primary content cards */
+  --radius-sheet: 28px;  /* bottom-sheet top corners */
+  --radius-pill:  999px;
 
-  --shadow-sm: 0 1px 2px rgba(25, 22, 16, 0.06), 0 1px 1px rgba(25, 22, 16, 0.04);
-  --shadow-md: 0 4px 16px rgba(25, 22, 16, 0.10);
-  --shadow-lg: 0 12px 32px rgba(25, 22, 16, 0.14);
+  /*
+   * Calibrated to what the app already used, not invented from scratch: 13
+   * near-duplicate shadow strings (0.08/0.12/0.15 opacity at the same
+   * blur, accreted one component at a time) collapsed to the 4 the app
+   * actually needs. Values are the most common variant in each cluster, so
+   * consolidating these does not shift how anything looks.
+   */
+  --shadow-sm:     0 2px 12px rgba(0, 0, 0, 0.15);   /* floating pills, chips */
+  --shadow-md:     0 4px 16px rgba(0, 0, 0, 0.12);   /* raised cards, dropdowns */
+  --shadow-lg:     0 -8px 32px rgba(0, 0, 0, 0.12);  /* bottom sheets */
+  --shadow-accent: 0 6px 18px rgba(41, 71, 222, 0.25); /* primary CTA glow */
 
   --ease: cubic-bezier(0.4, 0, 0.2, 1);
   --duration-fast: 150ms;

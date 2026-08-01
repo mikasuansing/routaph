@@ -104,7 +104,7 @@ export function ThemeToggle() {
         width: 44, height: 44, borderRadius: '50%',
         background: 'var(--color-surface)',
         border: '1.5px solid var(--color-border)',
-        boxShadow: '0 2px 12px rgba(0,0,0,0.15)',
+        boxShadow: 'var(--shadow-sm)',
         cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
         fontSize: 20, transition: 'background 0.2s',
       }}

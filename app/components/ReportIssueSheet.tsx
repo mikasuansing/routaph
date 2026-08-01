@@ -65,11 +65,11 @@ export function ReportIssueButton({ stopId, routeId, contextLabel }: {
   return (
     <div style={{
       background: 'var(--color-card)', border: '1px solid var(--color-border)',
-      borderRadius: 16, padding: 14, marginTop: 8,
+      borderRadius: 'var(--radius-md)', padding: 14, marginTop: 8,
     }}>
       {status === 'sent' ? (
         <>
-          <p style={{ margin: 0, fontSize: 13, fontWeight: 700, color: 'var(--color-ink)' }}>Thanks — report sent.</p>
+          <p style={{ margin: 0, fontSize: 13, fontWeight: 700, color: 'var(--color-ink)' }}>Thanks, report sent.</p>
           <button onClick={reset} style={{ background: 'none', border: 'none', padding: '8px 0 0', cursor: 'pointer', fontFamily: 'inherit', fontSize: 12, fontWeight: 600, color: 'var(--color-muted)' }}>Close</button>
         </>
       ) : (
@@ -81,7 +81,7 @@ export function ReportIssueButton({ stopId, routeId, contextLabel }: {
             {CATEGORIES.map(c => (
               <button key={c.key} onClick={() => setCategory(c.key)} style={{
                 cursor: 'pointer', fontFamily: 'inherit', fontSize: 12, fontWeight: 700,
-                padding: '6px 12px', borderRadius: 999,
+                padding: '6px 12px', borderRadius: 'var(--radius-pill)',
                 background: category === c.key ? 'var(--color-ink)' : 'transparent',
                 color: category === c.key ? 'var(--color-bg)' : 'var(--color-body)',
                 border: `1.5px solid ${category === c.key ? 'var(--color-ink)' : 'var(--color-border)'}`,
@@ -110,7 +110,7 @@ export function ReportIssueButton({ stopId, routeId, contextLabel }: {
               disabled={!category || status === 'sending'}
               style={{
                 cursor: category ? 'pointer' : 'default', fontFamily: 'inherit', fontSize: 13, fontWeight: 700,
-                padding: '8px 16px', borderRadius: 999, border: 'none',
+                padding: '8px 16px', borderRadius: 'var(--radius-pill)', border: 'none',
                 background: category ? 'var(--color-accent)' : 'var(--color-card-el)',
                 color: category ? 'var(--color-on-primary)' : 'var(--color-muted)',
               }}
@@ -119,7 +119,7 @@ export function ReportIssueButton({ stopId, routeId, contextLabel }: {
             </button>
             <button onClick={reset} style={{
               cursor: 'pointer', fontFamily: 'inherit', fontSize: 13, fontWeight: 600,
-              padding: '8px 16px', borderRadius: 999, border: 'none', background: 'none', color: 'var(--color-muted)',
+              padding: '8px 16px', borderRadius: 'var(--radius-pill)', border: 'none', background: 'none', color: 'var(--color-muted)',
             }}>
               Cancel
             </button>

@@ -49,7 +49,7 @@ export default function OfflinePage() {
 
         <div style={{
           marginTop: 22, background: C.card, border: `1px solid ${C.border}`,
-          borderRadius: 20, padding: 18,
+          borderRadius: 'var(--radius-lg)', padding: 18,
         }}>
           <p style={{
             margin: 0, fontSize: 11, fontWeight: 700, letterSpacing: '0.1em',
@@ -75,7 +75,7 @@ export default function OfflinePage() {
           href="/planner"
           style={{
             display: 'block', marginTop: 16, padding: '15px 16px',
-            borderRadius: 999, background: 'var(--gradient-primary)',
+            borderRadius: 'var(--radius-pill)', background: 'var(--gradient-primary)',
             color: 'var(--color-on-primary)', textAlign: 'center',
             fontSize: 15, fontWeight: 700, textDecoration: 'none',
           }}

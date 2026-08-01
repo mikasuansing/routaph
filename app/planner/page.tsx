@@ -243,7 +243,7 @@ function StopRow({ label, value, onChange, placeholder, stops, extraOption }: {
         <div style={{
           position: 'absolute', left: 0, right: 0, top: '100%', marginTop: 4, zIndex: 30,
           background: C.card, border: `1px solid ${C.border}`, borderRadius: 12,
-          boxShadow: '0 8px 24px rgba(0,0,0,0.12)', maxHeight: 220, overflowY: 'auto',
+          boxShadow: 'var(--shadow-md)', maxHeight: 220, overflowY: 'auto',
         }}>
           {matches.map((s, i) => (
             <div
@@ -277,8 +277,8 @@ function Sheet({ children, height, style }: { children: React.ReactNode; height:
       position: 'absolute', left: 0, right: 0, bottom: 0, zIndex: 20,
       height, background: C.surface,
       borderTop: `1px solid ${C.border}`,
-      borderRadius: '28px 28px 0 0',
-      boxShadow: '0 -8px 32px rgba(25,22,16,0.08)',
+      borderRadius: 'var(--radius-sheet) var(--radius-sheet) 0 0',
+      boxShadow: 'var(--shadow-lg)',
       display: 'flex', flexDirection: 'column',
       paddingBottom: 'env(safe-area-inset-bottom)',
       ...style,
@@ -661,7 +661,7 @@ export default function Planner() {
           }).addTo(group);
           marker.bindTooltip(
             `${v.lineName} · near ${v.nearStopName}<br>` +
-            `<span style="opacity:.7">Estimated from ${v.riderCount} rider${v.riderCount > 1 ? 's' : ''} — not an official position</span>`,
+            `<span style="opacity:.7">Estimated from ${v.riderCount} rider${v.riderCount > 1 ? 's' : ''}, not an official position</span>`,
             { direction: 'top', offset: [0, -8] },
           );
         }
@@ -784,7 +784,7 @@ export default function Planner() {
   const statusDetail = disruptions && disruptions.length > 0
     ? (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-          <Micro color={C.ink} style={{ letterSpacing: '0.04em' }}>▲ {disruptions.length} route update{disruptions.length > 1 ? 's' : ''} — {disruptions[0].description}</Micro>
+          <Micro color={C.ink} style={{ letterSpacing: '0.04em' }}>▲ {disruptions.length} route update{disruptions.length > 1 ? 's' : ''}: {disruptions[0].description}</Micro>
         </div>
       )
     : null;
@@ -803,8 +803,8 @@ export default function Planner() {
           <div style={{ position: 'absolute', top: 0, left: 0, right: 0, zIndex: 10, padding: '52px 20px 0', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
             <div style={{
               display: 'flex', alignItems: 'center', gap: 10, background: C.surface,
-              border: `1px solid ${C.border}`, borderRadius: 999, padding: '10px 16px',
-              boxShadow: '0 2px 12px rgba(0,0,0,0.08)',
+              border: `1px solid ${C.border}`, borderRadius: 'var(--radius-pill)', padding: '10px 16px',
+              boxShadow: 'var(--shadow-sm)',
             }}>
               <span style={{ fontFamily: DISPLAY, fontSize: 16, fontWeight: 800, letterSpacing: '-0.02em', color: C.accent }}>
                 RoutaPH<span style={{ color: C.ink }}>.</span>
@@ -832,7 +832,7 @@ export default function Planner() {
               style={{
                 width: 40, height: 40, borderRadius: '50%', flexShrink: 0,
                 background: C.surface, border: `1px solid ${C.border}`,
-                boxShadow: '0 2px 12px rgba(0,0,0,0.08)', cursor: 'pointer',
+                boxShadow: 'var(--shadow-sm)', cursor: 'pointer',
                 display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 17,
               }}
             >
@@ -842,14 +842,14 @@ export default function Planner() {
 
           {/* Service alert detail — floats under the top pill */}
           {statusDetail && (
-            <div style={{ position: 'absolute', top: 110, left: 20, right: 20, zIndex: 9, padding: '12px 14px', borderRadius: 14, background: C.surface, border: `1px solid ${C.border}`, boxShadow: '0 4px 16px rgba(0,0,0,0.1)' }}>
+            <div style={{ position: 'absolute', top: 110, left: 20, right: 20, zIndex: 9, padding: '12px 14px', borderRadius: 'var(--radius-sm)', background: C.surface, border: `1px solid ${C.border}`, boxShadow: 'var(--shadow-md)' }}>
               {statusDetail}
             </div>
           )}
 
           {/* Rain advisory — floats over the map regardless of form state */}
           {rainAdvisory && (
-            <div style={{ position: 'absolute', top: statusDetail ? 172 : 110, left: 20, right: 20, zIndex: 9, padding: '12px 14px', borderRadius: 14, background: C.error, color: '#FFFFFF', boxShadow: '0 4px 16px rgba(0,0,0,0.15)' }}>
+            <div style={{ position: 'absolute', top: statusDetail ? 172 : 110, left: 20, right: 20, zIndex: 9, padding: '12px 14px', borderRadius: 'var(--radius-sm)', background: C.error, color: '#FFFFFF', boxShadow: 'var(--shadow-md)' }}>
               <p style={{ margin: 0, fontSize: 13, fontWeight: 700, lineHeight: 1.5 }}>{rainAdvisory.message}</p>
             </div>
           )}
@@ -861,9 +861,9 @@ export default function Planner() {
               style={{
                 position: 'absolute', left: 20, right: 20, bottom: 'calc(24px + env(safe-area-inset-bottom))', zIndex: 10,
                 display: 'flex', alignItems: 'center', gap: 12,
-                background: C.surface, border: `1px solid ${C.border}`, borderRadius: 999,
+                background: C.surface, border: `1px solid ${C.border}`, borderRadius: 'var(--radius-pill)',
                 padding: '16px 20px', cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left',
-                boxShadow: '0 4px 20px rgba(0,0,0,0.12)',
+                boxShadow: 'var(--shadow-md)',
               }}
             >
               {/* The one thing this screen is for, so it reads as an
@@ -919,7 +919,7 @@ export default function Planner() {
                     </p>
                     {jeepneyFallback && (
                       <div style={{
-                        marginTop: 10, padding: '12px 14px', borderRadius: 14,
+                        marginTop: 10, padding: '12px 14px', borderRadius: 'var(--radius-sm)',
                         border: `1.5px dashed ${C.border}`, background: C.surface,
                       }}>
                         <p style={{ margin: 0, fontSize: 13, fontWeight: 700, color: C.ink }}>
@@ -968,13 +968,13 @@ export default function Planner() {
                   onClick={search}
                   disabled={!canSearch}
                   style={{
-                    width: '100%', border: 'none', borderRadius: 999, padding: '17px', margin: '22px 0 0',
+                    width: '100%', border: 'none', borderRadius: 'var(--radius-pill)', padding: '17px', margin: '22px 0 0',
                     fontSize: 15, fontWeight: 700, letterSpacing: '0.01em', flexShrink: 0,
                     cursor: canSearch ? 'pointer' : 'default',
                     background: canSearch ? 'var(--gradient-primary)' : C.cardEl,
                     color: canSearch ? C.onPrimary : C.muted,
                     fontFamily: 'inherit',
-                    boxShadow: canSearch ? '0 6px 18px rgba(41,71,222,0.25)' : 'none',
+                    boxShadow: canSearch ? 'var(--shadow-accent)' : 'none',
                   }}
                 >
                   {t(lang, 'find_routes')}
@@ -1006,7 +1006,7 @@ export default function Planner() {
                           style={{
                             cursor: 'pointer', fontFamily: 'inherit',
                             fontSize: 14, fontWeight: 700, padding: '9px 18px',
-                            borderRadius: 999, transition: 'all 0.15s',
+                            borderRadius: 'var(--radius-pill)', transition: 'all 0.15s',
                             background: on ? C.accent : 'transparent',
                             color: on ? '#FFFFFF' : C.body,
                             border: `1.5px solid ${on ? C.accent : C.border}`,
@@ -1085,10 +1085,10 @@ export default function Planner() {
         return (
           <>
             <div style={{ position: 'absolute', top: 0, left: 0, right: 0, zIndex: 10, padding: '52px 20px 0' }}>
-              <button onClick={() => { setScreen('home'); setItineraries([]); setSelected(null); }} style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 999, padding: '9px 16px', cursor: 'pointer', color: C.ink, fontSize: 13, fontWeight: 700, fontFamily: 'inherit' }}>
+              <button onClick={() => { setScreen('home'); setItineraries([]); setSelected(null); }} style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 'var(--radius-pill)', padding: '9px 16px', cursor: 'pointer', color: C.ink, fontSize: 13, fontWeight: 700, fontFamily: 'inherit' }}>
                 ← Back
               </button>
-              <div style={{ marginTop: 12, background: C.card, border: `1px solid ${C.border}`, borderRadius: 16, padding: '12px 16px' }}>
+              <div style={{ marginTop: 12, background: C.card, border: `1px solid ${C.border}`, borderRadius: 'var(--radius-md)', padding: '12px 16px' }}>
                 <p style={{ margin: 0, fontSize: 14, fontWeight: 700, color: C.ink, letterSpacing: '-0.01em' }}>
                   {from} <span style={{ color: C.muted, fontWeight: 400 }}>→</span> {to}
                 </p>
@@ -1104,7 +1104,7 @@ export default function Planner() {
                     <button key={f.key} onClick={() => setModeFilter(f.key)} style={{
                       cursor: 'pointer', fontFamily: 'inherit',
                       fontSize: 13, fontWeight: 700, padding: '7px 16px',
-                      borderRadius: 999, transition: 'all 0.15s',
+                      borderRadius: 'var(--radius-pill)', transition: 'all 0.15s',
                       background: on ? C.ink : 'transparent',
                       color: on ? C.bg : C.body,
                       border: `1.5px solid ${on ? C.ink : C.border}`,
@@ -1134,9 +1134,9 @@ export default function Planner() {
                   const worstRail = worstLastTrainCheck(checkLastTrain(itin.legs));
                   return (
                   <button key={idx} onClick={() => { setSelected(itin); setScreen('detail'); }}
-                    style={{ display: 'block', width: '100%', background: C.card, border: `1px solid ${C.border}`, borderRadius: 20, padding: '16px 18px', marginBottom: 12, cursor: 'pointer', textAlign: 'left', fontFamily: 'inherit' }}
+                    style={{ display: 'block', width: '100%', background: C.card, border: `1px solid ${C.border}`, borderRadius: 'var(--radius-lg)', padding: '16px 18px', marginBottom: 12, cursor: 'pointer', textAlign: 'left', fontFamily: 'inherit' }}
                   >
-                    <Micro color={C.accent}>Route {idx + 1} — {objLabel}</Micro>
+                    <Micro color={C.accent}>Route {idx + 1} ({objLabel})</Micro>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginTop: 6 }}>
                       <span className="tnum" style={{ fontFamily: DISPLAY, fontSize: 34, fontWeight: 800, color: C.ink, letterSpacing: '-0.02em', lineHeight: 1 }}>
                         {itin.totalDurationMin}<span style={{ fontFamily: 'inherit', fontSize: 15, fontWeight: 600, color: C.muted }}> min</span>
@@ -1189,7 +1189,7 @@ export default function Planner() {
         return (
           <>
             <div style={{ position: 'absolute', top: 0, left: 0, right: 0, zIndex: 10, padding: '52px 20px 0', display: 'flex', justifyContent: 'space-between' }}>
-              <button onClick={() => setScreen('results')} style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 999, padding: '9px 16px', cursor: 'pointer', color: C.ink, fontSize: 13, fontWeight: 700, fontFamily: 'inherit' }}>
+              <button onClick={() => setScreen('results')} style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 'var(--radius-pill)', padding: '9px 16px', cursor: 'pointer', color: C.ink, fontSize: 13, fontWeight: 700, fontFamily: 'inherit' }}>
                 ← Routes
               </button>
               {/* Was a plain <span> styled exactly like a button — same pill
@@ -1205,7 +1205,7 @@ export default function Planner() {
                     setSelected(next);
                   }}
                   style={{
-                    background: C.accent, border: 'none', borderRadius: 999,
+                    background: C.accent, border: 'none', borderRadius: 'var(--radius-pill)',
                     padding: '9px 16px', fontSize: 11, fontWeight: 700,
                     letterSpacing: '0.08em', textTransform: 'uppercase',
                     color: '#FFFFFF', cursor: 'pointer', fontFamily: 'inherit',
@@ -1216,7 +1216,7 @@ export default function Planner() {
                   <span aria-hidden style={{ fontSize: 12, lineHeight: 1 }}>⇄</span>
                 </button>
               ) : (
-                <span style={{ background: C.accent, borderRadius: 999, padding: '9px 16px', fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#FFFFFF' }}>
+                <span style={{ background: C.accent, borderRadius: 'var(--radius-pill)', padding: '9px 16px', fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#FFFFFF' }}>
                   {OBJ_LABEL[selected.objective] ?? selected.objective}
                 </span>
               )}
@@ -1244,7 +1244,7 @@ export default function Planner() {
 
                 {worstRailCheck && (
                   <div style={{
-                    margin: '0 0 20px', padding: '12px 14px', borderRadius: 14,
+                    margin: '0 0 20px', padding: '12px 14px', borderRadius: 'var(--radius-sm)',
                     background: worstRailCheck.status === 'closed' ? C.error : C.accent,
                     color: '#FFFFFF',
                   }}>
@@ -1380,15 +1380,15 @@ export default function Planner() {
                     try { sessionStorage.setItem(TRIP_STORAGE_KEY, JSON.stringify(selected)); } catch { /* noop */ }
                     router.push('/trip');
                   }} style={{
-                    width: '100%', border: 'none', borderRadius: 999, padding: '17px',
+                    width: '100%', border: 'none', borderRadius: 'var(--radius-pill)', padding: '17px',
                     fontSize: 15, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit',
                     background: 'var(--gradient-primary)', color: C.onPrimary, letterSpacing: '0.01em',
-                    boxShadow: '0 6px 18px rgba(41,71,222,0.25)',
+                    boxShadow: 'var(--shadow-accent)',
                   }}>
                     {t(lang, 'start_trip')}
                   </button>
                   <a href={wazeUrl} target="_blank" rel="noopener noreferrer" style={{
-                    display: 'block', textAlign: 'center', border: `1.5px solid ${C.accent}`, borderRadius: 999,
+                    display: 'block', textAlign: 'center', border: `1.5px solid ${C.accent}`, borderRadius: 'var(--radius-pill)',
                     padding: '15px', fontSize: 15, fontWeight: 700, color: C.accent,
                     textDecoration: 'none', fontFamily: 'inherit',
                   }}>
@@ -1396,7 +1396,7 @@ export default function Planner() {
                   </a>
 
                   {addingStop ? (
-                    <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 16, padding: 14 }}>
+                    <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 'var(--radius-md)', padding: 14 }}>
                       <StopRow label="Add another stop" value={nextStop} onChange={setNextStop} placeholder={t(lang, 'choose_a_stop')} stops={stopNames} />
                       {chainError && <p style={{ margin: '8px 0 0', fontSize: 12, color: C.error }}>{chainError}</p>}
                       <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
@@ -1405,7 +1405,7 @@ export default function Planner() {
                           disabled={!nextStop || nextStop === to || chainBusy}
                           style={{
                             flex: 1, cursor: nextStop && nextStop !== to ? 'pointer' : 'default', fontFamily: 'inherit',
-                            fontSize: 13, fontWeight: 700, padding: '10px', borderRadius: 999, border: 'none',
+                            fontSize: 13, fontWeight: 700, padding: '10px', borderRadius: 'var(--radius-pill)', border: 'none',
                             background: nextStop && nextStop !== to ? C.accent : C.cardEl,
                             color: nextStop && nextStop !== to ? C.onPrimary : C.muted,
                           }}
@@ -1414,7 +1414,7 @@ export default function Planner() {
                         </button>
                         <button
                           onClick={() => { setAddingStop(false); setNextStop(''); setChainError(null); }}
-                          style={{ fontSize: 13, fontWeight: 600, padding: '10px 16px', borderRadius: 999, border: 'none', background: 'none', color: C.muted, cursor: 'pointer', fontFamily: 'inherit' }}
+                          style={{ fontSize: 13, fontWeight: 600, padding: '10px 16px', borderRadius: 'var(--radius-pill)', border: 'none', background: 'none', color: C.muted, cursor: 'pointer', fontFamily: 'inherit' }}
                         >
                           Cancel
                         </button>
@@ -1423,7 +1423,7 @@ export default function Planner() {
                   ) : (
                     <button onClick={() => setAddingStop(true)} style={{
                       width: '100%', background: 'transparent', color: C.ink,
-                      border: `1.5px solid ${C.border}`, borderRadius: 999,
+                      border: `1.5px solid ${C.border}`, borderRadius: 'var(--radius-pill)',
                       padding: '14px', fontSize: 14, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit',
                     }}>
                       + Add another stop
