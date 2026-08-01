@@ -767,7 +767,7 @@ export default function Planner() {
   }
 
   const GLOBAL = `
-    @import url('https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,400;0,14..32,500;0,14..32,600;0,14..32,700;0,14..32,800&family=Baloo+2:wght@600;700;800&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,400;0,14..32,500;0,14..32,600;0,14..32,700;0,14..32,800&display=swap');
     *{box-sizing:border-box;margin:0;padding:0;-webkit-font-smoothing:antialiased;}
     body{font-family:var(--font-sans);}
     select{-webkit-appearance:none;-moz-appearance:none;appearance:none;}
@@ -1192,9 +1192,34 @@ export default function Planner() {
               <button onClick={() => setScreen('results')} style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 999, padding: '9px 16px', cursor: 'pointer', color: C.ink, fontSize: 13, fontWeight: 700, fontFamily: 'inherit' }}>
                 ← Routes
               </button>
-              <span style={{ background: C.accent, borderRadius: 999, padding: '9px 16px', fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#FFFFFF' }}>
-                {selected.alternative ? 'Another way' : OBJ_LABEL[selected.objective] ?? selected.objective}
-              </span>
+              {/* Was a plain <span> styled exactly like a button — same pill
+                  shape and fill as every real control on this screen — so it
+                  read as tappable and did nothing when tapped. It now cycles
+                  to the next itinerary, which is what its own label promises:
+                  tap "Another way" and you see another way. */}
+              {itineraries.length > 1 ? (
+                <button
+                  onClick={() => {
+                    const i = itineraries.indexOf(selected);
+                    const next = itineraries[(i + 1) % itineraries.length];
+                    setSelected(next);
+                  }}
+                  style={{
+                    background: C.accent, border: 'none', borderRadius: 999,
+                    padding: '9px 16px', fontSize: 11, fontWeight: 700,
+                    letterSpacing: '0.08em', textTransform: 'uppercase',
+                    color: '#FFFFFF', cursor: 'pointer', fontFamily: 'inherit',
+                    display: 'flex', alignItems: 'center', gap: 6,
+                  }}
+                >
+                  {selected.alternative ? 'Another way' : OBJ_LABEL[selected.objective] ?? selected.objective}
+                  <span aria-hidden style={{ fontSize: 12, lineHeight: 1 }}>⇄</span>
+                </button>
+              ) : (
+                <span style={{ background: C.accent, borderRadius: 999, padding: '9px 16px', fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#FFFFFF' }}>
+                  {OBJ_LABEL[selected.objective] ?? selected.objective}
+                </span>
+              )}
             </div>
 
             <Sheet height="70%">

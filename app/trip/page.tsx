@@ -56,7 +56,7 @@ const C = {
 };
 
 const GLOBAL = `
-@import url('https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,400;0,14..32,500;0,14..32,600;0,14..32,700;0,14..32,800&family=Baloo+2:wght@600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,400;0,14..32,500;0,14..32,600;0,14..32,700;0,14..32,800&display=swap');
 *{box-sizing:border-box;-webkit-font-smoothing:antialiased;}
 body{font-family:var(--font-sans);}
 button:active{opacity:0.85;}
