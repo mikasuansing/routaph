@@ -1,6 +1,7 @@
 'use client';
 
 import { createContext, useContext, useEffect, useSyncExternalStore } from 'react';
+import { Sun, Moon } from 'lucide-react';
 
 type Theme = 'light' | 'dark';
 
@@ -109,7 +110,7 @@ export function ThemeToggle() {
         fontSize: 20, transition: 'background 0.2s',
       }}
     >
-      {theme === 'light' ? '🌙' : '☀️'}
+      {theme === 'light' ? <Moon size={20} strokeWidth={2} color="currentColor" /> : <Sun size={20} strokeWidth={2} color="currentColor" />}
     </button>
   );
 }

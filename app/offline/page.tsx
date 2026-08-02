@@ -37,7 +37,7 @@ export default function OfflinePage() {
 
         <h1 style={{
           margin: '18px 0 0', fontFamily: 'var(--font-display)',
-          fontSize: 28, fontWeight: 800, letterSpacing: '-0.02em', color: C.ink,
+          fontSize: 'var(--text-2xl)', fontWeight: 800, letterSpacing: '-0.02em', color: C.ink,
         }}>
           No signal right now
         </h1>
