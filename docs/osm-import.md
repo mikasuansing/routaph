@@ -108,10 +108,11 @@ Stop ids are assigned in blocks so seed files stay independent:
 | 301–313 | LRT-2 |
 | 401–441 | LRT-1 (421–436 are EDSA Carousel) |
 | 501–542 | Route 3 (Aurora Blvd) |
-| 543+ | next imported route |
+| 543–553 | Divisoria–Don Bosco Jeepney |
+| 554+ | next imported route |
 
 Corridor/route ids: 1 EDSA Carousel, 2 Katipunan Jeepney, 3 MRT-3, 4 LRT-2,
-5 LRT-1, 6 Route 3. Next import takes 7.
+5 LRT-1, 6 Route 3, 7 Divisoria–Don Bosco Jeepney. Next import takes 8.
 
 ## Applying
 

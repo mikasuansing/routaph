@@ -11,6 +11,7 @@ import { notificationPermission, requestNotificationPermission } from '@/lib/tri
 import { nearestStationEntrance } from '@/lib/routing/stationEntrances';
 import { t, loadLang, type Lang } from '@/lib/i18n';
 import { useTheme } from '@/app/providers';
+import { Check, Circle, AlertTriangle, LocateFixed } from 'lucide-react';
 
 // Voyager (light) / Dark Matter (dark). Only used by the flat fallback map.
 const TILE_URL = (isDark: boolean) => isDark
@@ -61,7 +62,7 @@ const GLOBAL = `
 body{font-family:var(--font-sans);}
 button:active{opacity:0.85;}
 .tnum{font-variant-numeric:tabular-nums;}
-@keyframes pulse{0%,100%{opacity:.4}50%{opacity:1}}
+/* @keyframes pulse now lives in app/globals.css (shared with app/loading.tsx) */
 `;
 
 const DISPLAY = 'var(--font-display)';
@@ -541,8 +542,12 @@ function TripScreen() {
     return (
       <div style={{ minHeight: '100vh', background: C.bg, color: C.ink, display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: '0 28px', fontFamily: 'Inter,system-ui,sans-serif' }}>
         <style>{GLOBAL}</style>
-        <Micro color={C.accent}>✓ Trip complete</Micro>
-        <h1 style={{ margin: '14px 0 0', fontFamily: DISPLAY, fontSize: 42, fontWeight: 800, letterSpacing: '-0.02em', lineHeight: 1.1 }}>
+        <Micro color={C.accent}>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+            <Check size={11} strokeWidth={2.5} color="currentColor" /> Trip complete
+          </span>
+        </Micro>
+        <h1 style={{ margin: '14px 0 0', fontFamily: DISPLAY, fontSize: 'var(--text-5xl)', fontWeight: 800, letterSpacing: '-0.02em', lineHeight: 1.1 }}>
           You&apos;ve arrived.
         </h1>
         {trip.itinerary && (
@@ -617,12 +622,12 @@ function TripScreen() {
               on "Finding your location". So this state is "blocked", and
               calling it "unavailable" sent people looking for a signal
               problem instead of a permission they can grant. */}
-          <p style={{ margin: '2px 0 0', fontSize: 11, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: position ? C.accent : C.muted }}>
+          <p style={{ margin: '2px 0 0', fontSize: 11, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: position ? C.accent : C.muted, display: 'flex', alignItems: 'center', gap: 4 }}>
             {position
-              ? '● Live location'
+              ? <><Circle size={11} strokeWidth={2.5} color="currentColor" fill="currentColor" /> Live location</>
               : gpsDenied
-                ? '○ Location blocked'
-                : <span style={{ animation: 'pulse 1.6s ease-in-out infinite' }}>○ Finding you</span>}
+                ? <><Circle size={11} strokeWidth={2.5} color="currentColor" /> Location blocked</>
+                : <span style={{ display: 'flex', alignItems: 'center', gap: 4, animation: 'pulse 1.6s ease-in-out infinite' }}><Circle size={11} strokeWidth={2.5} color="currentColor" /> Finding you</span>}
           </p>
         </div>
         <button
@@ -646,7 +651,9 @@ function TripScreen() {
           padding: '12px 14px', boxShadow: 'var(--shadow-sm)',
           display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
         }}>
-          <p style={{ margin: 0, fontSize: 13, fontWeight: 700, color: C.ink }}>▲ {activeDisruption.description}</p>
+          <p style={{ margin: 0, fontSize: 13, fontWeight: 700, color: C.ink, display: 'flex', alignItems: 'center', gap: 4 }}>
+            <AlertTriangle size={13} strokeWidth={2} color="currentColor" /> {activeDisruption.description}
+          </p>
           <button
             style={{ background: 'none', border: 'none', fontSize: 13, fontWeight: 800, color: C.accent, textDecoration: 'underline', cursor: 'pointer', fontFamily: 'inherit', flexShrink: 0 }}
             onClick={() => trip.triggerReroute()}
@@ -714,7 +721,7 @@ function TripScreen() {
             boxShadow: 'var(--shadow-accent)',
           }}
         >
-          ◎ Recenter
+          <LocateFixed size={13} strokeWidth={2.5} color={C.onPrimary} /> Recenter
         </button>
       )}
 
@@ -856,6 +863,7 @@ function TripScreen() {
                   color: C.onPrimary,
                   border: 'none', letterSpacing: '0.01em',
                   boxShadow: 'var(--shadow-accent)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
                 }}
                 onClick={() => {
                   // Guard accidental taps: without any GPS fix the app can't
@@ -868,7 +876,7 @@ function TripScreen() {
                   trip.advanceLeg();
                 }}
               >
-                ✓ {legDoneLabel(currentLeg, isLastLeg, lang)}
+                <Check size={15} strokeWidth={2} color="currentColor" /> {legDoneLabel(currentLeg, isLastLeg, lang)}
               </button>
             )}
 
@@ -924,7 +932,7 @@ function TripScreen() {
                     color: done || here ? C.onPrimary : C.muted,
                     border: done || here ? 'none' : `1.5px solid ${C.border}`,
                   }}>
-                    {done ? '✓' : i + 1}
+                    {done ? <Check size={12} strokeWidth={2.5} color="currentColor" /> : i + 1}
                   </span>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <p style={{

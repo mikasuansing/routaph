@@ -21,7 +21,7 @@ export default function PrivacyPage() {
           <span style={{ fontSize: 20, fontWeight: 700, color: C.accent, letterSpacing: '-0.03em' }}>PH</span>
         </Link>
 
-        <h1 style={{ fontSize: 28, fontWeight: 700, color: C.ink, letterSpacing: '-0.02em', marginBottom: 8 }}>Privacy Policy</h1>
+        <h1 style={{ fontSize: 'var(--text-2xl)', fontWeight: 700, color: C.ink, letterSpacing: '-0.02em', marginBottom: 8 }}>Privacy Policy</h1>
         <p style={{ fontSize: 13, color: C.muted, marginBottom: 40 }}>
           Effective: July 2026 &middot; Governed by the Philippine Data Privacy Act of 2012 (RA 10173)
         </p>

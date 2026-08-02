@@ -86,12 +86,16 @@ export async function loadTransitGraph(): Promise<TransitGraph> {
     // with a maximum, so the per-km approximation has to be clamped or it
     // runs past what the operator can actually charge — LRT-1 end to end
     // came out at P51 against its P15-30 matrix before this existed.
-    // Road modes are left uncapped: LTFRB publishes a per-km rate for them
-    // with no ceiling, so inventing one would be worse than the overshoot.
+    // Road modes are otherwise left uncapped: LTFRB publishes a per-km rate
+    // for them with no ceiling, so inventing one would be worse than the
+    // overshoot. EDSA Carousel is the one exception, because a real
+    // end-to-end ceiling for it is publicly documented (unlike Route 3 or
+    // a generic jeepney) — see migration 010 for the two sources.
     const MAX_FARE: Partial<Record<number, number>> = {
-      3: 14,  // MRT-3, P6-14 matrix
-      4: 18,  // LRT-2, P8-18 matrix
-      5: 30,  // LRT-1, P15-30 matrix
+      1: 75.50, // EDSA Carousel, Monumento<->PITX ceiling (~P73-75.50)
+      3: 14,    // MRT-3, P6-14 matrix
+      4: 18,    // LRT-2, P8-18 matrix
+      5: 30,    // LRT-1, P15-30 matrix
     };
 
     // Per-LINE fare rules (lineId = route id, which is the engine's line id).

@@ -10,6 +10,7 @@ import { ReportIssueButton } from '@/app/components/ReportIssueSheet';
 import { t, loadLang, LANG_STORAGE_KEY, type Lang } from '@/lib/i18n';
 import { useTheme } from '@/app/providers';
 import { PinPickerSheet, type PickedLocation } from '@/app/components/PinPickerSheet';
+import { Settings, MapPin, X, ArrowUpRight, ArrowLeftRight, ArrowUpDown, AlertTriangle, Check, Circle, CircleDot, ArrowLeft } from 'lucide-react';
 
 const BEEP_STORAGE_KEY = 'parapo:has_beep';
 
@@ -784,7 +785,12 @@ export default function Planner() {
   const statusDetail = disruptions && disruptions.length > 0
     ? (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-          <Micro color={C.ink} style={{ letterSpacing: '0.04em' }}>▲ {disruptions.length} route update{disruptions.length > 1 ? 's' : ''}: {disruptions[0].description}</Micro>
+          <Micro color={C.ink} style={{ letterSpacing: '0.04em' }}>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+              <AlertTriangle size={11} strokeWidth={2.5} color="currentColor" />
+              {disruptions.length} route update{disruptions.length > 1 ? 's' : ''}: {disruptions[0].description}
+            </span>
+          </Micro>
         </div>
       )
     : null;
@@ -813,16 +819,28 @@ export default function Planner() {
               {disruptions === null ? (
                 <Micro>…</Micro>
               ) : disruptions.length === 0 ? (
-                <Micro color={C.accent}>● No major disruptions</Micro>
+                <Micro color={C.accent}>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                    <Circle size={11} strokeWidth={2.5} color="currentColor" fill="currentColor" /> No major disruptions
+                  </span>
+                </Micro>
               ) : (
-                <Micro color={C.ink}>▲ {disruptions.length} notice{disruptions.length > 1 ? 's' : ''}</Micro>
+                <Micro color={C.ink}>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                    <AlertTriangle size={11} strokeWidth={2.5} color="currentColor" /> {disruptions.length} notice{disruptions.length > 1 ? 's' : ''}
+                  </span>
+                </Micro>
               )}
               {/* Only appears when riders are actually contributing — an
                   empty live map shows nothing rather than a zero. */}
               {liveVehicles.length > 0 && (
                 <>
                   <div style={{ width: 1, height: 14, background: C.border }} />
-                  <Micro color={C.accent}>◉ {liveVehicles.length} on the map</Micro>
+                  <Micro color={C.accent}>
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                      <CircleDot size={11} strokeWidth={2.5} color="currentColor" /> {liveVehicles.length} on the map
+                    </span>
+                  </Micro>
                 </>
               )}
             </div>
@@ -836,7 +854,7 @@ export default function Planner() {
                 display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 17,
               }}
             >
-              ⚙️
+              <Settings size={17} strokeWidth={2} color="currentColor" />
             </button>
           </div>
 
@@ -875,7 +893,7 @@ export default function Planner() {
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                 fontSize: 16, fontWeight: 800,
               }}>
-                ↗
+                <ArrowUpRight size={16} strokeWidth={2} color="#FFFFFF" />
               </span>
               <span style={{ flex: 1, minWidth: 0 }}>
                 {from && to ? (
@@ -905,8 +923,8 @@ export default function Planner() {
               <div style={{ overflowY: 'auto', overscrollBehavior: 'contain', WebkitOverflowScrolling: 'touch', padding: '14px 24px 28px', display: 'flex', flexDirection: 'column' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
                   <Micro>Plan a trip</Micro>
-                  <button onClick={() => setFormOpen(false)} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: 13, fontWeight: 700, color: C.muted, fontFamily: 'inherit' }}>
-                    ✕ Close
+                  <button onClick={() => setFormOpen(false)} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: 13, fontWeight: 700, color: C.muted, fontFamily: 'inherit', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                    <X size={13} strokeWidth={2.5} color="currentColor" /> Close
                   </button>
                 </div>
 
@@ -941,19 +959,19 @@ export default function Planner() {
                       <button onClick={useMyLocation} disabled={locBusy} style={{ background: 'none', border: 'none', padding: '8px 0 0', fontSize: 13, fontWeight: 700, color: C.accent, cursor: 'pointer', fontFamily: 'inherit', letterSpacing: '0.02em' }}>
                         {locBusy ? 'Locating…' : from === MY_LOCATION ? `● ${t(lang, 'use_current_location')}` : `◉ ${t(lang, 'use_current_location')}`}
                       </button>
-                      <button onClick={() => setPinningFor('from')} style={{ background: 'none', border: 'none', padding: '8px 0 0', fontSize: 13, fontWeight: 700, color: C.accent, cursor: 'pointer', fontFamily: 'inherit', letterSpacing: '0.02em' }}>
-                        📍 Drop a pin
+                      <button onClick={() => setPinningFor('from')} style={{ background: 'none', border: 'none', padding: '8px 0 0', fontSize: 13, fontWeight: 700, color: C.accent, cursor: 'pointer', fontFamily: 'inherit', letterSpacing: '0.02em', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                        <MapPin size={13} strokeWidth={2.5} color="currentColor" /> Drop a pin
                       </button>
                     </div>
                   </div>
                   <div>
                     <StopRow label="To" value={to} onChange={setTo} placeholder={t(lang, 'choose_a_stop')} stops={[...stopNames, ...Object.keys(pinned)]} />
-                    <button onClick={() => setPinningFor('to')} style={{ background: 'none', border: 'none', padding: '8px 0 0', fontSize: 13, fontWeight: 700, color: C.accent, cursor: 'pointer', fontFamily: 'inherit', letterSpacing: '0.02em' }}>
-                      📍 Drop a pin on the map
+                    <button onClick={() => setPinningFor('to')} style={{ background: 'none', border: 'none', padding: '8px 0 0', fontSize: 13, fontWeight: 700, color: C.accent, cursor: 'pointer', fontFamily: 'inherit', letterSpacing: '0.02em', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                      <MapPin size={13} strokeWidth={2.5} color="currentColor" /> Drop a pin on the map
                     </button>
                   </div>
-                  <button onClick={() => { if (from !== MY_LOCATION) { const t = from; setFrom(to); setTo(t); } }} style={{ alignSelf: 'flex-end', background: 'none', border: 'none', fontSize: 13, fontWeight: 700, color: from === MY_LOCATION ? C.border : C.muted, cursor: 'pointer', fontFamily: 'inherit', marginTop: -8 }}>
-                    ⇅ Swap
+                  <button onClick={() => { if (from !== MY_LOCATION) { const t = from; setFrom(to); setTo(t); } }} style={{ alignSelf: 'flex-end', background: 'none', border: 'none', fontSize: 13, fontWeight: 700, color: from === MY_LOCATION ? C.border : C.muted, cursor: 'pointer', fontFamily: 'inherit', marginTop: -8, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                    <ArrowUpDown size={13} strokeWidth={2.5} color="currentColor" /> Swap
                   </button>
                 </div>
 
@@ -989,8 +1007,8 @@ export default function Planner() {
               <div style={{ overflowY: 'auto', overscrollBehavior: 'contain', WebkitOverflowScrolling: 'touch', padding: '14px 24px 28px', display: 'flex', flexDirection: 'column' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 }}>
                   <Micro>Settings</Micro>
-                  <button onClick={() => setSettingsOpen(false)} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: 13, fontWeight: 700, color: C.muted, fontFamily: 'inherit' }}>
-                    ✕ Close
+                  <button onClick={() => setSettingsOpen(false)} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: 13, fontWeight: 700, color: C.muted, fontFamily: 'inherit', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                    <X size={13} strokeWidth={2.5} color="currentColor" /> Close
                   </button>
                 </div>
 
@@ -1010,9 +1028,10 @@ export default function Planner() {
                             background: on ? C.accent : 'transparent',
                             color: on ? '#FFFFFF' : C.body,
                             border: `1.5px solid ${on ? C.accent : C.border}`,
+                            display: 'inline-flex', alignItems: 'center', gap: 4,
                           }}
                         >
-                          {g.label}{on ? ' ✓' : ''}
+                          {g.label}{on && <Check size={14} strokeWidth={2} color="currentColor" />}
                         </button>
                       );
                     })}
@@ -1027,7 +1046,9 @@ export default function Planner() {
                 {/* Beep card — adjusts fare display, doesn't change routing */}
                 <button onClick={toggleHasBeep} style={{ background: 'none', border: 'none', padding: 0, margin: '14px 0 0', cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left', flexShrink: 0 }}>
                   <Micro color={hasBeep ? C.ink : C.muted}>
-                    {hasBeep ? '✓ I have a Beep card' : 'Paying cash / no Beep card'}
+                    {hasBeep
+                      ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><Check size={11} strokeWidth={2.5} color="currentColor" /> I have a Beep card</span>
+                      : 'Paying cash / no Beep card'}
                   </Micro>
                 </button>
 
@@ -1085,8 +1106,8 @@ export default function Planner() {
         return (
           <>
             <div style={{ position: 'absolute', top: 0, left: 0, right: 0, zIndex: 10, padding: '52px 20px 0' }}>
-              <button onClick={() => { setScreen('home'); setItineraries([]); setSelected(null); }} style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 'var(--radius-pill)', padding: '9px 16px', cursor: 'pointer', color: C.ink, fontSize: 13, fontWeight: 700, fontFamily: 'inherit' }}>
-                ← Back
+              <button onClick={() => { setScreen('home'); setItineraries([]); setSelected(null); }} style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 'var(--radius-pill)', padding: '9px 16px', cursor: 'pointer', color: C.ink, fontSize: 13, fontWeight: 700, fontFamily: 'inherit', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                <ArrowLeft size={13} strokeWidth={2.5} color="currentColor" /> Back
               </button>
               <div style={{ marginTop: 12, background: C.card, border: `1px solid ${C.border}`, borderRadius: 'var(--radius-md)', padding: '12px 16px' }}>
                 <p style={{ margin: 0, fontSize: 14, fontWeight: 700, color: C.ink, letterSpacing: '-0.01em' }}>
@@ -1138,10 +1159,10 @@ export default function Planner() {
                   >
                     <Micro color={C.accent}>Route {idx + 1} ({objLabel})</Micro>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginTop: 6 }}>
-                      <span className="tnum" style={{ fontFamily: DISPLAY, fontSize: 34, fontWeight: 800, color: C.ink, letterSpacing: '-0.02em', lineHeight: 1 }}>
+                      <span className="tnum" style={{ fontFamily: DISPLAY, fontSize: 'var(--text-4xl)', fontWeight: 800, color: C.ink, letterSpacing: '-0.02em', lineHeight: 1 }}>
                         {itin.totalDurationMin}<span style={{ fontFamily: 'inherit', fontSize: 15, fontWeight: 600, color: C.muted }}> min</span>
                       </span>
-                      <span className="tnum" style={{ fontFamily: DISPLAY, fontSize: 24, fontWeight: 800, color: C.accent, letterSpacing: '-0.02em' }}>
+                      <span className="tnum" style={{ fontFamily: DISPLAY, fontSize: 'var(--text-xl)', fontWeight: 800, color: C.accent, letterSpacing: '-0.02em' }}>
                         ₱{displayFare.toFixed(2)}
                       </span>
                     </div>
@@ -1189,8 +1210,8 @@ export default function Planner() {
         return (
           <>
             <div style={{ position: 'absolute', top: 0, left: 0, right: 0, zIndex: 10, padding: '52px 20px 0', display: 'flex', justifyContent: 'space-between' }}>
-              <button onClick={() => setScreen('results')} style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 'var(--radius-pill)', padding: '9px 16px', cursor: 'pointer', color: C.ink, fontSize: 13, fontWeight: 700, fontFamily: 'inherit' }}>
-                ← Routes
+              <button onClick={() => setScreen('results')} style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 'var(--radius-pill)', padding: '9px 16px', cursor: 'pointer', color: C.ink, fontSize: 13, fontWeight: 700, fontFamily: 'inherit', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                <ArrowLeft size={13} strokeWidth={2.5} color="currentColor" /> Routes
               </button>
               {/* Was a plain <span> styled exactly like a button — same pill
                   shape and fill as every real control on this screen — so it
@@ -1213,7 +1234,7 @@ export default function Planner() {
                   }}
                 >
                   {selected.alternative ? 'Another way' : OBJ_LABEL[selected.objective] ?? selected.objective}
-                  <span aria-hidden style={{ fontSize: 12, lineHeight: 1 }}>⇄</span>
+                  <span aria-hidden style={{ fontSize: 12, lineHeight: 1, display: 'inline-flex' }}><ArrowLeftRight size={12} strokeWidth={2.5} color="currentColor" /></span>
                 </button>
               ) : (
                 <span style={{ background: C.accent, borderRadius: 'var(--radius-pill)', padding: '9px 16px', fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#FFFFFF' }}>
@@ -1227,7 +1248,7 @@ export default function Planner() {
                 {/* Headline numbers */}
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', padding: '10px 0 6px' }}>
                   <div>
-                    <span className="tnum" style={{ fontFamily: DISPLAY, fontSize: 50, fontWeight: 800, color: C.ink, letterSpacing: '-0.02em', lineHeight: 1 }}>
+                    <span className="tnum" style={{ fontFamily: DISPLAY, fontSize: 'var(--text-6xl)', fontWeight: 800, color: C.ink, letterSpacing: '-0.02em', lineHeight: 1 }}>
                       {selected.totalDurationMin}<span style={{ fontSize: 17, fontWeight: 600, color: C.muted }}> min</span>
                     </span>
                     <p className="tnum" style={{ margin: '6px 0 0', fontSize: 14, color: C.body }}>
@@ -1235,7 +1256,7 @@ export default function Planner() {
                     </p>
                   </div>
                   <div style={{ textAlign: 'right' }}>
-                    <span className="tnum" style={{ fontFamily: DISPLAY, fontSize: 30, fontWeight: 800, color: C.accent, letterSpacing: '-0.02em' }}>₱{selectedDisplayFare.toFixed(2)}</span>
+                    <span className="tnum" style={{ fontFamily: DISPLAY, fontSize: 'var(--text-3xl)', fontWeight: 800, color: C.accent, letterSpacing: '-0.02em' }}>₱{selectedDisplayFare.toFixed(2)}</span>
                     <p style={{ margin: '4px 0 0', fontSize: 12, color: C.muted }}>per person{hasBeep ? ' · Beep' : ' · cash'}</p>
                   </div>
                 </div>
@@ -1332,8 +1353,9 @@ export default function Planner() {
                             <p style={{ margin: '6px 0 0', fontSize: 11, color: C.accent, fontWeight: 600 }}>{beepFare.note}</p>
                           )}
                           {outages.map((a, oi) => (
-                            <p key={oi} style={{ margin: '4px 0 0', fontSize: 11, color: C.error, fontWeight: 600 }}>
-                              ⚠ {a.feature === 'elevator' ? 'Elevator' : 'Escalator'} reported out of service
+                            <p key={oi} style={{ margin: '4px 0 0', fontSize: 11, color: C.error, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}>
+                              <AlertTriangle size={11} strokeWidth={2.5} color="currentColor" />
+                              {a.feature === 'elevator' ? 'Elevator' : 'Escalator'} reported out of service
                               {a.note ? ` — ${a.note}` : ''}
                             </p>
                           ))}

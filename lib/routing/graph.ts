@@ -25,6 +25,7 @@ const SEED_LINES: Line[] = [
   { id: 4, name: 'LRT-2',             mode: 'lrt',     color: '#06B6D4' },
   { id: 5, name: 'LRT-1',             mode: 'lrt',     color: '#0B7A45' },
   { id: 6, name: 'Route 3 (Aurora Blvd)', mode: 'bus', color: '#C2410C' },
+  { id: 7, name: 'Divisoria–Don Bosco Jeepney', mode: 'jeepney', color: '#8A5A2B' },
 ];
 
 const SEED_STOPS: Stop[] = [
@@ -160,6 +161,19 @@ const SEED_STOPS: Stop[] = [
   { id: 540, name: "Liwasang Bonifacio", lat: 14.591065, lng: 120.980799 },
   { id: 541, name: "Lawton", lat: 14.593120, lng: 120.980154 },
   { id: 542, name: "Quiapo", lat: 14.600471, lng: 120.984672 },
+
+  // ── Divisoria–Don Bosco Jeepney — LTFRB T366, via Moriones (Tondo, Manila) ─
+  { id: 543, name: "Padre Rada Street", lat: 14.606791, lng: 120.969843 },
+  { id: 544, name: "Padre Herrera Street", lat: 14.608093, lng: 120.969245 },
+  { id: 545, name: "Juan Luna Street", lat: 14.609858, lng: 120.968609 },
+  { id: 546, name: "Plaza Morga", lat: 14.610040, lng: 120.965900 },
+  { id: 547, name: "Abad Santos Street", lat: 14.609846, lng: 120.963880 },
+  { id: 548, name: "Masinop corner Moriones", lat: 14.610055, lng: 120.962922 },
+  { id: 549, name: "Tondo High School", lat: 14.611049, lng: 120.962844 },
+  { id: 550, name: "Coral Street (North Harbor)", lat: 14.614090, lng: 120.962723 },
+  { id: 551, name: "Dandan Street", lat: 14.616936, lng: 120.962463 },
+  { id: 552, name: "Herbosa Street", lat: 14.618183, lng: 120.962082 },
+  { id: 553, name: "Herbosa–Don Bosco", lat: 14.617409, lng: 120.959850 },
 ];
 
 // Stop sequences per line  [lineId, [stopId, stopId, ...]]
@@ -170,6 +184,7 @@ const SEED_LINE_STOPS: Array<[number, number[]]> = [
   [4, [301, 307, 308, 309, 310, 311, 312, 302, 313, 303, 304, 305, 306]],
   [5, [441, 440, 439, 438, 437, 401, 402, 403, 404, 405, 406, 407, 408, 409, 410, 411, 412, 413, 414, 415, 416, 417, 418, 419, 420]],
   [6, [501, 502, 503, 504, 505, 506, 507, 508, 509, 510, 511, 512, 513, 514, 515, 516, 517, 518, 519, 520, 521, 522, 523, 524, 525, 526, 527, 528, 529, 530, 531, 532, 533, 534, 535, 536, 537, 538, 539, 540, 541, 542]],
+  [7, [543, 544, 545, 546, 547, 548, 549, 550, 551, 552, 553]],
 ];
 
 // ---------------------------------------------------------------------------

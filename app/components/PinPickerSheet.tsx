@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { MapPin, X, LocateFixed, RefreshCw, Box } from 'lucide-react';
 import 'maplibre-gl/dist/maplibre-gl.css';
 
 /*
@@ -266,7 +267,7 @@ export function PinPickerSheet({ title, initial, onConfirm, onCancel }: Props) {
         pointerEvents: 'none', fontSize: 34, lineHeight: 1,
         filter: 'drop-shadow(0 3px 6px rgba(0,0,0,0.35))',
       }}>
-        📍
+        <MapPin size={34} strokeWidth={2} color="currentColor" fill="currentColor" />
       </div>
 
       {/* Header: close + what we're picking */}
@@ -283,16 +284,17 @@ export function PinPickerSheet({ title, initial, onConfirm, onCancel }: Props) {
             background: C.card, border: `1px solid ${C.border}`,
             boxShadow: 'var(--shadow-sm)', cursor: 'pointer',
             fontSize: 18, color: C.ink, fontFamily: 'inherit',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
           }}
         >
-          ✕
+          <X size={18} strokeWidth={2} color={C.ink} />
         </button>
         <div style={{
           flex: 1, minWidth: 0, background: C.card, border: `1px solid ${C.border}`,
           borderRadius: 'var(--radius-pill)', padding: '11px 16px', boxShadow: 'var(--shadow-sm)',
           display: 'flex', alignItems: 'center', gap: 8,
         }}>
-          <span style={{ flexShrink: 0 }}>📍</span>
+          <span style={{ flexShrink: 0, display: 'flex' }}><MapPin size={16} strokeWidth={2} color="currentColor" /></span>
           <span style={{
             fontSize: 14, fontWeight: 700, color: C.ink,
             whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
@@ -319,7 +321,7 @@ export function PinPickerSheet({ title, initial, onConfirm, onCancel }: Props) {
             boxShadow: 'var(--shadow-sm)',
           }}
         >
-          ◎ {locating ? 'Finding…' : 'Current'}
+          <LocateFixed size={13} strokeWidth={2.5} color={C.accent} /> {locating ? 'Finding…' : 'Current'}
         </button>
         <button
           onClick={() => lookup(center[0], center[1])}
@@ -331,7 +333,7 @@ export function PinPickerSheet({ title, initial, onConfirm, onCancel }: Props) {
             boxShadow: 'var(--shadow-sm)',
           }}
         >
-          ↻ Refresh
+          <RefreshCw size={13} strokeWidth={2.5} color={C.body} /> Refresh
         </button>
 
         {/* Tilt only exists on the WebGL renderer. Looking straight down is
@@ -357,7 +359,7 @@ export function PinPickerSheet({ title, initial, onConfirm, onCancel }: Props) {
               boxShadow: 'var(--shadow-sm)',
             }}
           >
-            ⬢ 3D
+            <Box size={13} strokeWidth={2.5} color={tilted ? C.onPrimary : C.body} /> 3D
           </button>
         )}
       </div>
@@ -371,7 +373,7 @@ export function PinPickerSheet({ title, initial, onConfirm, onCancel }: Props) {
         boxShadow: 'var(--shadow-lg)',
       }}>
         <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
-          <span style={{ flexShrink: 0, fontSize: 16, lineHeight: 1.3 }}>📍</span>
+          <span style={{ flexShrink: 0, fontSize: 16, lineHeight: 1.3, display: 'flex' }}><MapPin size={16} strokeWidth={2} color="currentColor" /></span>
           <div style={{ flex: 1, minWidth: 0 }}>
             <p style={{ margin: 0, fontSize: 15, fontWeight: 700, color: C.ink, lineHeight: 1.4 }}>
               {busy ? 'Reading the map…' : label || 'Move the map to place the pin'}

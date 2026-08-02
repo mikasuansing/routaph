@@ -59,6 +59,20 @@ input::placeholder { color: var(--color-muted); }
   --ease: cubic-bezier(0.4, 0, 0.2, 1);
   --duration-fast: 150ms;
   --duration-base: 200ms;
+
+  /*
+   * Type scale — same approach as the radius/shadow tokens above: named
+   * from the sizes already in real use (18 raw fontSize values with no
+   * naming, checked via grep), not invented. Applied to the highest-
+   * leverage spots first — page h1 headings and the big tabular-number
+   * fare/ETA displays — not mass-migrated across every inline style.
+   */
+  --text-xl:  24px; /* secondary tabular numbers (planner list-row fare) */
+  --text-2xl: 28px; /* page h1 headings (privacy, offline, error boundaries) */
+  --text-3xl: 30px; /* trip-detail fare number */
+  --text-4xl: 34px; /* planner list-row duration number */
+  --text-5xl: 42px; /* trip screen hero ETA */
+  --text-6xl: 50px; /* planner detail sheet's largest duration number */
 }
 
 :root,
@@ -112,3 +126,8 @@ input::placeholder { color: var(--color-muted); }
 
 /* Numbers a commuter scans at a glance — keep them fixed-width */
 .tnum { font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
+
+/* Shared "waiting for something" pulse. Was defined only inside trip/page.tsx's
+   local <style> block, so app/loading.tsx (which mounts standalone, before any
+   page-level styles) had no access to it. One definition, global. */
+@keyframes pulse { 0%, 100% { opacity: 0.4; } 50% { opacity: 1; } }
