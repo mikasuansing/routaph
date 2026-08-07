@@ -1,0 +1,65 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# gitleaks-action needs to list the PR's commits on pull_request events
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Test (unit + contract)
+        run: npm run test:cov
+
+      - name: Build
+        run: npm run build
+
+      - name: Audit (production deps only)
+        run: npm audit --omit=dev --audit-level=high
+
+      - name: Secret scan (gitleaks)
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Health smoke test
+        # Asserts the production server boots and /api/health responds with the
+        # envelope. Without real secrets the endpoint correctly reports 503
+        # (placeholder Supabase/Redis are unreachable), so don't use curl -f;
+        # dependency reachability is a deploy-time concern, not a CI one.
+        run: |
+          npm run start &
+          sleep 5
+          curl -s http://localhost:3000/api/health | grep '"checks"'
+          kill %1
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.co' }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'placeholder' }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY || 'placeholder' }}
+          UPSTASH_REDIS_REST_URL: ${{ secrets.UPSTASH_REDIS_REST_URL || 'https://placeholder.upstash.io' }}
+          UPSTASH_REDIS_REST_TOKEN: ${{ secrets.UPSTASH_REDIS_REST_TOKEN || 'placeholder' }}

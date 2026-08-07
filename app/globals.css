@@ -1,0 +1,141 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,400;0,14..32,500;0,14..32,600;0,14..32,700;0,14..32,800&family=Big+Shoulders+Display:wght@700;800&display=swap');
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; }
+body {
+  min-height: 100vh;
+  font-family: var(--font-sans);
+  background: var(--color-bg);
+  color: var(--color-ink);
+  -webkit-font-smoothing: antialiased;
+}
+input::placeholder { color: var(--color-muted); }
+
+/*
+ * Cream + cobalt design system.
+ * Warm cream canvas, white cards, one electric-cobalt accent for primary
+ * actions and live states; ink pills for secondary emphasis. Headings and
+ * body both set in Inter — display copy is Inter at 800 with tight
+ * tracking rather than a second, rounder display face. A chunky rounded
+ * headline font (this app previously used Baloo 2) reads as a consumer
+ * toy app; one disciplined type family at a defined weight/tracking scale
+ * is what makes the same layout read as a considered product instead.
+ * No gradients: --gradient-primary is a FLAT cobalt fill kept only so
+ * legacy `background: var(--gradient-primary)` call sites resolve solid.
+ */
+
+/*
+ * Shared tokens — radius, shadow and motion. Colors and fonts were already
+ * tokenized (below); these three weren't, and every surface was hand-
+ * rolling its own shadow string and transition duration. Introduced here
+ * so new work has a scale to reach for; existing inline styles are not
+ * mass-migrated in this pass — see the handoff notes for why.
+ */
+:root {
+  /*
+   * Named from the values already in consistent use, not invented: the app
+   * already had a real 3-tier card scale (compact notice / secondary card /
+   * primary card), it just had no name. Naming it is the fix; the sizes
+   * are unchanged.
+   */
+  --radius-sm:    14px;  /* compact notices, inline badges */
+  --radius-md:    16px;  /* secondary cards */
+  --radius-lg:    20px;  /* primary content cards */
+  --radius-sheet: 28px;  /* bottom-sheet top corners */
+  --radius-pill:  999px;
+
+  /*
+   * Calibrated to what the app already used, not invented from scratch: 13
+   * near-duplicate shadow strings (0.08/0.12/0.15 opacity at the same
+   * blur, accreted one component at a time) collapsed to the 4 the app
+   * actually needs. Values are the most common variant in each cluster, so
+   * consolidating these does not shift how anything looks.
+   */
+  --shadow-sm:     0 2px 12px rgba(0, 0, 0, 0.15);   /* floating pills, chips */
+  --shadow-md:     0 4px 16px rgba(0, 0, 0, 0.12);   /* raised cards, dropdowns */
+  --shadow-lg:     0 -8px 32px rgba(0, 0, 0, 0.12);  /* bottom sheets */
+  --shadow-accent: 0 6px 18px rgba(41, 71, 222, 0.25); /* primary CTA glow */
+
+  --ease: cubic-bezier(0.4, 0, 0.2, 1);
+  --duration-fast: 150ms;
+  --duration-base: 200ms;
+
+  /*
+   * Type scale — same approach as the radius/shadow tokens above: named
+   * from the sizes already in real use (18 raw fontSize values with no
+   * naming, checked via grep), not invented. Applied to the highest-
+   * leverage spots first — page h1 headings and the big tabular-number
+   * fare/ETA displays — not mass-migrated across every inline style.
+   */
+  --text-xl:  24px; /* secondary tabular numbers (planner list-row fare) */
+  --text-2xl: 28px; /* page h1 headings (privacy, offline, error boundaries) */
+  --text-3xl: 30px; /* trip-detail fare number */
+  --text-4xl: 34px; /* planner list-row duration number */
+  --text-5xl: 42px; /* trip screen hero ETA */
+  --text-6xl: 50px; /* planner detail sheet's largest duration number */
+
+  /*
+   * A second display face, used ONLY for the fare, the ETA, and the
+   * "arrived" moment — nowhere else. Everything else stays Inter. A
+   * condensed, heavier numeral face gives money and time a voice of their
+   * own instead of reading as the same weight as every other heading.
+   */
+  --font-numeral: 'Big Shoulders Display', var(--font-display);
+}
+
+:root,
+[data-theme="light"] {
+  --color-bg:           #F3EEE2;   /* warm cream */
+  --color-surface:      #FBF8F0;
+  --color-card:         #FFFFFF;
+  --color-card-el:      #E9E2D2;
+  --color-border:       #E1D9C6;
+  --color-muted:        #8D8672;
+  --color-body:         #4A4436;
+  --color-ink:          #191610;
+  --color-accent:       #2947DE;   /* electric cobalt */
+  --color-accent-2:     #2947DE;
+  --color-green:        #2947DE;
+  --color-blue:         #2947DE;
+  --color-error:        #B3261E;
+  --color-glass:        #FFFFFF;
+  --color-glass-border: #E1D9C6;
+  --gradient-primary:   linear-gradient(#2947DE, #2947DE);
+  --color-on-primary:   #FFFFFF;
+  --font-sans:    'Inter', ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  /* Display copy is the same family, not a second decorative face — see
+     the design-system comment above. */
+  --font-display: 'Inter', ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --map-tile: "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png";
+}
+
+[data-theme="dark"] {
+  --color-bg:           #2A1F18;   /* dark espresso */
+  --color-surface:      #342820;
+  --color-card:         #3E3128;
+  --color-card-el:      #4A3B30;
+  --color-border:       #514237;
+  --color-muted:        #A5988A;
+  --color-body:         #D8CDBE;
+  --color-ink:          #F6F0E3;
+  --color-accent:       #7A90FF;   /* cobalt lifted for dark */
+  --color-accent-2:     #7A90FF;
+  --color-green:        #7A90FF;
+  --color-blue:         #7A90FF;
+  --color-error:        #FF8A7E;
+  --color-glass:        #3E3128;
+  --color-glass-border: #514237;
+  --gradient-primary:   linear-gradient(#4A63F2, #4A63F2);
+  --color-on-primary:   #FFFFFF;
+  --font-sans:    'Inter', ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-display: 'Inter', ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --map-tile: "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png";
+}
+
+/* Numbers a commuter scans at a glance — keep them fixed-width */
+.tnum { font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
+
+/* Shared "waiting for something" pulse. Was defined only inside trip/page.tsx's
+   local <style> block, so app/loading.tsx (which mounts standalone, before any
+   page-level styles) had no access to it. One definition, global. */
+@keyframes pulse { 0%, 100% { opacity: 0.4; } 50% { opacity: 1; } }

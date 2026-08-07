@@ -1,0 +1,259 @@
+import { haversineKm, walkMinutes } from './utils';
+import { DEFAULT_FARE_RULES } from './fares';
+import type { FareRule, GraphEdge, GraphNode, Line, LineData, Stop, TransitGraph } from './types';
+
+const TRANSFER_WALK_MAX_KM = 0.5;
+const RIDE_SPEED_KMH: Record<string, number> = {
+  jeepney: 18, bus: 24, mrt: 45, lrt: 40,
+};
+
+// ---------------------------------------------------------------------------
+// Seed data — the offline fallback used when Supabase is unavailable.
+//
+// Ids, names and coordinates deliberately MIRROR the live database (see
+// supabase/seed/*.sql) so the fallback answers the same questions the same
+// way instead of quietly disagreeing with production. Rail coordinates come
+// from OpenStreetMap relations 109159 / 8000264 / 110418 — © OpenStreetMap
+// contributors, ODbL. Keep this in step with
+// supabase/seed/007_rail_completion.sql when either changes.
+// ---------------------------------------------------------------------------
+
+const SEED_LINES: Line[] = [
+  { id: 1, name: 'EDSA Carousel',     mode: 'bus',     color: '#D05A28' },
+  { id: 2, name: 'Katipunan Jeepney', mode: 'jeepney', color: '#B8962E' },
+  { id: 3, name: 'MRT-3',             mode: 'mrt',     color: '#6366F1' },
+  { id: 4, name: 'LRT-2',             mode: 'lrt',     color: '#06B6D4' },
+  { id: 5, name: 'LRT-1',             mode: 'lrt',     color: '#0B7A45' },
+  { id: 6, name: 'Route 3 (Aurora Blvd)', mode: 'bus', color: '#C2410C' },
+  { id: 7, name: 'Divisoria–Don Bosco Jeepney', mode: 'jeepney', color: '#8A5A2B' },
+];
+
+const SEED_STOPS: Stop[] = [
+  // ── EDSA Carousel (bus), Monumento → PITX ─────────────────────────────────
+  { id:   1, name: 'Monumento',              lat: 14.6549, lng: 120.9842 },
+  { id: 421, name: 'Bagong Barrio',          lat: 14.6573, lng: 120.9976 },
+  { id:   2, name: 'Balintawak',             lat: 14.6573, lng: 121.0028 },
+  { id: 422, name: 'Kaingin Road',           lat: 14.6569, lng: 121.0111 },
+  { id: 423, name: 'Roosevelt',              lat: 14.6560, lng: 121.0200 },
+  { id: 424, name: 'SM North EDSA',          lat: 14.6560, lng: 121.0300 },
+  { id: 425, name: 'North Avenue (Bus)',     lat: 14.6520, lng: 121.0330 },
+  { id: 426, name: 'Philam',                 lat: 14.6480, lng: 121.0360 },
+  { id: 427, name: 'Quezon Avenue',          lat: 14.6420, lng: 121.0390 },
+  { id:   3, name: 'Kamuning',               lat: 14.6360, lng: 121.0430 },
+  { id: 428, name: 'Nepa Q-Mart',            lat: 14.6300, lng: 121.0470 },
+  { id:   4, name: 'Main Avenue (Cubao)',    lat: 14.6197, lng: 121.0510 },
+  { id: 429, name: 'Santolan (EDSA)',        lat: 14.6108, lng: 121.0542 },
+  { id:   5, name: 'Ortigas',                lat: 14.5870, lng: 121.0576 },
+  { id:   6, name: 'Guadalupe',              lat: 14.5667, lng: 121.0454 },
+  { id: 430, name: 'Buendia (Bus)',          lat: 14.5540, lng: 121.0337 },
+  { id:   7, name: 'Ayala',                  lat: 14.5488, lng: 121.0275 },
+  { id: 431, name: 'Tramo',                  lat: 14.5430, lng: 121.0150 },
+  { id:   8, name: 'Taft Ave',               lat: 14.5376, lng: 121.0019 },
+  { id: 432, name: 'Roxas Boulevard',        lat: 14.5330, lng: 120.9980 },
+  { id: 433, name: 'SM Mall of Asia',        lat: 14.5350, lng: 120.9820 },
+  { id: 434, name: 'DFA (Aseana)',           lat: 14.5290, lng: 120.9930 },
+  { id: 435, name: 'Ayala Malls Manila Bay', lat: 14.5230, lng: 120.9900 },
+  { id: 436, name: 'PITX',                   lat: 14.5083, lng: 120.9912 },
+
+  // ── Katipunan Jeepney ─────────────────────────────────────────────────────
+  { id:   9, name: 'Katipunan LRT',   lat: 14.6299, lng: 121.0731 },
+  { id:  10, name: 'Ateneo Gate',     lat: 14.6395, lng: 121.0776 },
+  { id:  11, name: 'Miriam',          lat: 14.6437, lng: 121.0788 },
+  { id:  12, name: 'UP Town Center',  lat: 14.6517, lng: 121.0686 },
+
+  // ── MRT-3, North Avenue → Taft Avenue ─────────────────────────────────────
+  { id: 201, name: 'North Avenue',               lat: 14.651694, lng: 121.032633 },
+  { id: 202, name: 'Quezon Ave (MRT)',           lat: 14.642449, lng: 121.038645 },
+  { id: 203, name: 'GMA-Kamuning',               lat: 14.635333, lng: 121.043275 },
+  { id: 204, name: 'Cubao (MRT)',                lat: 14.619478, lng: 121.051057 },
+  { id: 213, name: 'Santolan-Annapolis (MRT-3)', lat: 14.607541, lng: 121.056574 },
+  { id: 205, name: 'Ortigas (MRT)',              lat: 14.587341, lng: 121.056519 },
+  { id: 206, name: 'Shaw Blvd',                  lat: 14.581102, lng: 121.053408 },
+  { id: 207, name: 'Boni',                       lat: 14.573093, lng: 121.047644 },
+  { id: 208, name: 'Guadalupe (MRT)',            lat: 14.566719, lng: 121.045438 },
+  { id: 209, name: 'Buendia',                    lat: 14.553952, lng: 121.033684 },
+  { id: 210, name: 'Ayala (MRT)',                lat: 14.548755, lng: 121.027540 },
+  { id: 211, name: 'Magallanes',                 lat: 14.541743, lng: 121.019050 },
+  { id: 212, name: 'Taft Avenue (MRT)',          lat: 14.537597, lng: 121.001890 },
+
+  // ── LRT-2, Recto → Antipolo ───────────────────────────────────────────────
+  { id: 301, name: 'Recto',             lat: 14.603467, lng: 120.983984 },
+  { id: 307, name: 'Legarda',           lat: 14.600830, lng: 120.992486 },
+  { id: 308, name: 'Pureza',            lat: 14.601679, lng: 121.005040 },
+  { id: 309, name: 'V. Mapa',           lat: 14.604003, lng: 121.017048 },
+  { id: 310, name: 'J. Ruiz',           lat: 14.610536, lng: 121.026068 },
+  { id: 311, name: 'Gilmore',           lat: 14.613477, lng: 121.034082 },
+  { id: 312, name: 'Betty Go-Belmonte', lat: 14.618579, lng: 121.042754 },
+  { id: 302, name: 'Cubao (LRT-2)',     lat: 14.622891, lng: 121.053041 },
+  { id: 313, name: 'Anonas',            lat: 14.628075, lng: 121.065197 },
+  { id: 303, name: 'Katipunan (LRT-2)', lat: 14.631260, lng: 121.073293 },
+  { id: 304, name: 'Santolan (LRT-2)',  lat: 14.621693, lng: 121.086314 },
+  { id: 305, name: 'Marikina (LRT-2)',  lat: 14.620444, lng: 121.100632 },
+  { id: 306, name: 'Antipolo',          lat: 14.624771, lng: 121.121380 },
+
+  // ── LRT-1, Dr. Santos → Fernando Poe Jr. (incl. Cavite Extension) ─────────
+  { id: 441, name: 'Dr. Santos',          lat: 14.485249, lng: 120.989397 },
+  { id: 440, name: 'Ninoy Aquino Avenue', lat: 14.498939, lng: 120.994355 },
+  { id: 439, name: 'PITX (LRT-1)',        lat: 14.508304, lng: 120.991240 },
+  { id: 438, name: 'MIA Road',            lat: 14.517992, lng: 120.992917 },
+  { id: 437, name: 'Redemptorist-Aseana', lat: 14.529737, lng: 120.992985 },
+  { id: 401, name: 'Baclaran',            lat: 14.533913, lng: 120.998050 },
+  { id: 402, name: 'EDSA (LRT-1)',        lat: 14.538952, lng: 121.000588 },
+  { id: 403, name: 'Libertad',            lat: 14.547684, lng: 120.998613 },
+  { id: 404, name: 'Gil Puyat',           lat: 14.554054, lng: 120.997144 },
+  { id: 405, name: 'Vito Cruz',           lat: 14.563460, lng: 120.994737 },
+  { id: 406, name: 'Quirino',             lat: 14.570215, lng: 120.991561 },
+  { id: 407, name: 'Pedro Gil',           lat: 14.576579, lng: 120.987999 },
+  { id: 408, name: 'UN Avenue',           lat: 14.582623, lng: 120.984546 },
+  { id: 409, name: 'Central Terminal',    lat: 14.592447, lng: 120.981705 },
+  { id: 410, name: 'Carriedo',            lat: 14.599028, lng: 120.981322 },
+  { id: 411, name: 'Doroteo Jose',        lat: 14.605346, lng: 120.981998 },
+  { id: 412, name: 'Bambang',             lat: 14.611120, lng: 120.982438 },
+  { id: 413, name: 'Tayuman',             lat: 14.616666, lng: 120.982711 },
+  { id: 414, name: 'Blumentritt',         lat: 14.622826, lng: 120.982872 },
+  { id: 415, name: 'Abad Santos',         lat: 14.630607, lng: 120.981420 },
+  { id: 416, name: 'R. Papa',             lat: 14.636026, lng: 120.982264 },
+  { id: 417, name: '5th Avenue',          lat: 14.644425, lng: 120.983535 },
+  { id: 418, name: 'Monumento (LRT-1)',   lat: 14.653834, lng: 120.983848 },
+  { id: 419, name: 'Balintawak (LRT-1)',  lat: 14.657422, lng: 121.003517 },
+  { id: 420, name: 'Fernando Poe Jr.',    lat: 14.657622, lng: 121.020688 },
+
+  // ── Route 3 (Aurora Blvd) — LTFRB Route 3, Antipolo ↔ Quiapo ─────────────
+  { id: 501, name: "Robinsons Place Antipolo", lat: 14.594111, lng: 121.172412 },
+  { id: 502, name: "Olalia Road", lat: 14.606704, lng: 121.172952 },
+  { id: 503, name: "Cloud 9", lat: 14.612892, lng: 121.154585 },
+  { id: 504, name: "Our Lady of Fatima University", lat: 14.619117, lng: 121.151106 },
+  { id: 505, name: "XentroMall Antipolo", lat: 14.617214, lng: 121.135769 },
+  { id: 506, name: "Masinag", lat: 14.625341, lng: 121.123084 },
+  { id: 507, name: "LRT Antipolo Station", lat: 14.624875, lng: 121.120322 },
+  { id: 508, name: "AMA East Rizal Campus", lat: 14.623946, lng: 121.116246 },
+  { id: 509, name: "Narra Village", lat: 14.621925, lng: 121.106624 },
+  { id: 510, name: "LRT Marikina-Pasig Station", lat: 14.620699, lng: 121.100971 },
+  { id: 511, name: "Ayala Malls Feliz", lat: 14.619266, lng: 121.093589 },
+  { id: 512, name: "LRT Santolan Station", lat: 14.622068, lng: 121.086864 },
+  { id: 513, name: "SM City Marikina", lat: 14.624701, lng: 121.084138 },
+  { id: 514, name: "Barangka", lat: 14.630057, lng: 121.079531 },
+  { id: 515, name: "Katipunan Flyover", lat: 14.632278, lng: 121.074962 },
+  { id: 516, name: "LRT Katipunan Station", lat: 14.631174, lng: 121.072720 },
+  { id: 517, name: "J. P. Rizal Street", lat: 14.629217, lng: 121.068659 },
+  { id: 518, name: "LRT Anonas Station", lat: 14.627965, lng: 121.063897 },
+  { id: 519, name: "La Salle Street", lat: 14.626260, lng: 121.059703 },
+  { id: 520, name: "Miami Street", lat: 14.625362, lng: 121.057881 },
+  { id: 521, name: "LRT Araneta Center-Cubao Station", lat: 14.622738, lng: 121.052448 },
+  { id: 522, name: "Aurora\u2013N. Domingo", lat: 14.620216, lng: 121.046309 },
+  { id: 523, name: "LRT Betty Go-Belmonte Station", lat: 14.618705, lng: 121.042689 },
+  { id: 524, name: "Robinsons Magnolia", lat: 14.615901, lng: 121.038056 },
+  { id: 525, name: "St. Paul University", lat: 14.614948, lng: 121.036447 },
+  { id: 526, name: "LRT Gilmore Station", lat: 14.613663, lng: 121.034144 },
+  { id: 527, name: "LRT J. Ruiz Station", lat: 14.610822, lng: 121.026659 },
+  { id: 528, name: "UE Ramon Magsaysay Campus", lat: 14.607885, lng: 121.020759 },
+  { id: 529, name: "SM City Santa Mesa", lat: 14.605197, lng: 121.017997 },
+  { id: 530, name: "LRT V. Mapa Station", lat: 14.603861, lng: 121.016664 },
+  { id: 531, name: "Magsaysay\u2013V. Mapa Intersection", lat: 14.602758, lng: 121.015146 },
+  { id: 532, name: "Old Santa Mesa Street", lat: 14.602395, lng: 121.011029 },
+  { id: 533, name: "Civil Registration Central Outlet", lat: 14.601692, lng: 121.003777 },
+  { id: 534, name: "M. Jhocson Street", lat: 14.600841, lng: 120.995387 },
+  { id: 535, name: "LRT Legarda Station", lat: 14.601388, lng: 120.992220 },
+  { id: 536, name: "Recto\u2013Mendiola", lat: 14.599973, lng: 120.990595 },
+  { id: 537, name: "Tanduay-NTC", lat: 14.597936, lng: 120.989631 },
+  { id: 538, name: "TIP P. Casal Campus", lat: 14.595865, lng: 120.989054 },
+  { id: 539, name: "Philippine Normal University", lat: 14.586905, lng: 120.983236 },
+  { id: 540, name: "Liwasang Bonifacio", lat: 14.591065, lng: 120.980799 },
+  { id: 541, name: "Lawton", lat: 14.593120, lng: 120.980154 },
+  { id: 542, name: "Quiapo", lat: 14.600471, lng: 120.984672 },
+
+  // ── Divisoria–Don Bosco Jeepney — LTFRB T366, via Moriones (Tondo, Manila) ─
+  { id: 543, name: "Padre Rada Street", lat: 14.606791, lng: 120.969843 },
+  { id: 544, name: "Padre Herrera Street", lat: 14.608093, lng: 120.969245 },
+  { id: 545, name: "Juan Luna Street", lat: 14.609858, lng: 120.968609 },
+  { id: 546, name: "Plaza Morga", lat: 14.610040, lng: 120.965900 },
+  { id: 547, name: "Abad Santos Street", lat: 14.609846, lng: 120.963880 },
+  { id: 548, name: "Masinop corner Moriones", lat: 14.610055, lng: 120.962922 },
+  { id: 549, name: "Tondo High School", lat: 14.611049, lng: 120.962844 },
+  { id: 550, name: "Coral Street (North Harbor)", lat: 14.614090, lng: 120.962723 },
+  { id: 551, name: "Dandan Street", lat: 14.616936, lng: 120.962463 },
+  { id: 552, name: "Herbosa Street", lat: 14.618183, lng: 120.962082 },
+  { id: 553, name: "Herbosa–Don Bosco", lat: 14.617409, lng: 120.959850 },
+];
+
+// Stop sequences per line  [lineId, [stopId, stopId, ...]]
+const SEED_LINE_STOPS: Array<[number, number[]]> = [
+  [1, [1, 421, 2, 422, 423, 424, 425, 426, 427, 3, 428, 4, 429, 5, 6, 430, 7, 431, 8, 432, 433, 434, 435, 436]],
+  [2, [9, 10, 11, 12]],
+  [3, [201, 202, 203, 204, 213, 205, 206, 207, 208, 209, 210, 211, 212]],
+  [4, [301, 307, 308, 309, 310, 311, 312, 302, 313, 303, 304, 305, 306]],
+  [5, [441, 440, 439, 438, 437, 401, 402, 403, 404, 405, 406, 407, 408, 409, 410, 411, 412, 413, 414, 415, 416, 417, 418, 419, 420]],
+  [6, [501, 502, 503, 504, 505, 506, 507, 508, 509, 510, 511, 512, 513, 514, 515, 516, 517, 518, 519, 520, 521, 522, 523, 524, 525, 526, 527, 528, 529, 530, 531, 532, 533, 534, 535, 536, 537, 538, 539, 540, 541, 542]],
+  [7, [543, 544, 545, 546, 547, 548, 549, 550, 551, 552, 553]],
+];
+
+// ---------------------------------------------------------------------------
+// Pure graph builder — no Next.js / Supabase / Redis imports.
+// Accepts data from any source (seed constants or a DB loader).
+// ---------------------------------------------------------------------------
+export function buildGraphFromData(
+  lines: Line[],
+  stops: Stop[],
+  lineStops: Array<[number, number[]]>,
+  fareRules: FareRule[],
+): TransitGraph {
+  const stopMap = new Map<number, Stop>(stops.map(s => [s.id, s]));
+  const nodes = new Map<number, GraphNode>();
+  for (const stop of stops) {
+    nodes.set(stop.id, { stop, edges: [] });
+  }
+
+  const linesMap = new Map<number, LineData>();
+
+  for (const [lineId, stopIds] of lineStops) {
+    const line = lines.find(l => l.id === lineId);
+    if (!line) continue;
+    const sequence = stopIds.map(id => stopMap.get(id)).filter((s): s is Stop => s != null);
+    linesMap.set(lineId, { line, stops: sequence });
+
+    const speedKmh = RIDE_SPEED_KMH[line.mode] ?? 20;
+    for (let i = 0; i < sequence.length - 1; i++) {
+      const a = sequence[i];
+      const b = sequence[i + 1];
+      const distKm = haversineKm(a.lat, a.lng, b.lat, b.lng);
+      const timeMin = (distKm / speedKmh) * 60;
+      const edgeAB: GraphEdge = { type: 'ride', toStopId: b.id, lineId, distKm, timeMin };
+      const edgeBA: GraphEdge = { type: 'ride', toStopId: a.id, lineId, distKm, timeMin };
+      nodes.get(a.id)!.edges.push(edgeAB);
+      nodes.get(b.id)!.edges.push(edgeBA);
+    }
+  }
+
+  // Transfer edges: stops on different lines within TRANSFER_WALK_MAX_KM
+  for (let i = 0; i < stops.length; i++) {
+    for (let j = i + 1; j < stops.length; j++) {
+      const a = stops[i];
+      const b = stops[j];
+      const aLines = new Set(lineStops.filter(([, ids]) => ids.includes(a.id)).map(([lid]) => lid));
+      const bLines = new Set(lineStops.filter(([, ids]) => ids.includes(b.id)).map(([lid]) => lid));
+      if ([...aLines].some(lid => bLines.has(lid))) continue;
+      const distKm = haversineKm(a.lat, a.lng, b.lat, b.lng);
+      if (distKm > TRANSFER_WALK_MAX_KM) continue;
+      const timeMin = walkMinutes(distKm);
+      nodes.get(a.id)!.edges.push({ type: 'transfer', toStopId: b.id, distKm, timeMin });
+      nodes.get(b.id)!.edges.push({ type: 'transfer', toStopId: a.id, distKm, timeMin });
+    }
+  }
+
+  return { nodes, lines: linesMap, fareRules };
+}
+
+// ---------------------------------------------------------------------------
+// Seed-backed singleton (used by tests and as fallback when DB is unavailable)
+// ---------------------------------------------------------------------------
+let _graph: TransitGraph | null = null;
+
+export function getGraph(): TransitGraph {
+  if (!_graph) _graph = buildGraphFromData(SEED_LINES, SEED_STOPS, SEED_LINE_STOPS, DEFAULT_FARE_RULES);
+  return _graph;
+}
+
+export function invalidateGraph(): void { _graph = null; }
+
+// Exposed for catalog API seed fallback
+export { SEED_LINES as seedLines, SEED_STOPS as seedStops, SEED_LINE_STOPS as seedLineStops };
