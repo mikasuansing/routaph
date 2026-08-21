@@ -19,12 +19,14 @@ const TILE_URL = (isDark: boolean) => isDark
   ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
   : 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png';
 
-/** Keyless OpenMapTiles vector tiles (ODbL) — see ADR 0004. */
+/** Keyless OpenMapTiles vector tiles (ODbL) - see ADR 0004. */
 const VECTOR_STYLE = 'https://tiles.openfreemap.org/styles/liberty';
 
 /** Camera while navigating: tilted forward and zoomed to street level. */
 const NAV_PITCH = 60;
-const NAV_ZOOM  = 16.5;
+const NAV_ZOOM = 16.5;
+/** Street-level zoom for the flat Leaflet fallback (no tilt, so no NAV_PITCH). */
+const NAV_ZOOM_FLAT = 17;
 
 /** MapLibre needs WebGL; without it the trip map falls back to flat Leaflet. */
 function hasWebGL(): boolean {
@@ -40,19 +42,19 @@ function hasWebGL(): boolean {
 }
 
 /*
- * Trip Companion — live tracking screen.
+ * Trip Companion - live tracking screen.
  * Monochrome minimal: typography carries the hierarchy; the single accent
  * (transit green) marks the live GPS state and arrival confirmation.
  */
 
 const C = {
-  bg:     'var(--color-bg)',
-  card:   'var(--color-card)',
+  bg: 'var(--color-bg)',
+  card: 'var(--color-card)',
   cardEl: 'var(--color-card-el)',
   border: 'var(--color-border)',
-  muted:  'var(--color-muted)',
-  body:   'var(--color-body)',
-  ink:    'var(--color-ink)',
+  muted: 'var(--color-muted)',
+  body: 'var(--color-body)',
+  ink: 'var(--color-ink)',
   accent: 'var(--color-accent)',
   onPrimary: 'var(--color-on-primary)',
 };
@@ -67,7 +69,7 @@ button:active{opacity:0.85;}
 `;
 
 const DISPLAY = 'var(--font-display)';
-// Reserved for the fare, the ETA, and the "arrived" moment only — see
+// Reserved for the fare, the ETA, and the "arrived" moment only - see
 // the --font-numeral comment in globals.css.
 const NUMERAL = 'var(--font-numeral)';
 
@@ -103,8 +105,8 @@ function legLabel(leg: RideLeg | WalkLeg | undefined): string {
  * The old card read "LRT-2 → Buendia (9 stops)", which packs the line, the
  * destination and the stop count into one line of shorthand and never says
  * what to actually DO. These split a leg into an instruction you can follow
- * without decoding it: what to get on, where to get off, and — once the
- * step is done — what the next one is.
+ * without decoding it: what to get on, where to get off, and - once the
+ * step is done - what the next one is.
  */
 
 /** What to do for this leg, as an instruction ("Take the LRT-2 train"). */
@@ -116,12 +118,12 @@ function legAction(leg: RideLeg | WalkLeg | undefined, lang: Lang): string {
   const r = leg as RideLeg;
   const key =
     r.line.mode === 'jeepney' ? 'take_a_jeepney'
-    : r.line.mode === 'bus'   ? 'take_the_bus'
+    : r.line.mode === 'bus' ? 'take_the_bus'
     : 'take_the_train';
   return t(lang, key, { line: r.line.name });
 }
 
-/** Where this leg ends — the place completing it puts you. */
+/** Where this leg ends - the place completing it puts you. */
 function legEndName(leg: RideLeg | WalkLeg | undefined): string {
   if (!leg) return '';
   return leg.type === 'walk' ? (leg as WalkLeg).toName : (leg as RideLeg).to.name;
@@ -166,9 +168,9 @@ function TripScreen() {
     return () => clearInterval(id);
   }, [trip.status]);
 
-  const mapElRef  = useRef<HTMLDivElement>(null);
-  const mapRef    = useRef<unknown>(null);
-  const tileRef   = useRef<unknown>(null);
+  const mapElRef = useRef<HTMLDivElement>(null);
+  const mapRef = useRef<unknown>(null);
+  const tileRef = useRef<unknown>(null);
   const posMarker = useRef<unknown>(null);
 
   // Track browser geolocation permission so the UI can explain itself
@@ -181,13 +183,13 @@ function TripScreen() {
         status = s;
         setGeoPerm(s.state);
         s.onchange = () => setGeoPerm(s.state);
-      }).catch(() => { /* unsupported — stay unknown */ });
+      }).catch(() => { /* unsupported - stay unknown */ });
     } catch { /* unsupported */ }
     return () => { active = false; if (status) status.onchange = null; };
   }, []);
 
   // On mount: restore itinerary from sessionStorage. If leg progress was
-  // also saved (a prior tab session got this far before reload/eviction —
+  // also saved (a prior tab session got this far before reload/eviction -
   // the exact failure mode a signal-loss tunnel causes), resume there
   // instead of silently restarting the trip from leg 0.
   useEffect(() => {
@@ -210,12 +212,12 @@ function TripScreen() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Navigation is a side effect — never call router.replace during render
+  // Navigation is a side effect - never call router.replace during render
   useEffect(() => {
     if (trip.status === 'ended') router.replace('/planner');
   }, [trip.status, router]);
 
-  // Keep the screen awake during an active trip — mobile browsers pause the
+  // Keep the screen awake during an active trip - mobile browsers pause the
   // GPS watcher when the screen locks. Best-effort: not all browsers support
   // the Wake Lock API, and it must be re-acquired when the tab regains focus.
   useEffect(() => {
@@ -231,7 +233,7 @@ function TripScreen() {
         const l = await wl.request('screen');
         if (disposed) { void l.release(); return; }
         lock = l;
-      } catch { /* low battery or unsupported — non-fatal */ }
+      } catch { /* low battery or unsupported - non-fatal */ }
     };
 
     const onVisible = () => { if (document.visibilityState === 'visible') void acquire(); };
@@ -284,6 +286,10 @@ function TripScreen() {
       mapRef.current = map;
       setNavMap(false);
 
+      // Panning away hands control back to the rider, same as the nav map -
+      // otherwise the next GPS fix would snap the camera back mid-drag.
+      map.on('dragstart', () => setFollowing(false));
+
       // The container often has no measured size on first paint, so an
       // immediate fit anchors to a 0x0 viewport; recompute, then refit.
       const fit = () => {
@@ -298,7 +304,7 @@ function TripScreen() {
 
   // Keep the FALLBACK basemap in step with the theme toggle. The navigation
   // map uses one vector style for both themes, so this only applies to the
-  // raster map — but leaving it out stranded a dark basemap under a cream
+  // raster map - but leaving it out stranded a dark basemap under a cream
   // page, which is what the toggle looked broken as before.
   useEffect(() => {
     if (!tileRef.current) return;
@@ -307,15 +313,15 @@ function TripScreen() {
   }, [theme]);
 
   /*
-   * Navigation map — MapLibre, so the camera can tilt and turn.
+   * Navigation map - MapLibre, so the camera can tilt and turn.
    *
    * A trip screen is a navigation view: the useful question is "what is in
    * front of me", which a flat north-up map answers badly. Leaflet cannot
    * pitch or rotate at all, so this is the surface that resolves ADR 0004
    * toward MapLibre.
    *
-   * The whole route is drawn as GeoJSON — ride legs solid in the line's own
-   * colour, walk legs dashed — and the camera then locks onto the rider.
+   * The whole route is drawn as GeoJSON - ride legs solid in the line's own
+   * colour, walk legs dashed - and the camera then locks onto the rider.
    */
   useEffect(() => {
     if ((trip.status !== 'active' && trip.status !== 'rerouting') || !trip.itinerary) return;
@@ -437,7 +443,7 @@ function TripScreen() {
    * On the navigation map this is the Waze behaviour: an arrow that points
    * where you're going, with the camera locked behind it and the whole map
    * turned so your direction of travel is up. Rotation is the part that
-   * makes a tilted map legible — without it you're reading a 3D scene
+   * makes a tilted map legible - without it you're reading a 3D scene
    * facing an arbitrary way.
    */
   useEffect(() => {
@@ -474,7 +480,7 @@ function TripScreen() {
       }
 
       if (following) {
-        // Only turn the camera when there's a heading worth trusting —
+        // Only turn the camera when there's a heading worth trusting -
         // otherwise a stationary phone would spin the map on the platform.
         const bearing = pos.headingDeg;
         const turn = bearing !== undefined && Math.abs(bearingDelta(m.getBearing(), bearing)) > 3;
@@ -485,7 +491,7 @@ function TripScreen() {
           zoom: Math.max(m.getZoom(), NAV_ZOOM),
           duration: 900,
           // Sit the rider low on screen so most of the map shows what's
-          // ahead rather than what's already behind — the standard
+          // ahead rather than what's already behind - the standard
           // navigation framing.
           padding: { top: 0, bottom: Math.round(window.innerHeight * 0.28), left: 0, right: 0 },
         });
@@ -522,14 +528,20 @@ function TripScreen() {
         const marker = posMarker.current as any;
         marker.setLatLng(here);
         // Rotate the existing DOM node directly rather than recreating the
-        // icon on every fix — swapping divIcons re-adds the element and
+        // icon on every fix - swapping divIcons re-adds the element and
         // makes the arrow flicker on each GPS update.
         const el = marker.getElement()?.firstChild as HTMLElement | undefined;
         if (el) el.style.transform = `rotate(${heading}deg)`;
       }
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      if (following) (mapRef.current as any).panTo(here, { animate: true });
+      if (following) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const m = mapRef.current as any;
+        // setView (not panTo) so the camera also zooms in to street level -
+        // fitBounds on mount framed the WHOLE route, which is city-wide zoomed
+        // out. Math.max keeps a rider-chosen closer zoom from being undone.
+        m.setView(here, Math.max(m.getZoom(), NAV_ZOOM_FLAT), { animate: true });
+      }
     });
   }, [trip.position, navMap, following]);
 
@@ -575,11 +587,11 @@ function TripScreen() {
   if (!itinerary) return null;
 
   const currentLeg = itinerary.legs[currentLegIndex];
-  const nextLeg    = itinerary.legs[currentLegIndex + 1];
-  const isLastLeg  = currentLegIndex >= itinerary.legs.length - 1;
+  const nextLeg = itinerary.legs[currentLegIndex + 1];
+  const isLastLeg = currentLegIndex >= itinerary.legs.length - 1;
 
   // A GPS fix that's gone quiet for a while (MRT tunnel, no signal) still
-  // shows the LAST KNOWN position/ETA below rather than blanking — but
+  // shows the LAST KNOWN position/ETA below rather than blanking - but
   // labeled as last-known so it's not mistaken for a live reading.
   const SIGNAL_STALE_MS = 20_000;
   const signalStale = position !== null && nowTick - position.timestamp > SIGNAL_STALE_MS;
@@ -589,9 +601,9 @@ function TripScreen() {
     : null;
 
   const distKm = position ? distToNextStop(position, itinerary, currentLegIndex) : null;
-  // Jeepneys have no fixed schedule — show distance only, never a minute ETA.
+  // Jeepneys have no fixed schedule - show distance only, never a minute ETA.
   const currentIsJeepney = currentLeg?.type === 'ride' && (currentLeg as RideLeg).line.mode === 'jeepney';
-  const eta    = position && !currentIsJeepney ? etaToNextStop(position, itinerary, currentLegIndex, position.speedMps) : null;
+  const eta = position && !currentIsJeepney ? etaToNextStop(position, itinerary, currentLegIndex, position.speedMps) : null;
 
   const wazeUrl = originalDest
     ? `https://waze.com/ul?ll=${originalDest.lat},${originalDest.lng}&navigate=yes&utm_source=parapo`
@@ -603,7 +615,7 @@ function TripScreen() {
 
       {/* Full-bleed map, same shell as the planner. A trip is a navigation
           task, so the map should be the screen rather than a panel at the
-          top of a scrolling document — everything else floats over it.
+          top of a scrolling document - everything else floats over it.
           `zIndex: 0` contains Leaflet's internal panes (they run 400-800)
           so they can't paint over the controls. */}
       <div ref={mapElRef} style={{ position: 'absolute', inset: 0, zIndex: 0 }} />
@@ -621,7 +633,7 @@ function TripScreen() {
           <span style={{ fontFamily: DISPLAY, fontSize: 15, fontWeight: 800, letterSpacing: '-0.02em', color: C.accent }}>
             RoutaPH<span style={{ color: C.ink }}>.</span>
           </span>
-          {/* `gpsDenied` is set only on PERMISSION_DENIED — a genuinely
+          {/* `gpsDenied` is set only on PERMISSION_DENIED - a genuinely
               unavailable fix or a timeout keeps the watcher alive and stays
               on "Finding your location". So this state is "blocked", and
               calling it "unavailable" sent people looking for a signal
@@ -647,7 +659,7 @@ function TripScreen() {
         </button>
       </div>
 
-      {/* Active disruption — floats under the pill so it can't be missed */}
+      {/* Active disruption - floats under the pill so it can't be missed */}
       {activeDisruption && status !== 'rerouting' && (
         <div style={{
           position: 'absolute', top: 'calc(76px + env(safe-area-inset-top))', left: 16, right: 16, zIndex: 10,
@@ -667,7 +679,7 @@ function TripScreen() {
         </div>
       )}
 
-      {/* The instruction, on the map — a navigation app's turn banner.
+      {/* The instruction, on the map - a navigation app's turn banner.
           For a passenger the equivalent of "turn right in 300 m" is where
           to get off and how far away it is; that is the one thing worth
           reading at a glance, so it sits over the map rather than in the
@@ -715,7 +727,7 @@ function TripScreen() {
         </div>
       )}
 
-      {/* Recenter — appears only after panning away, like a navigation app.
+      {/* Recenter - appears only after panning away, like a navigation app.
           Sits just above the sheet so a thumb can reach it. */}
       {status === 'active' && !following && (
         <button
@@ -740,7 +752,7 @@ function TripScreen() {
         // Anchored top-and-bottom rather than given a `vh` height. On
         // mobile `vh` is locked to the viewport with the browser toolbar
         // HIDDEN, so while the toolbar is showing a vh-sized sheet hangs
-        // below the screen — taking the action bar pinned to its bottom
+        // below the screen - taking the action bar pinned to its bottom
         // with it, and shifting as the toolbar hides and reappears on
         // scroll. The parent is `fixed; inset: 0`, so a percentage here
         // resolves against the viewport that is actually visible.
@@ -751,14 +763,14 @@ function TripScreen() {
         display: 'flex', flexDirection: 'column',
         // No paddingBottom here. The action bar below is the element that
         // actually touches the bottom edge while a trip is active, and it
-        // already carries the safe-area inset on its own padding — adding
+        // already carries the safe-area inset on its own padding - adding
         // it here too stacked both, leaving dead space under the buttons on
         // any iPhone with a home indicator.
       }}>
         <div style={{ width: 32, height: 4, borderRadius: 2, background: C.border, margin: '10px auto 0', flexShrink: 0 }} />
 
       <main style={{ flex: 1, overflowY: 'auto', overscrollBehavior: 'contain', WebkitOverflowScrolling: 'touch', padding: '14px 24px calc(24px + env(safe-area-inset-bottom))' }}>
-        {/* GPS state — explain, and offer a way in, instead of failing silently */}
+        {/* GPS state - explain, and offer a way in, instead of failing silently */}
         {!position && (gpsDenied || geoPerm === 'denied') && (
           <div style={{ marginBottom: 22, background: C.card, border: `1px solid ${C.border}`, borderRadius: 'var(--radius-lg)', padding: 16 }}>
             <Micro>Location access is blocked</Micro>
@@ -768,7 +780,7 @@ function TripScreen() {
               <strong style={{ color: C.ink }}> padlock icon</strong> next to the address →
               <strong style={{ color: C.ink }}> Site settings</strong> →
               <strong style={{ color: C.ink }}> Location</strong> → Allow, then reload.
-              You can still follow the trip — just tap
+              You can still follow the trip - just tap
               <strong style={{ color: C.ink }}> Done</strong> at the end of each step.
             </p>
           </div>
@@ -815,10 +827,10 @@ function TripScreen() {
             </Micro>
             <p style={{ margin: '8px 0 14px', fontSize: 13, color: C.body, lineHeight: 1.7 }}>
               {sharingPosition
-                ? 'Other commuters can see roughly where this vehicle is. Your position is anonymous, kept for 3 minutes, and never saved to our database.'
-                : 'No operator publishes live train or bus positions here. Share your position anonymously while you ride and others can see where this vehicle is.'}
+                ? 'Anonymous, and expires in 3 minutes.'
+                : 'Share your position anonymously so others can see this vehicle.'}
             </p>
-            {/* Full-width below the copy rather than beside it — at 375 px a
+            {/* Full-width below the copy rather than beside it - at 375 px a
                 side-by-side button starves the explanation into a column
                 barely six words wide, and this is text people should read
                 before opting in. */}
@@ -838,11 +850,11 @@ function TripScreen() {
           </div>
         )}
 
-        {/* Current leg — the glance */}
+        {/* Current leg - the glance */}
         {currentLeg && (
           <section style={{ marginBottom: 28, background: C.card, border: `1px solid ${C.border}`, borderRadius: 'var(--radius-lg)', padding: 18 }}>
             {/* Which vehicle you're on. Where to get off, how far and which
-                step lives in the banner over the map — repeating it here
+                step lives in the banner over the map - repeating it here
                 just made the rider read the same sentence twice. */}
             <p style={{ margin: 0, fontFamily: DISPLAY, fontSize: 22, fontWeight: 800, color: C.ink, letterSpacing: '-0.02em', lineHeight: 1.25 }}>
               {legAction(currentLeg, lang)}
@@ -854,12 +866,12 @@ function TripScreen() {
             )}
             {signalStale && (
               <p style={{ margin: '6px 0 0', fontSize: 12, fontWeight: 700, color: C.muted }}>
-                Signal lost — showing last known position ({Math.round((nowTick - position!.timestamp) / 1000)}s ago)
+                Signal lost - showing last known position ({Math.round((nowTick - position!.timestamp) / 1000)}s ago)
               </p>
             )}
             {isLastLeg && currentLeg.type === 'walk' && finalEntrance && (
               <p style={{ margin: '6px 0 0', fontSize: 13, fontWeight: 700, color: C.accent }}>
-                Exit via the {finalEntrance.label} — closer to your destination
+                Exit via the {finalEntrance.label} - closer to your destination
               </p>
             )}
             {status === 'active' && (
@@ -878,8 +890,8 @@ function TripScreen() {
                   // tell where you are, so completing a leg needs intent.
                   if (!position && !window.confirm(
                     isLastLeg
-                      ? 'No GPS fix — mark the whole trip as done anyway?'
-                      : 'No GPS fix — mark this leg as done anyway?'
+                      ? 'No GPS fix - mark the whole trip as done anyway?'
+                      : 'No GPS fix - mark this leg as done anyway?'
                   )) return;
                   trip.advanceLeg();
                 }}
@@ -916,7 +928,7 @@ function TripScreen() {
           </p>
         )}
 
-        {/* All steps — a numbered checklist, so progress through a
+        {/* All steps - a numbered checklist, so progress through a
             multi-vehicle trip is readable at a glance and a completed step
             visibly stays completed. */}
         <section style={{ marginBottom: 28 }}>

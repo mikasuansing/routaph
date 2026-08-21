@@ -43,19 +43,22 @@ describe('fare rules', () => {
 /*
  * Rail fares are published as a matrix with a ceiling, not as an open-ended
  * per-km rate. `base + rate x km` approximates the middle of that matrix and
- * runs past the end of it: before capping, the full length of LRT-1 priced
- * at ₱51 against a published ₱15-30 matrix.
+ * can run past the end of it, so a maxFare clamps the result.
  */
 describe('fare ceilings', () => {
   const CAPPED_LRT1: FareRule = {
-    lineId: 5, mode: 'lrt', baseFare: 16.25, perKmRate: 1.47, flagDistanceKm: 0, maxFare: 30,
+    lineId: 5, mode: 'lrt', baseFare: 16.25, perKmRate: 1.47, flagDistanceKm: 0, maxFare: 52,
   };
   const capped: FareRule[] = [CAPPED_LRT1, ...DEFAULT_FARE_RULES];
 
-  it('clamps a long journey to the published maximum', () => {
+  it('prices the real end-to-end LRT-1 trip just under the published maximum', () => {
     // 23.6 km is the real end-to-end length of LRT-1 including the Cavite
-    // Extension; uncapped this is ₱50.94.
-    expect(computeFare('lrt', 23.6, 5, capped)).toBe(30);
+    // Extension: 16.25 + 23.6 * 1.47 = ₱50.94, just under the ₱52 beep ceiling.
+    expect(computeFare('lrt', 23.6, 5, capped)).toBeCloseTo(50.94, 2);
+  });
+
+  it('clamps a journey longer than the line to the published maximum', () => {
+    expect(computeFare('lrt', 40, 5, capped)).toBe(52);
   });
 
   it('leaves fares below the ceiling untouched', () => {
@@ -74,7 +77,7 @@ describe('fare ceilings', () => {
 
   it('leaves road modes uncapped', () => {
     // LTFRB publishes a per-km rate for jeepney and bus with no ceiling, so
-    // there is no honest number to clamp to — inventing one would be a
+    // there is no honest number to clamp to - inventing one would be a
     // bigger error than the overshoot on a very long ride.
     const far = computeFare('bus', 40, 999, DEFAULT_FARE_RULES);
     expect(far).toBeCloseTo(18 + 35 * 2.98, 2);

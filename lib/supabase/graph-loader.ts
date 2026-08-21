@@ -1,7 +1,7 @@
 /**
  * Builds a TransitGraph from the Supabase database.
  * Falls back to seed data when Supabase is unconfigured or the query fails.
- * Server-only — never import from a Client Component.
+ * Server-only - never import from a Client Component.
  */
 import type { FareRule, Line, Stop, TransitGraph } from '@/lib/routing/types';
 import { DEFAULT_FARE_RULES } from '@/lib/routing/fares';
@@ -14,7 +14,7 @@ function mapMode(dbMode: string, name = ''): Line['mode'] {
   return dbMode as Line['mode'];
 }
 
-// Module-level TTL cache — shared across requests in one server process
+// Module-level TTL cache - shared across requests in one server process
 let _cache: { graph: TransitGraph; at: number } | null = null;
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 
@@ -22,7 +22,7 @@ export async function loadTransitGraph(): Promise<TransitGraph> {
   if (_cache && Date.now() - _cache.at < CACHE_TTL_MS) return _cache.graph;
 
   if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
-    return getGraph(); // dev / test — no DB configured
+    return getGraph(); // dev / test - no DB configured
   }
 
   try {
@@ -84,18 +84,18 @@ export async function loadTransitGraph(): Promise<TransitGraph> {
     // Published single-journey ceilings, keyed by route id (see
     // supabase/migrations/006_2026_fare_rates.sql). Rail fares are matrices
     // with a maximum, so the per-km approximation has to be clamped or it
-    // runs past what the operator can actually charge — LRT-1 end to end
-    // came out at P51 against its P15-30 matrix before this existed.
+    // runs past what the operator can actually charge - LRT-1 end to end
+    // came out at P51 against a stale P15-30 cap before this was corrected.
     // Road modes are otherwise left uncapped: LTFRB publishes a per-km rate
     // for them with no ceiling, so inventing one would be worse than the
     // overshoot. EDSA Carousel is the one exception, because a real
     // end-to-end ceiling for it is publicly documented (unlike Route 3 or
-    // a generic jeepney) — see migration 010 for the two sources.
+    // a generic jeepney) - see migration 010 for the two sources.
     const MAX_FARE: Partial<Record<number, number>> = {
       1: 75.50, // EDSA Carousel, Monumento<->PITX ceiling (~P73-75.50)
       3: 14,    // MRT-3, P6-14 matrix
       4: 18,    // LRT-2, P8-18 matrix
-      5: 30,    // LRT-1, P15-30 matrix
+      5: 52,    // LRT-1 beep, P16-52 matrix (lrmc.ph 2025-04-02 notice; SJT is P20-55)
     };
 
     // Per-LINE fare rules (lineId = route id, which is the engine's line id).

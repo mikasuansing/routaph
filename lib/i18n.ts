@@ -1,5 +1,5 @@
 /**
- * Filipino/Taglish string map — key UI strings only, not a full i18n
+ * Filipino/Taglish string map - key UI strings only, not a full i18n
  * library. `{var}` placeholders are substituted via a plain string
  * replace; there's no pluralization/ICU machinery here on purpose.
  */
@@ -17,7 +17,8 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     step_by_step:        'Step by step',
     walk_to:             'Walk to {stop}',
     board_here:          'Board',
-    no_fixed_schedule:   'No fixed schedule, ride until your stop',
+    along_corridor:      'Along',
+    no_fixed_schedule:   'Flag one down anywhere along the road, hop off anywhere too',
     fare_breakdown:       'Fare breakdown',
     total_per_person:    'Total per person',
     start_trip:          'Start trip and track live',
@@ -56,7 +57,8 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     step_by_step:        'Hakbang-hakbang',
     walk_to:             'Lakad papuntang {stop}',
     board_here:          'Sakay dito',
-    no_fixed_schedule:   'Maghintay ng jeep, walang schedule, sumakay hanggang sa hintuan mo',
+    along_corridor:      'Sa daanan ng',
+    no_fixed_schedule:   'Sumakay kahit saan sa daan, bumaba rin kahit saan',
     fare_breakdown:       'Breakdown ng pamasahe',
     total_per_person:    'Kabuuan bawat tao',
     start_trip:          'Simulan ang biyahe at subaybayan nang live',

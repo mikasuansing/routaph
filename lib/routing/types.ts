@@ -26,10 +26,10 @@ export type FareRule = {
    * Highest fare the operator will charge for a single journey.
    *
    * Rail fares here are published as a MATRIX with a ceiling, not as an
-   * open-ended per-km rate — `base + rate x km` only approximates the middle
-   * of that matrix and overshoots at the ends. Without a cap, LRT-1 end to
-   * end came out at P51 against a published P15-30 matrix. Omit when the
-   * operator genuinely publishes no ceiling.
+   * open-ended per-km rate - `base + rate x km` only approximates the middle
+   * of that matrix and can overshoot at the ends. E.g. LRT-1's real ceiling
+   * is P52 (beep); without this cap a long enough trip would price past it.
+   * Omit when the operator genuinely publishes no ceiling.
    */
   maxFare?: number;
 };
@@ -107,8 +107,8 @@ export type Itinerary = {
   /**
    * True when this itinerary was surfaced as a different way to make the
    * trip rather than as the winner of an objective. A commuter picks a
-   * route for reasons the cost function never sees — queue length at the
-   * turnstile, wanting a seat, aircon, or just knowing the road — so the
+   * route for reasons the cost function never sees - queue length at the
+   * turnstile, wanting a seat, aircon, or just knowing the road - so the
    * planner offers the runner-up modes instead of insisting on one answer.
    */
   alternative?: true;
