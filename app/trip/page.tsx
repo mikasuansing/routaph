@@ -24,9 +24,12 @@ const VECTOR_STYLE = 'https://tiles.openfreemap.org/styles/liberty';
 
 /** Camera while navigating: tilted forward and zoomed to street level. */
 const NAV_PITCH = 60;
-const NAV_ZOOM = 16.5;
+// Walking-navigation zoom (Google Maps/Waze pedestrian mode sits around
+// 18-19, not the ~16.5 driving-nav zoom this used before) - tight enough to
+// actually read which side of the street you're on.
+const NAV_ZOOM = 18;
 /** Street-level zoom for the flat Leaflet fallback (no tilt, so no NAV_PITCH). */
-const NAV_ZOOM_FLAT = 17;
+const NAV_ZOOM_FLAT = 18.5;
 
 /** MapLibre needs WebGL; without it the trip map falls back to flat Leaflet. */
 function hasWebGL(): boolean {

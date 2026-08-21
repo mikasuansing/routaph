@@ -346,7 +346,47 @@ function StopRow({ label, value, onChange, placeholder, stops, extraOption, onPi
 }
 
 /* ── Bottom sheet - plain surface, hairline top, no shadow theatre ────────── */
-function Sheet({ children, height, style }: { children: React.ReactNode; height: string | number; style?: React.CSSProperties }) {
+/** How far down (px) a drag has to travel before it counts as "collapse the
+ *  sheet" rather than a tap or a scroll-through-the-handle. */
+const SHEET_DRAG_THRESHOLD_PX = 60;
+/** How much of the screen a collapsed sheet still shows - just enough for
+ *  the handle and a hint of content, so it's obviously still there. */
+const SHEET_PEEK_HEIGHT = '14%';
+
+function Sheet({ children, height, style, collapsible }: {
+  children: React.ReactNode; height: string | number; style?: React.CSSProperties;
+  /** When true, dragging the handle down reveals the map behind the sheet
+   *  (collapses to a peek height) instead of the sheet being a fixed,
+   *  immovable panel - the handle bar looks draggable everywhere else in
+   *  the app, but nothing behind it actually was. */
+  collapsible?: boolean;
+}) {
+  const [collapsed, setCollapsed] = useState(false);
+  const dragRef = useRef<{ startY: number } | null>(null);
+  // A drag release also fires a click event afterwards (pointerup then
+  // click, same as any button) - without this, a drag that just set
+  // `collapsed` gets immediately flipped back by the click handler below.
+  // Set on a real drag, read and cleared by the very next click.
+  const justDraggedRef = useRef(false);
+
+  function onPointerDown(e: React.PointerEvent) {
+    if (!collapsible) return;
+    dragRef.current = { startY: e.clientY };
+    (e.target as HTMLElement).setPointerCapture(e.pointerId);
+  }
+  function onPointerUp(e: React.PointerEvent) {
+    if (!collapsible || !dragRef.current) return;
+    const delta = e.clientY - dragRef.current.startY;
+    if (delta > SHEET_DRAG_THRESHOLD_PX) { setCollapsed(true); justDraggedRef.current = true; }
+    else if (delta < -SHEET_DRAG_THRESHOLD_PX) { setCollapsed(false); justDraggedRef.current = true; }
+    dragRef.current = null;
+  }
+  function onHandleClick() {
+    if (!collapsible) return;
+    if (justDraggedRef.current) { justDraggedRef.current = false; return; }
+    setCollapsed(c => !c);
+  }
+
   return (
     <div style={{
       // Heights come in as PERCENTAGES, not `vh`. On mobile `vh` is locked
@@ -356,7 +396,9 @@ function Sheet({ children, height, style }: { children: React.ReactNode; height:
       // root here is `fixed; inset: 0`, so a percentage tracks the viewport
       // that is actually visible.
       position: 'absolute', left: 0, right: 0, bottom: 0, zIndex: 20,
-      height, background: C.surface,
+      height: collapsible && collapsed ? SHEET_PEEK_HEIGHT : height,
+      transition: 'height 0.25s ease',
+      background: C.surface,
       borderTop: `1px solid ${C.border}`,
       borderRadius: 'var(--radius-sheet) var(--radius-sheet) 0 0',
       boxShadow: 'var(--shadow-lg)',
@@ -364,8 +406,22 @@ function Sheet({ children, height, style }: { children: React.ReactNode; height:
       paddingBottom: 'env(safe-area-inset-bottom)',
       ...style,
     }}>
-      <div style={{ width: 32, height: 4, borderRadius: 2, background: C.border, margin: '10px auto 0', flexShrink: 0 }} />
-      {children}
+      <div
+        onPointerDown={onPointerDown}
+        onPointerUp={onPointerUp}
+        onClick={onHandleClick}
+        style={{
+          // A generous invisible touch target around the visible bar - a
+          // real thumb is much wider than a 4px-tall handle.
+          padding: collapsible ? '14px 40px' : 0, margin: '10px auto 0',
+          touchAction: collapsible ? 'none' : undefined,
+          cursor: collapsible ? 'grab' : undefined,
+          flexShrink: 0,
+        }}
+      >
+        <div style={{ width: 32, height: 4, borderRadius: 2, background: C.border }} />
+      </div>
+      {(!collapsible || !collapsed) && children}
     </div>
   );
 }
@@ -1210,7 +1266,7 @@ export default function Planner() {
               </div>
             </div>
 
-            <Sheet height="64%">
+            <Sheet height="64%" collapsible>
               {/* filter row - text only */}
               <div style={{ display: 'flex', gap: 8, padding: '12px 24px', flexShrink: 0 }}>
                 {modeFilters.map(f => {
@@ -1337,7 +1393,7 @@ export default function Planner() {
               )}
             </div>
 
-            <Sheet height="70%">
+            <Sheet height="70%" collapsible>
               <div style={{ flex: 1, overflowY: 'auto', overscrollBehavior: 'contain', WebkitOverflowScrolling: 'touch', padding: '10px 24px 32px' }}>
                 {/* Headline numbers */}
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', padding: '10px 0 6px' }}>
