@@ -802,8 +802,11 @@ function TripScreen() {
       )}
 
       {/* Recenter - appears only after panning away, like a navigation app.
-          Sits just above the sheet so a thumb can reach it. */}
-      {status === 'active' && !following && (
+          Sits just above the sheet so a thumb can reach it. Also requires a
+          real position: with none, there's nothing to recenter ON, so
+          showing the button made it look broken (tap it, nothing happens)
+          rather than just correctly not being there yet. */}
+      {status === 'active' && !following && position && (
         <button
           onClick={() => setFollowing(true)}
           style={{
