@@ -17,43 +17,43 @@ import type { Mode } from '@/lib/routing/types';
 const BEEP_STORAGE_KEY = 'parapo:has_beep';
 
 /*
- * Planner — the primary commuter dashboard.
+ * Planner - the primary commuter dashboard.
  * Monochrome minimal: typography scale is the hierarchy; whitespace groups
  * information; the single accent (transit green) marks live/positive states
  * (location fix, normal service, GO actions) and nothing decorative.
  */
 
 const C = {
-  bg:     'var(--color-bg)',
+  bg: 'var(--color-bg)',
   surface:'var(--color-surface)',
-  card:   'var(--color-card)',
+  card: 'var(--color-card)',
   cardEl: 'var(--color-card-el)',
   border: 'var(--color-border)',
-  muted:  'var(--color-muted)',
-  body:   'var(--color-body)',
-  ink:    'var(--color-ink)',
+  muted: 'var(--color-muted)',
+  body: 'var(--color-body)',
+  ink: 'var(--color-ink)',
   accent: 'var(--color-accent)',
-  error:  'var(--color-error)',
+  error: 'var(--color-error)',
   onPrimary: 'var(--color-on-primary)',
 };
 
 const DISPLAY = 'var(--font-display)';
-// Reserved for the fare, the ETA, and the "arrived" moment only — see
+// Reserved for the fare, the ETA, and the "arrived" moment only - see
 // the --font-numeral comment in globals.css.
 const NUMERAL = 'var(--font-numeral)';
 
-/* Grayscale ramp for route segments — line identity is carried by TEXT */
+/* Grayscale ramp for route segments - line identity is carried by TEXT */
 const MODE_META: Record<string, { label: string; shade: string }> = {
-  mrt:     { label: 'MRT',  shade: 'var(--color-ink)' },
-  lrt:     { label: 'LRT',  shade: 'var(--color-body)' },
-  bus:     { label: 'BUS',  shade: 'var(--color-muted)' },
+  mrt: { label: 'MRT', shade: 'var(--color-ink)' },
+  lrt: { label: 'LRT', shade: 'var(--color-body)' },
+  bus: { label: 'BUS', shade: 'var(--color-muted)' },
   jeepney: { label: 'JEEP', shade: 'var(--color-border)' },
-  walk:    { label: 'WALK', shade: 'var(--color-card-el)' },
+  walk: { label: 'WALK', shade: 'var(--color-card-el)' },
 };
 
 /**
  * A bordered plate for the mode tag (MRT/BUS/JEEP…), referencing the
- * painted destination boards real jeepneys carry — monospace, high
+ * painted destination boards real jeepneys carry - monospace, high
  * contrast, a wider corner radius than the app's other chips (6px against
  * the 14px+ scale everywhere else) so it reads as its own object instead
  * of another rounded pill.
@@ -73,10 +73,10 @@ function SignboardChip({ label, shade }: { label: string; shade: string }) {
 }
 
 const FARE_REF: [string, string][] = [
-  ['MRT-3',   '₱6 min · ₱0.48/km ½-price'],
-  ['LRT-2',   '₱8 min · ₱0.46/km ½-price'],
-  ['LRT-1',   '₱16.25 min · ₱1.47/km'],
-  ['Bus',     '₱18 first 5 km · ₱2.98/km'],
+  ['MRT-3', '₱6 min · ₱0.48/km ½-price'],
+  ['LRT-2', '₱8 min · ₱0.46/km ½-price'],
+  ['LRT-1', '₱16.25 min · ₱1.47/km'],
+  ['Bus', '₱18 first 5 km · ₱2.98/km'],
   ['Jeepney', '₱14 first 4 km · ₱2.00/km'],
 ];
 
@@ -91,7 +91,7 @@ type Itinerary = { legs: Leg[]; totalDurationMin: number; totalFare: number; tra
 type Disruption = { id: number; corridorId: number; description: string };
 type StationAccessibility = { stopId: number; feature: 'elevator' | 'escalator'; status: 'unknown' | 'operational' | 'out_of_service'; note: string | null };
 type RainAdvisory = { heavyRainExpected: boolean; message: string };
-// Crowdsourced vehicle estimate — see docs/api-contracts.md. Never an
+// Crowdsourced vehicle estimate - see docs/api-contracts.md. Never an
 // official operator position; every surface that shows one must say so.
 type LiveVehicle = {
   lineId: number; lineName: string; mode: string;
@@ -106,13 +106,13 @@ type ModeFilter = 'all' | 'train' | 'bus' | 'jeepney';
 type ModeGroup = 'train' | 'bus' | 'jeepney';
 
 const MODE_GROUPS: { key: ModeGroup; label: string; engineModes: string[]; icon: Mode }[] = [
-  { key: 'train',   label: 'Train',   engineModes: ['mrt', 'lrt'], icon: 'mrt' },
-  { key: 'bus',     label: 'Bus',     engineModes: ['bus'],        icon: 'bus' },
-  { key: 'jeepney', label: 'Jeepney', engineModes: ['jeepney'],    icon: 'jeepney' },
+  { key: 'train', label: 'Train', engineModes: ['mrt', 'lrt'], icon: 'mrt' },
+  { key: 'bus', label: 'Bus', engineModes: ['bus'], icon: 'bus' },
+  { key: 'jeepney', label: 'Jeepney', engineModes: ['jeepney'], icon: 'jeepney' },
 ];
 
 const MY_LOCATION = 'My location';
-// Warm basemaps — Voyager (light) / Dark Matter (dark). Picked at map init
+// Warm basemaps - Voyager (light) / Dark Matter (dark). Picked at map init
 // AND swapped on every theme change; a dark basemap under a cream page is
 // the one thing that makes the whole screen look broken.
 const TILE_URL = (isDark: boolean) => isDark
@@ -135,7 +135,7 @@ function matchesFilter(itin: Itinerary, f: ModeFilter): boolean {
   return modes.some(m => m === f);
 }
 
-/* "arrive 7:42 PM" — the split-second number a commuter actually needs */
+/* "arrive 7:42 PM" - the split-second number a commuter actually needs */
 function arriveAt(durationMin: number): string {
   return new Date(Date.now() + durationMin * 60_000)
     .toLocaleTimeString('en-PH', { hour: 'numeric', minute: '2-digit' });
@@ -150,7 +150,7 @@ function worstLastTrainCheck(checks: LastTrainCheck[]): LastTrainCheck | null {
 /* Transport combination, e.g. "MRT-3 → EDSA Carousel" */
 /*
  * "LRT-2" already tells you it's a train, but "Route 3 (Aurora Blvd)" or
- * "EDSA Carousel" don't say BUS anywhere in the name — so on the results
+ * "EDSA Carousel" don't say BUS anywhere in the name - so on the results
  * list, before anyone taps in, a bus route read exactly like a train one.
  * Prefixing the mode only when the line's own name doesn't already carry
  * it keeps "LRT-2" clean while making "BUS · Route 3 (Aurora Blvd)"
@@ -201,7 +201,7 @@ function Micro({ children, color, style }: { children: React.ReactNode; color?: 
   );
 }
 
-/* ── Searchable stop input — underline, custom-rendered dropdown ──────────── */
+/* ── Searchable stop input - underline, custom-rendered dropdown ──────────── */
 /* Native <datalist> suggestion UI never renders on iOS Safari and is
  * inconsistent elsewhere, so matches are rendered as a real absolutely-
  * positioned list instead of relying on the browser's own popup. */
@@ -211,7 +211,7 @@ function StopRow({ label, value, onChange, placeholder, stops, extraOption }: {
 }) {
   const [text, setText] = useState(value);
   // Sync when the committed value changes externally (swap, saved-commute
-  // prefill) — state-during-render, per React's derived-state guidance.
+  // prefill) - state-during-render, per React's derived-state guidance.
   const [prevValue, setPrevValue] = useState(value);
   if (value !== prevValue) {
     setPrevValue(value);
@@ -291,14 +291,14 @@ function StopRow({ label, value, onChange, placeholder, stops, extraOption }: {
   );
 }
 
-/* ── Bottom sheet — plain surface, hairline top, no shadow theatre ────────── */
+/* ── Bottom sheet - plain surface, hairline top, no shadow theatre ────────── */
 function Sheet({ children, height, style }: { children: React.ReactNode; height: string | number; style?: React.CSSProperties }) {
   return (
     <div style={{
       // Heights come in as PERCENTAGES, not `vh`. On mobile `vh` is locked
       // to the viewport with the browser toolbar hidden, so a vh-sized sheet
       // hangs below the screen while the toolbar shows and shifts as it
-      // hides on scroll — taking anything pinned to its bottom with it. The
+      // hides on scroll - taking anything pinned to its bottom with it. The
       // root here is `fixed; inset: 0`, so a percentage tracks the viewport
       // that is actually visible.
       position: 'absolute', left: 0, right: 0, bottom: 0, zIndex: 20,
@@ -320,11 +320,11 @@ function Sheet({ children, height, style }: { children: React.ReactNode; height:
 export default function Planner() {
   const router = useRouter();
   const { theme } = useTheme();
-  const [screen, setScreen]       = useState<Screen>('home');
-  const [from, setFrom]           = useState('');
-  const [to, setTo]               = useState('');
-  const [rush, setRush]           = useState(() => { const h = new Date().getHours(); return (h >= 7 && h <= 9) || (h >= 17 && h <= 19); });
-  const [hasBeep, setHasBeep]     = useState(() => {
+  const [screen, setScreen] = useState<Screen>('home');
+  const [from, setFrom] = useState('');
+  const [to, setTo] = useState('');
+  const [rush, setRush] = useState(() => { const h = new Date().getHours(); return (h >= 7 && h <= 9) || (h >= 17 && h <= 19); });
+  const [hasBeep, setHasBeep] = useState(() => {
     if (typeof window === 'undefined') return true;
     try {
       const saved = localStorage.getItem(BEEP_STORAGE_KEY);
@@ -334,21 +334,21 @@ export default function Planner() {
   const [modeFilter, setModeFilter] = useState<ModeFilter>('all');
   const [enabledModes, setEnabledModes] = useState<Record<ModeGroup, boolean>>({ train: true, bus: true, jeepney: true });
   const [itineraries, setItineraries] = useState<Itinerary[]>([]);
-  const [selected, setSelected]   = useState<Itinerary | null>(null);
-  const [error, setError]         = useState<string | null>(null);
+  const [selected, setSelected] = useState<Itinerary | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const [jeepneyFallback, setJeepneyFallback] = useState<ReturnType<typeof suggestJeepneyCorridor>>(null);
   const [liveVehicles, setLiveVehicles] = useState<LiveVehicle[]>([]);
   // The map builds asynchronously, so effects that draw onto it have to wait
   // for it rather than run once against a null layer group and never retry.
   const [mapReady, setMapReady] = useState(false);
   // Locations dropped on the map, keyed by the label shown in the picker.
-  // They live alongside catalog stops so the rest of the planner — search,
-  // map drawing, swap — treats a pinned address exactly like a named stop.
+  // They live alongside catalog stops so the rest of the planner - search,
+  // map drawing, swap - treats a pinned address exactly like a named stop.
   const [pinned, setPinned] = useState<Record<string, [number, number]>>({});
   const [pinningFor, setPinningFor] = useState<'from' | 'to' | null>(null);
   const [stopCoords, setStopCoords] = useState<Record<string, [number, number]>>({});
-  const [myLoc, setMyLoc]         = useState<[number, number] | null>(null);
-  const [locBusy, setLocBusy]     = useState(false);
+  const [myLoc, setMyLoc] = useState<[number, number] | null>(null);
+  const [locBusy, setLocBusy] = useState(false);
   const [disruptions, setDisruptions] = useState<Disruption[] | null>(null);
   const [accessibilityByStop, setAccessibilityByStop] = useState<Record<number, StationAccessibility[]>>({});
   const [rainAdvisory, setRainAdvisory] = useState<RainAdvisory | null>(null);
@@ -370,7 +370,7 @@ export default function Planner() {
   }
   const stopNames = Object.keys(stopCoords).sort();
 
-  /* ── Beep card preference — persisted locally, not tied to the account ──── */
+  /* ── Beep card preference - persisted locally, not tied to the account ──── */
   function toggleHasBeep() {
     setHasBeep(prev => {
       const next = !prev;
@@ -397,7 +397,7 @@ export default function Planner() {
           if (qTo && coords[qTo]) setTo(qTo);
         } catch { /* SSR guard */ }
       })
-      .catch(() => { if (active) setError('Could not load the stop catalog — check your connection.'); });
+      .catch(() => { if (active) setError('Could not load the stop catalog - check your connection.'); });
     return () => { active = false; };
   }, []);
 
@@ -417,11 +417,11 @@ export default function Planner() {
     fetch('/api/v1/weather/advisory')
       .then(res => res.json())
       .then((json: { data?: RainAdvisory }) => { if (active && json.data?.heavyRainExpected) setRainAdvisory(json.data); })
-      .catch(() => { /* non-fatal — a missed nudge is not worth surfacing as an error */ });
+      .catch(() => { /* non-fatal - a missed nudge is not worth surfacing as an error */ });
     return () => { active = false; };
   }, []);
 
-  /* ── Station accessibility (MRT-3 elevator/escalator) — manual, best-effort */
+  /* ── Station accessibility (MRT-3 elevator/escalator) - manual, best-effort */
   useEffect(() => {
     let active = true;
     fetch('/api/v1/station-accessibility')
@@ -434,11 +434,11 @@ export default function Planner() {
         }
         setAccessibilityByStop(map);
       })
-      .catch(() => { /* non-fatal — absence of this data doesn't block planning */ });
+      .catch(() => { /* non-fatal - absence of this data doesn't block planning */ });
     return () => { active = false; };
   }, []);
 
-  /* ── "Use my location" — one-shot fix, never persisted ────────────────── */
+  /* ── "Use my location" - one-shot fix, never persisted ────────────────── */
   function useMyLocation() {
     if (typeof navigator === 'undefined' || !navigator.geolocation) {
       setError('Location is not available on this device.'); return;
@@ -449,7 +449,7 @@ export default function Planner() {
         setLocBusy(false);
         const lat = pos.coords.latitude, lng = pos.coords.longitude;
         if (lat < 14.3 || lat > 14.8 || lng < 120.9 || lng > 121.2) {
-          setError('You appear to be outside Metro Manila — pick a stop instead.');
+          setError('You appear to be outside Metro Manila - pick a stop instead.');
           return;
         }
         setMyLoc([lat, lng]);
@@ -458,7 +458,7 @@ export default function Planner() {
       },
       () => {
         setLocBusy(false);
-        setError('Could not get your location — allow location access or pick a stop.');
+        setError('Could not get your location - allow location access or pick a stop.');
       },
       { enableHighAccuracy: true, timeout: 10_000, maximumAge: 30_000 },
     );
@@ -472,12 +472,12 @@ export default function Planner() {
     stopCoords[name] ?? pinned[name];
 
   /* ── Leaflet map ──────────────────────────────────────────────────────── */
-  const mapElRef    = useRef<HTMLDivElement>(null);
-  const mapRef      = useRef<unknown>(null);
-  const routeGroup  = useRef<unknown>(null);
-  const liveGroup   = useRef<unknown>(null);
+  const mapElRef = useRef<HTMLDivElement>(null);
+  const mapRef = useRef<unknown>(null);
+  const routeGroup = useRef<unknown>(null);
+  const liveGroup = useRef<unknown>(null);
   const networkGroup = useRef<unknown>(null);
-  const tileRef     = useRef<unknown>(null);
+  const tileRef = useRef<unknown>(null);
 
   useEffect(() => {
     if (!mapElRef.current || mapRef.current) return;
@@ -530,7 +530,7 @@ export default function Planner() {
     return () => { cancelled = true; };
   }, []);
 
-  /* ── Draw the selected route — single ink line, dashed walks ──────────── */
+  /* ── Draw the selected route - single ink line, dashed walks ──────────── */
   const drawRoute = useCallback(() => {
     if (!mapRef.current || !routeGroup.current) return;
     import('leaflet').then(mod => {
@@ -598,7 +598,7 @@ export default function Planner() {
 
   /* ── The network itself, on the home screen ───────────────────────────────
    * The home map used to be an empty basemap: nothing on it belonged to
-   * ParaPo, so the app's whole subject — the lines you can actually ride —
+   * ParaPo, so the app's whole subject - the lines you can actually ride -
    * was invisible until you searched. Drawing the network gives the screen
    * something to be, and orients you before you type anything.
    * Dimmed while a route is selected so the chosen itinerary reads clearly. */
@@ -629,7 +629,7 @@ export default function Planner() {
               lineCap: 'round', lineJoin: 'round',
             }).addTo(group);
 
-            // Stations only at rest — during a search they'd compete with
+            // Stations only at rest - during a search they'd compete with
             // the itinerary's own origin and destination markers.
             if (!faded) {
               for (const st of line.stops) {
@@ -654,11 +654,11 @@ export default function Planner() {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (tileRef.current as any).setUrl(TILE_URL(theme === 'dark'));
     // Route/vehicle colours are baked into the drawn layers, so they need a
-    // redraw too — otherwise cobalt-on-cream lines stay on a dark basemap.
+    // redraw too - otherwise cobalt-on-cream lines stay on a dark basemap.
     drawRoute();
   }, [theme, drawRoute]);
 
-  /* ── Live vehicles — crowdsourced, never an official feed ─────────────── */
+  /* ── Live vehicles - crowdsourced, never an official feed ─────────────── */
   useEffect(() => {
     let cancelled = false;
 
@@ -675,7 +675,7 @@ export default function Planner() {
         const accent = isDark ? '#7A90FF' : '#2947DE';
 
         for (const v of vehicles) {
-          // A single-rider estimate is drawn hollow and smaller — the map
+          // A single-rider estimate is drawn hollow and smaller - the map
           // should look less certain when the data is less certain.
           const solid = v.confidence !== 'low';
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -704,7 +704,7 @@ export default function Planner() {
         const vehicles = json.data ?? [];
         setLiveVehicles(vehicles);
         draw(vehicles);
-      } catch { /* live hints are optional — never break the planner */ }
+      } catch { /* live hints are optional - never break the planner */ }
     };
 
     poll();
@@ -732,7 +732,7 @@ export default function Planner() {
       const json = await res.json() as { data?: Itinerary[]; error?: { message: string } };
       if (!res.ok || json.error) {
         setError(json.error?.message ?? 'No route found.');
-        // No tracked itinerary exists at all — before giving up, check
+        // No tracked itinerary exists at all - before giving up, check
         // whether the raw origin/destination sit near a known jeepney
         // thoroughfare (see lib/routing/jeepneySuggest.ts). This is the
         // same honest "not a routed leg" suggestion shown inline on walk
@@ -744,13 +744,13 @@ export default function Planner() {
       setItineraries(json.data ?? []);
       setScreen('results');
     } catch {
-      setError('Network error — check your connection.'); setFormOpen(true); setScreen('home');
+      setError('Network error - check your connection.'); setFormOpen(true); setScreen('home');
     }
   }
 
   /* ── Multi-stop chaining: plan a second leg from the current itinerary's
      destination, then splice both into one combined Itinerary. Reuses the
-     same planning endpoint twice — no routing-engine changes. ────────────── */
+     same planning endpoint twice - no routing-engine changes. ────────────── */
   async function addAnotherStop() {
     if (!selected) return;
     const dest = stopCoords[nextStop];
@@ -787,7 +787,7 @@ export default function Planner() {
       setAddingStop(false);
       setNextStop('');
     } catch {
-      setChainError('Network error — check your connection.');
+      setChainError('Network error - check your connection.');
     } finally {
       setChainBusy(false);
     }
@@ -807,7 +807,7 @@ export default function Planner() {
 
   const canSearch = Boolean(from && to && from !== to && originCoords(from) && resolveStop(to) && Object.values(enabledModes).some(Boolean));
 
-  /* Service status detail — shown as a banner under the top pill when there are alerts */
+  /* Service status detail - shown as a banner under the top pill when there are alerts */
   const statusDetail = disruptions && disruptions.length > 0
     ? (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
@@ -857,7 +857,7 @@ export default function Planner() {
                   </span>
                 </Micro>
               )}
-              {/* Only appears when riders are actually contributing — an
+              {/* Only appears when riders are actually contributing - an
                   empty live map shows nothing rather than a zero. */}
               {liveVehicles.length > 0 && (
                 <>
@@ -884,16 +884,16 @@ export default function Planner() {
             </button>
           </div>
 
-          {/* Service alert detail — floats under the top pill */}
+          {/* Service alert detail - floats under the top pill */}
           {statusDetail && (
             <div style={{ position: 'absolute', top: 110, left: 20, right: 20, zIndex: 9, padding: '12px 14px', borderRadius: 'var(--radius-sm)', background: C.surface, border: `1px solid ${C.border}`, boxShadow: 'var(--shadow-md)' }}>
               {statusDetail}
             </div>
           )}
 
-          {/* Rain advisory — floats over the map regardless of form state.
+          {/* Rain advisory - floats over the map regardless of form state.
               A card with a left accent border and inline icon, not a
-              solid-fill full-width bar — this is the single most important
+              solid-fill full-width bar - this is the single most important
               message on the screen and needs to read as an alert, not as a
               dismissible banner blending into every other chip. */}
           {rainAdvisory && (
@@ -922,7 +922,7 @@ export default function Planner() {
               }}
             >
               {/* The one thing this screen is for, so it reads as an
-                  invitation rather than a form label — "Choose a stop"
+                  invitation rather than a form label - "Choose a stop"
                   described a control, not what the app does for you. */}
               <span style={{
                 flexShrink: 0, width: 34, height: 34, borderRadius: '50%',
@@ -969,7 +969,7 @@ export default function Planner() {
                   <div style={{ margin: '0 0 16px' }}>
                     <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: C.error }}>
                       {jeepneyFallback
-                        ? "No tracked route covers this trip yet — but here's a real jeepney thoroughfare that does:"
+                        ? "No tracked route covers this trip yet - but here's a real jeepney thoroughfare that does:"
                         : error}
                     </p>
                     {jeepneyFallback && (
@@ -988,7 +988,7 @@ export default function Planner() {
                   </div>
                 )}
 
-                {/* From / To — typography only */}
+                {/* From / To - typography only */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 18, flexShrink: 0 }}>
                   <div>
                     <StopRow label="From" value={from} onChange={setFrom} placeholder={t(lang, 'choose_a_stop')} stops={[...stopNames, ...Object.keys(pinned)]} extraOption={myLoc ? MY_LOCATION : undefined} />
@@ -1014,7 +1014,7 @@ export default function Planner() {
 
                 {!Object.values(enabledModes).some(Boolean) && (
                   <p style={{ margin: '14px 0 0', fontSize: 12, fontWeight: 600, color: C.error }}>
-                    All transport modes are off — enable at least one in Settings.
+                    All transport modes are off - enable at least one in Settings.
                   </p>
                 )}
 
@@ -1049,7 +1049,7 @@ export default function Planner() {
                   </button>
                 </div>
 
-                {/* Transport modes — text toggles */}
+                {/* Transport modes - text toggles */}
                 <div style={{ flexShrink: 0 }}>
                   <Micro>{t(lang, 'transport_modes')}</Micro>
                   <div style={{ display: 'flex', gap: 10, marginTop: 10, flexWrap: 'wrap' }}>
@@ -1076,12 +1076,12 @@ export default function Planner() {
                   </div>
                 </div>
 
-                {/* Rush hour — one text row */}
+                {/* Rush hour - one text row */}
                 <button onClick={() => setRush(!rush)} style={{ background: 'none', border: 'none', padding: 0, margin: '20px 0 0', cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left', flexShrink: 0 }}>
                   <Micro color={rush ? C.ink : C.muted}>Rush hour {rush ? 'on' : 'off'} · 7–9 am · 5–7 pm</Micro>
                 </button>
 
-                {/* Beep card — adjusts fare display, doesn't change routing */}
+                {/* Beep card - adjusts fare display, doesn't change routing */}
                 <button onClick={toggleHasBeep} style={{ background: 'none', border: 'none', padding: 0, margin: '14px 0 0', cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left', flexShrink: 0 }}>
                   <Micro color={hasBeep ? C.ink : C.muted}>
                     {hasBeep
@@ -1090,12 +1090,12 @@ export default function Planner() {
                   </Micro>
                 </button>
 
-                {/* Language — English / Taglish, key strings only */}
+                {/* Language - English / Taglish, key strings only */}
                 <button onClick={toggleLang} style={{ background: 'none', border: 'none', padding: 0, margin: '14px 0 0', cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left', flexShrink: 0 }}>
                   <Micro color={C.muted}>{lang === 'tl' ? 'Wika: Taglish' : 'Language: English'} · {lang === 'tl' ? 'Switch to English' : 'Switch sa Taglish'}</Micro>
                 </button>
 
-                {/* Fare reference — plain text */}
+                {/* Fare reference - plain text */}
                 <div style={{ margin: '28px 0 0', flexShrink: 0 }}>
                   <Micro>2026 fare rates</Micro>
                   <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -1132,7 +1132,7 @@ export default function Planner() {
         const filtered = itineraries.filter(itin => matchesFilter(itin, modeFilter));
         // No standalone "Jeepney" filter: the network has exactly one real
         // jeepney corridor (Katipunan, 4 stops), so filtering to it returns
-        // empty almost every time — a chip that reads as broken by default
+        // empty almost every time - a chip that reads as broken by default
         // rather than occasionally. Jeepney legs still surface inside mixed
         // routes, and the untracked-corridor suggestion card still fires
         // when nothing else matches; only the always-empty filter is gone.
@@ -1155,7 +1155,7 @@ export default function Planner() {
             </div>
 
             <Sheet height="64%">
-              {/* filter row — text only */}
+              {/* filter row - text only */}
               <div style={{ display: 'flex', gap: 8, padding: '12px 24px', flexShrink: 0 }}>
                 {modeFilters.map(f => {
                   const on = modeFilter === f.key;
@@ -1172,7 +1172,7 @@ export default function Planner() {
                 })}
               </div>
 
-              {/* route list — typography rows, whitespace separation */}
+              {/* route list - typography rows, whitespace separation */}
               <div style={{ flex: 1, overflowY: 'auto', overscrollBehavior: 'contain', WebkitOverflowScrolling: 'touch', padding: '10px 24px 32px' }}>
                 {filtered.length === 0 ? (
                   <div style={{ padding: '48px 0', textAlign: 'center' }}>
@@ -1184,7 +1184,7 @@ export default function Planner() {
                   // Don't claim "cheapest" when another shown route is cheaper
                   const minFare = Math.min(...filtered.map(x => beepAdjustedTotalFare(x.legs.filter(l => l.type === 'ride') as RideLeg[], hasBeep)));
                   // An alternative is a different way to make the trip, not the
-                  // winner of an objective — labelling it "Fastest" would be a lie.
+                  // winner of an objective - labelling it "Fastest" would be a lie.
                   const objLabel = itin.alternative
                     ? 'Another way'
                     : itin.objective === 'cheapest' && displayFare > minFare
@@ -1217,8 +1217,8 @@ export default function Planner() {
                         color: worstRail.status === 'closed' ? C.error : C.accent,
                       }}>
                         {worstRail.status === 'closed'
-                          ? `⚠ Last train has left — ${worstRail.lineName} closed at ${formatClockTime(worstRail.closesAt)}`
-                          : `⏰ You'll just make the last train — ${worstRail.lineName} boards ~${formatClockTime(worstRail.boardsAt)}`}
+                          ? `⚠ Last train has left - ${worstRail.lineName} closed at ${formatClockTime(worstRail.closesAt)}`
+                          : `⏰ You'll just make the last train - ${worstRail.lineName} boards ~${formatClockTime(worstRail.boardsAt)}`}
                       </p>
                     )}
                   </button>
@@ -1251,8 +1251,8 @@ export default function Planner() {
               <button onClick={() => setScreen('results')} style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 'var(--radius-pill)', padding: '9px 16px', cursor: 'pointer', color: C.ink, fontSize: 13, fontWeight: 700, fontFamily: 'inherit', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
                 <ArrowLeft size={13} strokeWidth={2.5} color="currentColor" /> Routes
               </button>
-              {/* Was a plain <span> styled exactly like a button — same pill
-                  shape and fill as every real control on this screen — so it
+              {/* Was a plain <span> styled exactly like a button - same pill
+                  shape and fill as every real control on this screen - so it
                   read as tappable and did nothing when tapped. It now cycles
                   to the next itinerary, which is what its own label promises:
                   tap "Another way" and you see another way. */}
@@ -1309,8 +1309,8 @@ export default function Planner() {
                   }}>
                     <p style={{ margin: 0, fontSize: 13, fontWeight: 700, lineHeight: 1.5 }}>
                       {worstRailCheck.status === 'closed'
-                        ? `⚠ Last train has left — ${worstRailCheck.lineName} closed at ${formatClockTime(worstRailCheck.closesAt)}. This route won't work right now.`
-                        : `⏰ You'll just make the last train — ${worstRailCheck.lineName} boards ~${formatClockTime(worstRailCheck.boardsAt)} (closes ${formatClockTime(worstRailCheck.closesAt)}).`}
+                        ? `⚠ Last train has left - ${worstRailCheck.lineName} closed at ${formatClockTime(worstRailCheck.closesAt)}. This route won't work right now.`
+                        : `⏰ You'll just make the last train - ${worstRailCheck.lineName} boards ~${formatClockTime(worstRailCheck.boardsAt)} (closes ${formatClockTime(worstRailCheck.closesAt)}).`}
                     </p>
                   </div>
                 )}
@@ -1332,7 +1332,7 @@ export default function Planner() {
                             <p className="tnum" style={{ margin: '2px 0 0', fontSize: 12, color: C.muted }}>{leg.durationMin} min · {leg.distKm.toFixed(2)} km</p>
                             {entrance && (
                               <p style={{ margin: '4px 0 0', fontSize: 12, color: C.accent, fontWeight: 600 }}>
-                                Exit via the {entrance.label} — closer to your destination
+                                Exit via the {entrance.label} - closer to your destination
                               </p>
                             )}
                           </div>
@@ -1344,7 +1344,7 @@ export default function Planner() {
                             border: `1.5px dashed ${C.border}`, background: C.surface,
                           }}>
                             <p style={{ margin: 0, fontSize: 12, fontWeight: 700, color: C.body }}>
-                              Suggested — ask a jeepney toward {jeep.towardLabel}
+                              Suggested - ask a jeepney toward {jeep.towardLabel}
                             </p>
                             <p className="tnum" style={{ margin: '3px 0 0', fontSize: 11, color: C.muted }}>
                               {jeep.corridorName} · ~₱{jeep.fareLow.toFixed(0)}–{jeep.fareHigh.toFixed(0)} · not a tracked route, no schedule
@@ -1357,7 +1357,7 @@ export default function Planner() {
                     const ride = leg as RideLeg;
                     const meta = MODE_META[ride.mode] ?? { label: ride.mode.toUpperCase(), shade: C.muted };
                     // Jeepneys have no fixed schedule, so a per-leg minute figure
-                    // is misleading — show board/alight stops instead. The leg's
+                    // is misleading - show board/alight stops instead. The leg's
                     // travel time still rolls into the overall trip ETA above.
                     const noSchedule = ride.mode === 'jeepney';
                     const beepFare = beepAdjustedFare(ride, hasBeep);
@@ -1371,7 +1371,7 @@ export default function Planner() {
                         <div style={{ flex: 1 }}>
                           <p style={{ margin: 0, fontSize: 15, fontWeight: 700, color: C.ink, letterSpacing: '-0.01em' }}>{ride.line.name}</p>
                           <p style={{ margin: '2px 0 0', fontSize: 13, color: C.body }}>
-                            {noSchedule ? t(lang, 'board_here') : ''} {ride.from.name} → {ride.to.name}
+                            {noSchedule ? t(lang, 'along_corridor') : ''} {ride.from.name} → {ride.to.name}
                           </p>
                           <p className="tnum" style={{ margin: '2px 0 0', fontSize: 12, color: C.muted }}>
                             {ride.stops.length} stop{ride.stops.length !== 1 ? 's' : ''} · {ride.distKm.toFixed(1)} km
@@ -1394,7 +1394,7 @@ export default function Planner() {
                             <p key={oi} style={{ margin: '4px 0 0', fontSize: 11, color: C.error, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}>
                               <AlertTriangle size={11} strokeWidth={2.5} color="currentColor" />
                               {a.feature === 'elevator' ? 'Elevator' : 'Escalator'} reported out of service
-                              {a.note ? ` — ${a.note}` : ''}
+                              {a.note ? ` - ${a.note}` : ''}
                             </p>
                           ))}
                         </div>
@@ -1404,7 +1404,7 @@ export default function Planner() {
                   })}
                 </div>
 
-                {/* Fare breakdown — receipt typography */}
+                {/* Fare breakdown - receipt typography */}
                 <Micro>{t(lang, 'fare_breakdown')}{!hasBeep ? ' (cash / no Beep card)' : ''}</Micro>
                 <div style={{ margin: '14px 0 0', display: 'flex', flexDirection: 'column', gap: 12 }}>
                   {selected.legs.map((leg, i) => {
@@ -1507,7 +1507,7 @@ export default function Planner() {
       })()}
 
       {/* Drop-a-pin picker. A confirmed pin is registered under its address
-          so it behaves like any other stop from here on — searchable in the
+          so it behaves like any other stop from here on - searchable in the
           row, routable, swappable. */}
       {pinningFor && (
         <PinPickerSheet

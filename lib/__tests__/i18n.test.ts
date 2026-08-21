@@ -40,7 +40,7 @@ describe('t', () => {
   it('resolves a non-empty string in both languages for every key used in the UI', () => {
     for (const key of [
       'find_routes', 'choose_a_stop', 'use_current_location', 'transport_modes',
-      'step_by_step', 'walk_to', 'board_here', 'no_fixed_schedule', 'fare_breakdown',
+      'step_by_step', 'walk_to', 'board_here', 'along_corridor', 'no_fixed_schedule', 'fare_breakdown',
       'total_per_person', 'start_trip', 'plan_another_trip',
       'now', 'next', 'mark_leg_done', 'mark_arrived', 'almost_there', 'get_off_at',
       // Step-by-step trip guidance
