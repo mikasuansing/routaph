@@ -608,6 +608,39 @@ function TripScreen() {
   const currentIsJeepney = currentLeg?.type === 'ride' && (currentLeg as RideLeg).line.mode === 'jeepney';
   const eta = position && !currentIsJeepney ? etaToNextStop(position, itinerary, currentLegIndex, position.speedMps) : null;
 
+  /*
+   * Overall trip progress - distance-weighted across every leg, not just
+   * "step 2 of 4". A 200 m walk and a 12 km train ride shouldn't count the
+   * same toward "how far along am I", so this sums real distances rather
+   * than leg counts. Within the CURRENT leg, progress comes from the live
+   * GPS-to-arrival distance already computed above (distKm); every leg
+   * before it counts as fully done, every leg after as not started - no
+   * wall-clock "departed at" time is invented, since for a jeepney leg
+   * especially that would be a precision this app doesn't actually have.
+   */
+  const totalTripKm = itinerary.legs.reduce((sum, l) => sum + l.distKm, 0);
+  // A running total per leg boundary, built with reduce (not a mutated
+  // outer variable) so it stays pure to render with - i is the position of
+  // the boundary AFTER leg i.
+  const legCumKm = itinerary.legs.reduce<number[]>((acc, leg) => {
+    acc.push((acc.length > 0 ? acc[acc.length - 1] : 0) + leg.distKm);
+    return acc;
+  }, []);
+  const kmBeforeCurrentLeg = currentLegIndex > 0 ? legCumKm[currentLegIndex - 1] : 0;
+  const currentLegDoneKm = distKm !== null
+    ? Math.max(0, Math.min(currentLeg.distKm, currentLeg.distKm - distKm))
+    : 0;
+  const overallProgress = totalTripKm > 0
+    ? Math.min(1, (kmBeforeCurrentLeg + currentLegDoneKm) / totalTripKm)
+    : 0;
+  const remainingMin = itinerary.legs.slice(currentLegIndex + 1).reduce((sum, l) => sum + l.durationMin, 0)
+    + (eta ?? (currentLeg?.durationMin ?? 0));
+  // nowTick (not Date.now() inline) - it's the same "tick every 5s while a
+  // trip is active" state already used above for signal-staleness, kept
+  // pure to render the same way.
+  const arriveClock = new Date(nowTick + remainingMin * 60_000)
+    .toLocaleTimeString('en-PH', { hour: 'numeric', minute: '2-digit' });
+
   const wazeUrl = originalDest
     ? `https://waze.com/ul?ll=${originalDest.lat},${originalDest.lng}&navigate=yes&utm_source=parapo`
     : null;
@@ -930,6 +963,49 @@ function TripScreen() {
             {t(lang, 'almost_there')}
           </p>
         )}
+
+        {/* Overall trip progress - one bar across every leg, distance-
+            weighted, with a tick at each leg boundary so a transfer point
+            is visible on the same track rather than only in the list
+            below. Answers "how far along am I on the WHOLE trip", which
+            the per-leg distance/ETA above the map doesn't. */}
+        <section style={{ marginBottom: 24 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+            <Micro>{t(lang, 'trip_progress')}</Micro>
+            <span className="tnum" style={{ fontSize: 12, color: C.muted }}>
+              {Math.round(overallProgress * 100)}% &middot; arrive ~{arriveClock}
+            </span>
+          </div>
+          <div style={{ position: 'relative', marginTop: 10, height: 6 }}>
+            <div style={{
+              position: 'absolute', inset: 0, borderRadius: 3, background: C.cardEl,
+            }} />
+            <div style={{
+              position: 'absolute', top: 0, bottom: 0, left: 0,
+              width: `${overallProgress * 100}%`, borderRadius: 3,
+              background: C.accent, transition: 'width 0.6s ease',
+            }} />
+            {/* One tick per leg boundary (not the very start), positioned
+                by cumulative distance (legCumKm, computed above) so an
+                11 km train leg and a 200 m walk get proportionally correct
+                space on the track. */}
+            {(() => {
+              return legCumKm.slice(0, -1).map((cumKm, i) => {
+                const atPct = totalTripKm > 0 ? (cumKm / totalTripKm) * 100 : 0;
+                const done = i < currentLegIndex;
+                return (
+                  <span key={i} style={{
+                    position: 'absolute', top: '50%', left: `${atPct}%`,
+                    width: 10, height: 10, borderRadius: '50%',
+                    transform: 'translate(-50%, -50%)',
+                    background: done ? C.accent : C.card,
+                    border: `2px solid ${done ? C.accent : C.border}`,
+                  }} />
+                );
+              });
+            })()}
+          </div>
+        </section>
 
         {/* All steps - a numbered checklist, so progress through a
             multi-vehicle trip is readable at a glance and a completed step
