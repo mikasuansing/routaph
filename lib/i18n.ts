@@ -37,6 +37,10 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     take_the_train:       'Take the {line} train',
     take_the_bus:         'Take the {line} bus',
     take_a_jeepney:       'Take the {line} jeepney',
+    // Used instead of the three above when the line's own name already
+    // says its mode ("Katipunan Jeepney") - avoids "Katipunan Jeepney
+    // jeepney".
+    take_the_line:        'Take the {line}',
     walk_step:            'Walk to {stop}',
     board_at:             'Get on at {stop}',
     ride_stops:           '{count} stops',
@@ -75,6 +79,7 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     take_the_train:       'Sumakay sa tren na {line}',
     take_the_bus:         'Sumakay sa bus na {line}',
     take_a_jeepney:       'Sumakay ng jeep sa {line}',
+    take_the_line:        'Sumakay sa {line}',
     walk_step:            'Maglakad papuntang {stop}',
     board_at:             'Sumakay sa {stop}',
     ride_stops:           '{count} na hintuan',

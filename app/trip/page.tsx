@@ -119,8 +119,15 @@ function legAction(leg: RideLeg | WalkLeg | undefined, lang: Lang): string {
     return t(lang, 'walk_step', { stop: (leg as WalkLeg).toName });
   }
   const r = leg as RideLeg;
-  const key =
-    r.line.mode === 'jeepney' ? 'take_a_jeepney'
+  // If the line's own name already says its mode ("Katipunan Jeepney",
+  // "Route 3 (Aurora Blvd)" would not, but a future "XYZ Bus" would) the
+  // mode-suffixed template would double up ("Katipunan Jeepney jeepney") -
+  // use the bare template instead.
+  const MODE_WORD: Partial<Record<typeof r.line.mode, string>> = { jeepney: 'jeepney', bus: 'bus', mrt: 'train', lrt: 'train' };
+  const modeWord = MODE_WORD[r.line.mode];
+  const nameAlreadySaysMode = modeWord ? r.line.name.toLowerCase().includes(modeWord) : false;
+  const key = nameAlreadySaysMode ? 'take_the_line'
+    : r.line.mode === 'jeepney' ? 'take_a_jeepney'
     : r.line.mode === 'bus' ? 'take_the_bus'
     : 'take_the_train';
   return t(lang, key, { line: r.line.name });
