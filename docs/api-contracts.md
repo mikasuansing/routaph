@@ -375,6 +375,41 @@ ReverseGeocode {
 
 ---
 
+## GET /api/v1/geo/search
+
+**Auth:** None
+**Query:** `q` (string, 3-120 chars, required)
+**Returns:** `{ "data": ForwardGeocodeResult[] }`
+
+```typescript
+ForwardGeocodeResult {
+  label: string;   // "2296 Chino Roces Ave, Makati City"
+  lat:   number;
+  lng:   number;
+}
+```
+
+**Status codes:** 200, 400 (validation), 429
+**Notes:**
+- Backs typed address search in the From/To fields, so a trip can start or
+  end anywhere - a house, a mall, a landmark - not only a named transit
+  stop. Complements (does not replace) drop-a-pin: this is forward search
+  (text to place), the pin picker is reverse (point to address).
+- Same server-only rationale as `/api/v1/geo/reverse`: a real
+  `GEOCODER_USER_AGENT`, Nominatim's rate limit, and the single-API-boundary
+  rule all require this not to be called from the client.
+- Queries are biased and bounded to a Metro Manila viewbox so "Manila"-named
+  places elsewhere in the world don't surface.
+- Results are cached in Redis for 30 days keyed to the lowercased query
+  text - repeated searches (a common street, a mall name) don't re-hit
+  Nominatim.
+- Returns an empty array rather than an error on a geocoding hiccup or a
+  missing `GEOCODER_USER_AGENT` - the search box just shows no results
+  rather than breaking the form.
+- Attribution: address data © OpenStreetMap contributors (ODbL).
+
+---
+
 ## Planned (not yet implemented)
 
 | Method | Path | Auth | Description |

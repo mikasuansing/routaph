@@ -68,6 +68,58 @@ export function shortLabel(address: NominatimAddress, displayName: string): stri
   return displayName.split(',').slice(0, 2).join(',').trim() || displayName;
 }
 
+export type ForwardGeocodeResult = {
+  label: string;
+  lat: number;
+  lng: number;
+};
+
+/** Metro Manila bounding box (lon/lat), used to bias/limit search results so
+ *  "Manila" doesn't return California. */
+const METRO_MANILA_VIEWBOX = '120.90,14.80,121.15,14.35';
+
+export function forwardGeocodeCacheKey(query: string): string {
+  return `geo:fwd:v1:${query.trim().toLowerCase()}`;
+}
+
+/**
+ * Forward geocoding - a typed address to candidate locations, via
+ * Nominatim's search endpoint. Same server-only rationale as the reverse
+ * lookup above: a real User-Agent and the single-API-boundary rule.
+ */
+export async function fetchForwardGeocode(query: string): Promise<ForwardGeocodeResult[]> {
+  const userAgent = process.env.GEOCODER_USER_AGENT;
+  if (!userAgent) return [];
+
+  const url =
+    `https://nominatim.openstreetmap.org/search` +
+    `?format=jsonv2&q=${encodeURIComponent(query)}` +
+    `&viewbox=${METRO_MANILA_VIEWBOX}&bounded=1` +
+    `&addressdetails=1&limit=5`;
+
+  const res = await fetch(url, {
+    headers: { 'User-Agent': userAgent, 'Accept-Language': 'en' },
+    signal: AbortSignal.timeout(5000),
+  });
+  if (!res.ok) throw new Error(`Nominatim request failed: ${res.status}`);
+
+  const json = (await res.json()) as Array<{
+    display_name?: string;
+    address?: NominatimAddress;
+    lat?: string;
+    lon?: string;
+  }>;
+
+  return json
+    .filter((r): r is typeof r & { lat: string; lon: string; display_name: string } =>
+      Boolean(r.lat && r.lon && r.display_name))
+    .map(r => ({
+      label: shortLabel(r.address ?? {}, r.display_name),
+      lat: parseFloat(r.lat),
+      lng: parseFloat(r.lon),
+    }));
+}
+
 export async function fetchReverseGeocode(lat: number, lng: number): Promise<ReverseGeocode> {
   const userAgent = process.env.GEOCODER_USER_AGENT;
   if (!userAgent) {

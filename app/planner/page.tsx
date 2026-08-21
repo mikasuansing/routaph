@@ -191,9 +191,22 @@ function Micro({ children, color, style }: { children: React.ReactNode; color?: 
 /* Native <datalist> suggestion UI never renders on iOS Safari and is
  * inconsistent elsewhere, so matches are rendered as a real absolutely-
  * positioned list instead of relying on the browser's own popup. */
-function StopRow({ label, value, onChange, placeholder, stops, extraOption }: {
+type AddressResult = { label: string; lat: number; lng: number };
+/** One entry in the merged dropdown: a known stop/pin (already a string
+ *  everywhere else in the app), or a live geocoded address result. */
+type Suggestion = { kind: 'stop'; value: string } | { kind: 'address'; result: AddressResult };
+
+/** Debounce before hitting the search API, so typing doesn't fire a
+ *  request per keystroke - matches the map-drag settle pattern in
+ *  PinPickerSheet. */
+const ADDRESS_SEARCH_DEBOUNCE_MS = 350;
+
+function StopRow({ label, value, onChange, placeholder, stops, extraOption, onPickAddress }: {
   label: string; value: string; onChange: (v: string) => void; placeholder: string;
   stops: string[]; extraOption?: string;
+  /** Called when the rider picks a live-searched address rather than a
+   *  known stop, so the caller can register it (same as a dropped pin). */
+  onPickAddress?: (result: AddressResult) => void;
 }) {
   const [text, setText] = useState(value);
   // Sync when the committed value changes externally (swap, saved-commute
@@ -205,15 +218,60 @@ function StopRow({ label, value, onChange, placeholder, stops, extraOption }: {
   }
   const [open, setOpen] = useState(false);
   const [highlight, setHighlight] = useState(0);
+  const [addressResults, setAddressResults] = useState<AddressResult[]>([]);
+  const [searching, setSearching] = useState(false);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   const options = extraOption ? [extraOption, ...stops] : stops;
-  const matches = text === ''
+  const stopMatches = text === ''
     ? options
     : options.filter(s => s.toLowerCase().includes(text.toLowerCase()));
+
+  // Address search: only once the rider has typed enough to be worth a
+  // request, and only past the point stop names alone already answer it -
+  // a query that exactly matches a known stop shouldn't also hit the
+  // network. Triggered from the input handler itself (not an effect) since
+  // it's a direct response to typing, not a sync with an external system;
+  // cleanup on unmount still needs an effect, just with no setState in it.
+  function triggerAddressSearch(v: string) {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    if (v.trim().length < 3 || options.includes(v)) {
+      setAddressResults([]);
+      setSearching(false);
+      return;
+    }
+    setSearching(true);
+    debounceRef.current = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/v1/geo/search?q=${encodeURIComponent(v)}`);
+        const json = await res.json() as { data?: AddressResult[] };
+        setAddressResults(json.data ?? []);
+      } catch {
+        setAddressResults([]);
+      } finally {
+        setSearching(false);
+      }
+    }, ADDRESS_SEARCH_DEBOUNCE_MS);
+  }
+  useEffect(() => {
+    return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
+  }, []);
+
+  const suggestions: Suggestion[] = [
+    ...stopMatches.map((value): Suggestion => ({ kind: 'stop', value })),
+    ...addressResults.map((result): Suggestion => ({ kind: 'address', result })),
+  ];
 
   function commit(v: string) {
     setText(v);
     onChange(v);
     setOpen(false);
+  }
+
+  function pick(s: Suggestion) {
+    if (s.kind === 'stop') { commit(s.value); return; }
+    onPickAddress?.(s.result);
+    commit(s.result.label);
   }
 
   return (
@@ -230,6 +288,7 @@ function StopRow({ label, value, onChange, placeholder, stops, extraOption }: {
           setHighlight(0);
           if (v === '') onChange('');
           else if (options.includes(v)) onChange(v); // committed on exact match
+          triggerAddressSearch(v);
         }}
         onFocus={() => setOpen(true)}
         onBlur={() => {
@@ -238,10 +297,10 @@ function StopRow({ label, value, onChange, placeholder, stops, extraOption }: {
           setOpen(false);
         }}
         onKeyDown={e => {
-          if (!open || matches.length === 0) return;
-          if (e.key === 'ArrowDown') { e.preventDefault(); setHighlight(h => Math.min(h + 1, matches.length - 1)); }
+          if (!open || suggestions.length === 0) return;
+          if (e.key === 'ArrowDown') { e.preventDefault(); setHighlight(h => Math.min(h + 1, suggestions.length - 1)); }
           else if (e.key === 'ArrowUp') { e.preventDefault(); setHighlight(h => Math.max(h - 1, 0)); }
-          else if (e.key === 'Enter') { e.preventDefault(); commit(matches[highlight]); }
+          else if (e.key === 'Enter') { e.preventDefault(); pick(suggestions[highlight]); }
           else if (e.key === 'Escape') { setOpen(false); }
         }}
         style={{
@@ -252,25 +311,34 @@ function StopRow({ label, value, onChange, placeholder, stops, extraOption }: {
           letterSpacing: '-0.02em',
         }}
       />
-      {open && matches.length > 0 && (
+      {open && (suggestions.length > 0 || searching) && (
         <div style={{
           position: 'absolute', left: 0, right: 0, top: '100%', marginTop: 4, zIndex: 30,
           background: C.card, border: `1px solid ${C.border}`, borderRadius: 12,
-          boxShadow: 'var(--shadow-md)', maxHeight: 220, overflowY: 'auto',
+          boxShadow: 'var(--shadow-md)', maxHeight: 260, overflowY: 'auto',
         }}>
-          {matches.map((s, i) => (
+          {suggestions.map((s, i) => (
             <div
-              key={s}
-              onMouseDown={e => { e.preventDefault(); commit(s); }}
+              key={s.kind === 'stop' ? `stop:${s.value}` : `addr:${s.result.lat},${s.result.lng}`}
+              onMouseDown={e => { e.preventDefault(); pick(s); }}
               style={{
+                display: 'flex', alignItems: 'center', gap: 8,
                 padding: '10px 14px', fontSize: 15, cursor: 'pointer',
                 color: C.ink, background: i === highlight ? C.cardEl : 'transparent',
                 fontFamily: 'inherit',
               }}
             >
-              {s}
+              {s.kind === 'address' && (
+                <MapPin size={14} strokeWidth={2} color={C.muted} style={{ flexShrink: 0 }} />
+              )}
+              {s.kind === 'stop' ? s.value : s.result.label}
             </div>
           ))}
+          {searching && (
+            <div style={{ padding: '10px 14px', fontSize: 13, color: C.muted, fontFamily: 'inherit' }}>
+              Searching addresses…
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -977,7 +1045,8 @@ export default function Planner() {
                 {/* From / To - typography only */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 18, flexShrink: 0 }}>
                   <div>
-                    <StopRow label="From" value={from} onChange={setFrom} placeholder={t(lang, 'choose_a_stop')} stops={[...stopNames, ...Object.keys(pinned)]} extraOption={myLoc ? MY_LOCATION : undefined} />
+                    <StopRow label="From" value={from} onChange={setFrom} placeholder={t(lang, 'choose_a_stop')} stops={[...stopNames, ...Object.keys(pinned)]} extraOption={myLoc ? MY_LOCATION : undefined}
+                      onPickAddress={result => setPinned(prev => ({ ...prev, [result.label]: [result.lat, result.lng] }))} />
                     <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
                       <button onClick={useMyLocation} disabled={locBusy} style={{ background: 'none', border: 'none', padding: '8px 0 0', fontSize: 13, fontWeight: 700, color: C.accent, cursor: 'pointer', fontFamily: 'inherit', letterSpacing: '0.02em' }}>
                         {locBusy ? 'Locating…' : from === MY_LOCATION ? `● ${t(lang, 'use_current_location')}` : `◉ ${t(lang, 'use_current_location')}`}
@@ -988,7 +1057,8 @@ export default function Planner() {
                     </div>
                   </div>
                   <div>
-                    <StopRow label="To" value={to} onChange={setTo} placeholder={t(lang, 'choose_a_destination')} stops={[...stopNames, ...Object.keys(pinned)]} />
+                    <StopRow label="To" value={to} onChange={setTo} placeholder={t(lang, 'choose_a_destination')} stops={[...stopNames, ...Object.keys(pinned)]}
+                      onPickAddress={result => setPinned(prev => ({ ...prev, [result.label]: [result.lat, result.lng] }))} />
                     <button onClick={() => setPinningFor('to')} style={{ background: 'none', border: 'none', padding: '8px 0 0', fontSize: 13, fontWeight: 700, color: C.accent, cursor: 'pointer', fontFamily: 'inherit', letterSpacing: '0.02em', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
                       <MapPin size={13} strokeWidth={2.5} color="currentColor" /> Drop a pin on the map
                     </button>
