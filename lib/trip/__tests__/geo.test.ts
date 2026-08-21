@@ -5,7 +5,7 @@
  * no DOM or fetch needed.
  */
 import { describe, it, expect } from 'vitest';
-import { shouldAdvanceLeg, distToNextStop, etaToNextStop, ADVANCE_THRESHOLD_KM } from '../geo';
+import { shouldAdvanceLeg, distToNextStop, etaToNextStop, isSameItinerary, ADVANCE_THRESHOLD_KM } from '../geo';
 import type { GeoPosition } from '../types';
 import type { Itinerary, RideLeg, WalkLeg } from '@/lib/routing/types';
 
@@ -135,5 +135,35 @@ describe('etaToNextStop', () => {
   it('returns null when legIndex is out of bounds', () => {
     const p = pos(stopFrom.lat, stopFrom.lng);
     expect(etaToNextStop(p, makeItinerary(), 99)).toBeNull();
+  });
+});
+
+// ── isSameItinerary ───────────────────────────────────────────────────────────
+// Regression coverage for the bug where the trip screen's mount effect
+// gated on a stale `trip.status` (leftover 'arrived'/'ended' from a
+// PREVIOUS trip surviving a router-cache-preserved remount) and silently
+// skipped loading a genuinely new second trip. The fix compares itinerary
+// content instead of trusting status.
+
+describe('isSameItinerary', () => {
+  it('returns false when nothing is loaded yet (null)', () => {
+    expect(isSameItinerary(null, makeItinerary())).toBe(false);
+  });
+
+  it('returns true for the identical itinerary object', () => {
+    const itin = makeItinerary();
+    expect(isSameItinerary(itin, itin)).toBe(true);
+  });
+
+  it('returns true for a structurally-equal but distinct object (as after a JSON round-trip through sessionStorage)', () => {
+    const original = makeItinerary();
+    const roundTripped = JSON.parse(JSON.stringify(original)) as Itinerary;
+    expect(isSameItinerary(original, roundTripped)).toBe(true);
+  });
+
+  it('returns false for a genuinely different second trip - the exact case the bug missed', () => {
+    const firstTrip = makeItinerary([rideLeg]);
+    const secondTrip = makeItinerary([walkLeg]);
+    expect(isSameItinerary(firstTrip, secondTrip)).toBe(false);
   });
 });

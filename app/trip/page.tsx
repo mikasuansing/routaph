@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { TripProvider, useTripContext } from '@/lib/trip/context';
 import type { Itinerary, RideLeg, WalkLeg } from '@/lib/routing/types';
 import { TRIP_PROGRESS_KEY, TRIP_STORAGE_KEY } from '@/lib/trip/types';
-import { bearingDelta, distToNextStop, etaToNextStop } from '@/lib/trip/geo';
+import { bearingDelta, distToNextStop, etaToNextStop, isSameItinerary } from '@/lib/trip/geo';
 import { ReportIssueButton } from '@/app/components/ReportIssueSheet';
 import { notificationPermission, requestNotificationPermission } from '@/lib/trip/notify';
 import { nearestStationEntrance } from '@/lib/routing/stationEntrances';
@@ -233,12 +233,30 @@ function TripScreen() {
   // also saved (a prior tab session got this far before reload/eviction -
   // the exact failure mode a signal-loss tunnel causes), resume there
   // instead of silently restarting the trip from leg 0.
+  //
+  // Deliberately does NOT gate on `trip.status === 'idle'`. TripProvider is
+  // mounted inside this same page component (see the bottom of this file),
+  // but Next's client-side router cache can keep a previous /trip mount's
+  // React tree - and its Context state - alive across a navigate-away-and-
+  // back, so a second trip's mount can start with a leftover 'arrived' or
+  // 'ended' status from the FIRST trip still sitting in context. With the
+  // old status-gate, that stale non-idle status silently skipped loading
+  // the second trip's itinerary entirely, leaving the first trip's
+  // "You've arrived" screen showing - and it only self-corrected on a
+  // second attempt once something else happened to reset status. Comparing
+  // itinerary content instead of trusting `status` fixes this regardless
+  // of why the status was stale.
   useEffect(() => {
-    if (trip.status !== 'idle') return;
     try {
       const raw = sessionStorage.getItem(TRIP_STORAGE_KEY);
-      if (!raw) { router.replace('/planner'); return; }
+      if (!raw) {
+        if (trip.status === 'idle') router.replace('/planner');
+        return;
+      }
       const itinerary = JSON.parse(raw) as Itinerary;
+
+      // Already showing exactly this trip - nothing to do.
+      if (isSameItinerary(trip.itinerary, itinerary)) return;
 
       const progressRaw = sessionStorage.getItem(TRIP_PROGRESS_KEY);
       const legIndex = progressRaw ? (JSON.parse(progressRaw) as { legIndex: number }).legIndex : 0;
@@ -250,8 +268,12 @@ function TripScreen() {
     } catch {
       router.replace('/planner');
     }
+  // Re-checks whenever the loaded itinerary or status actually changes
+  // (including once on mount, whatever their initial value is) rather than
+  // on every render - the nowTick clock elsewhere in this component ticks
+  // every 5s and would otherwise re-run this needlessly.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [trip.itinerary, trip.status]);
 
   // Navigation is a side effect - never call router.replace during render
   useEffect(() => {

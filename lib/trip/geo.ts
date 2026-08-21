@@ -88,3 +88,23 @@ export function etaToNextStop(
   const effectiveSpeed = speedMps && speedMps > 0.5 ? speedMps : WALK_MPS;
   return Math.max(1, Math.round((dist * 1000) / effectiveSpeed / 60));
 }
+
+/**
+ * Whether an itinerary just read from sessionStorage is one the trip
+ * screen already has loaded (so re-dispatching START/RESUME would just be
+ * noise) or a genuinely different trip that needs loading.
+ *
+ * This exists because of a real bug: the trip screen's mount effect used
+ * to gate on `trip.status === 'idle'` before loading sessionStorage. But
+ * Next's client-side router cache can keep a previous /trip mount's
+ * Context state alive across a navigate-away-and-back, so a SECOND trip
+ * could start with a leftover 'arrived'/'ended' status from the FIRST
+ * trip still in context — the status-gate then silently skipped loading
+ * the new trip's itinerary, leaving the first trip's "You've arrived"
+ * screen showing. Comparing itinerary *content* instead of trusting
+ * `status` fixes this regardless of why the status was stale.
+ */
+export function isSameItinerary(a: Itinerary | null, b: Itinerary): boolean {
+  if (!a) return false;
+  return JSON.stringify(a) === JSON.stringify(b);
+}
