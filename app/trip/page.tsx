@@ -31,6 +31,13 @@ const NAV_ZOOM = 18;
 /** Street-level zoom for the flat Leaflet fallback (no tilt, so no NAV_PITCH). */
 const NAV_ZOOM_FLAT = 18.5;
 
+/** How far down (px) a drag has to travel before it collapses the bottom
+ *  sheet - same threshold as the planner's collapsible Sheet. */
+const SHEET_DRAG_THRESHOLD_PX = 60;
+/** How far down the sheet collapses to - `top` percentage, not `height`,
+ *  since this panel is positioned by top/bottom rather than a fixed height. */
+const SHEET_COLLAPSED_TOP = '85%';
+
 /** MapLibre needs WebGL; without it the trip map falls back to flat Leaflet. */
 function hasWebGL(): boolean {
   try {
@@ -168,6 +175,30 @@ function TripScreen() {
   // Camera locked to the rider. Dragging the map releases it, the way a
   // navigation app stops fighting you the moment you pan.
   const [following, setFollowing] = useState(true);
+
+  // The bottom sheet's handle bar looked draggable (same visual affordance
+  // as everywhere else in the app) but nothing behind it actually was -
+  // fixed at top:42%, no way to pull it down and see the live nav map/
+  // rider arrow underneath. Mirrors the same drag-or-tap pattern used for
+  // the planner's collapsible Sheet.
+  const [sheetCollapsed, setSheetCollapsed] = useState(false);
+  const sheetDragRef = useRef<{ startY: number } | null>(null);
+  const sheetJustDraggedRef = useRef(false);
+  function onSheetHandlePointerDown(e: React.PointerEvent) {
+    sheetDragRef.current = { startY: e.clientY };
+    (e.target as HTMLElement).setPointerCapture(e.pointerId);
+  }
+  function onSheetHandlePointerUp(e: React.PointerEvent) {
+    if (!sheetDragRef.current) return;
+    const delta = e.clientY - sheetDragRef.current.startY;
+    if (delta > SHEET_DRAG_THRESHOLD_PX) { setSheetCollapsed(true); sheetJustDraggedRef.current = true; }
+    else if (delta < -SHEET_DRAG_THRESHOLD_PX) { setSheetCollapsed(false); sheetJustDraggedRef.current = true; }
+    sheetDragRef.current = null;
+  }
+  function onSheetHandleClick() {
+    if (sheetJustDraggedRef.current) { sheetJustDraggedRef.current = false; return; }
+    setSheetCollapsed(c => !c);
+  }
 
   // Ticks while a trip is active so the "last known position" staleness
   // check below re-evaluates even when no new GPS fix is coming in
@@ -799,7 +830,10 @@ function TripScreen() {
         // with it, and shifting as the toolbar hides and reappears on
         // scroll. The parent is `fixed; inset: 0`, so a percentage here
         // resolves against the viewport that is actually visible.
-        position: 'absolute', left: 0, right: 0, top: '42%', bottom: 0, zIndex: 20,
+        position: 'absolute', left: 0, right: 0,
+        top: sheetCollapsed ? SHEET_COLLAPSED_TOP : '42%',
+        bottom: 0, zIndex: 20,
+        transition: 'top 0.25s ease',
         background: C.bg,
         borderTop: `1px solid ${C.border}`, borderRadius: 'var(--radius-sheet) var(--radius-sheet) 0 0',
         boxShadow: 'var(--shadow-lg)',
@@ -810,7 +844,21 @@ function TripScreen() {
         // it here too stacked both, leaving dead space under the buttons on
         // any iPhone with a home indicator.
       }}>
-        <div style={{ width: 32, height: 4, borderRadius: 2, background: C.border, margin: '10px auto 0', flexShrink: 0 }} />
+        {/* Drag down (or tap) to collapse the sheet and see the live nav
+            map/rider arrow underneath - the handle bar looks draggable, so
+            now it actually is. Generous invisible touch target: a real
+            thumb is much wider than the 4px bar itself. */}
+        <div
+          onPointerDown={onSheetHandlePointerDown}
+          onPointerUp={onSheetHandlePointerUp}
+          onClick={onSheetHandleClick}
+          style={{
+            padding: '14px 40px', margin: '0 auto',
+            touchAction: 'none', cursor: 'grab', flexShrink: 0,
+          }}
+        >
+          <div style={{ width: 32, height: 4, borderRadius: 2, background: C.border }} />
+        </div>
 
       <main style={{ flex: 1, overflowY: 'auto', overscrollBehavior: 'contain', WebkitOverflowScrolling: 'touch', padding: '14px 24px calc(24px + env(safe-area-inset-bottom))' }}>
         {/* GPS state - explain, and offer a way in, instead of failing silently */}
