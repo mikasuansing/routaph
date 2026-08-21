@@ -165,20 +165,6 @@ function comboLabel(itin: Itinerary): string {
   }).join(' → ');
 }
 
-/* Human-readable fare computation from the rule the engine actually applied */
-function fareFormula(ride: RideLeg): string {
-  const rule = ride.fareRule;
-  if (!rule) return '';
-  const flag = rule.flagDistanceKm;
-  if (ride.distKm <= flag) {
-    return flag > 0
-      ? `₱${rule.baseFare} base (covers first ${flag} km)`
-      : `₱${rule.baseFare} base`;
-  }
-  const chargedKm = flag > 0 ? ride.distKm - flag : ride.distKm;
-  return `₱${rule.baseFare} base + ${chargedKm.toFixed(1)} km × ₱${rule.perKmRate.toFixed(2)}`;
-}
-
 /* ── Journey bar: grayscale segments proportional to leg duration ─────────── */
 function JourneyBar({ itin }: { itin: Itinerary }) {
   const total = itin.legs.reduce((s, l) => s + l.durationMin, 0) || 1;
@@ -1415,7 +1401,6 @@ export default function Planner() {
                       </div>
                     );
                     const ride = leg as RideLeg;
-                    const formula = fareFormula(ride);
                     const beepFare = beepAdjustedFare(ride, hasBeep);
                     return (
                       <div key={i}>
@@ -1423,7 +1408,6 @@ export default function Planner() {
                           <span style={{ fontWeight: 700, color: C.ink }}>{ride.line.name} <span className="tnum" style={{ fontWeight: 400, color: C.muted }}>{ride.distKm.toFixed(1)} km</span></span>
                           <span className="tnum" style={{ fontWeight: 700, color: C.ink }}>₱{beepFare.displayFare.toFixed(2)}</span>
                         </div>
-                        {formula && <p className="tnum" style={{ margin: '2px 0 0', fontSize: 12, color: C.muted }}>{formula}</p>}
                         {beepFare.note && <p style={{ margin: '2px 0 0', fontSize: 11, color: C.accent, fontWeight: 600 }}>{beepFare.note}</p>}
                       </div>
                     );
