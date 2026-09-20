@@ -221,12 +221,11 @@ export function PinPickerSheet({ title, initial, onConfirm, onCancel }: Props) {
         });
         // MapLibre reports missing tiles as errors too; only a failure to
         // load the style itself is fatal to the whole map.
-        map.on('error', (e: { error?: { status?: number } }) => {
+        map.on('error', () => {
           if (!settled && !map.isStyleLoaded()) {
             clearTimeout(styleTimer);
             giveUp();
           }
-          void e;
         });
 
         map.on('move', () => { const c = map.getCenter(); onMove(c.lat, c.lng); });
