@@ -732,7 +732,7 @@ function TripScreen() {
           borderRadius: 22, padding: '10px 16px', boxShadow: 'var(--shadow-sm)',
         }}>
           <span style={{ fontFamily: DISPLAY, fontSize: 15, fontWeight: 800, letterSpacing: '-0.02em', color: C.accent }}>
-            RoutaPH<span style={{ color: C.ink }}>.</span>
+            Routa<span style={{ color: C.ink }}>.</span>
           </span>
           {/* `gpsDenied` is set only on PERMISSION_DENIED - a genuinely
               unavailable fix or a timeout keeps the watcher alive and stays

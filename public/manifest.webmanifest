@@ -1,6 +1,6 @@
 {
-  "name": "RoutaPH — Metro Manila Commute Intelligence",
-  "short_name": "RoutaPH",
+  "name": "Routa — Metro Manila Commute Intelligence",
+  "short_name": "Routa",
   "description": "Plan Metro Manila commutes across MRT, LRT, bus, and jeepney — fares, ETAs, and live trip tracking.",
   "start_url": "/planner",
   "display": "standalone",

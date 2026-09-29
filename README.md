@@ -1,4 +1,4 @@
-# RoutaPH
+# Routa
 
 **Live: [parapo-chi.vercel.app](https://parapo-chi.vercel.app)** — free, no sign-up, works on any phone browser.
 
@@ -15,7 +15,7 @@ signal-poor jeepney ride.
 - **Plan a trip** — pick two stops (or drop a pin anywhere on the map) and
   get real routed itineraries across rail, bus, and jeepney, ranked by
   fastest / fewest transfers / cheapest, with a full fare breakdown per leg.
-- **Live trip tracking** — once you start a trip, RoutaPH follows your GPS,
+- **Live trip tracking** — once you start a trip, Routa follows your GPS,
   auto-advances to the next leg as you approach each stop, and tells you
   when to get off — without you having to keep checking the screen.
 - **Disruption-aware rerouting** — if a line goes down mid-trip, tap "I'm
@@ -23,7 +23,7 @@ signal-poor jeepney ride.
   surfaces ride-hailing fare estimates as a fallback (estimate only, never
   a live price, never processes payment).
 - **Honest jeepney handling** — traditional jeepneys have no fixed schedule
-  and no fixed stops. RoutaPH never fabricates an ETA for one; it shows a
+  and no fixed stops. Routa never fabricates an ETA for one; it shows a
   fare range and a real corridor instead of pretending to know an arrival
   time nobody could know.
 - **No accounts, no tracking of you** — there is no login. Nothing you

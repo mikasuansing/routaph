@@ -43,7 +43,7 @@ export default function Error({
     // Sentry (when NEXT_PUBLIC_SENTRY_DSN is set — see lib/monitoring.ts)
     // captures this; logging here too so it shows up in Vercel's own
     // function logs even before a DSN is configured.
-    console.error('RoutaPH route error:', error);
+    console.error('Routa route error:', error);
     captureError(error, { boundary: 'app/error.tsx' });
   }, [error]);
 
@@ -59,7 +59,7 @@ export default function Error({
           fontFamily: 'var(--font-display)', fontSize: 22, fontWeight: 800,
           letterSpacing: '-0.02em', color: C.accent,
         }}>
-          RoutaPH<span style={{ color: C.ink }}>.</span>
+          Routa<span style={{ color: C.ink }}>.</span>
         </span>
 
         <h1 style={{
