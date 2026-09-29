@@ -67,6 +67,10 @@ import.
 ```bash
 npm install
 cp .env.example .env.local   # fill in Supabase + Upstash credentials
+# Optional: NEXT_PUBLIC_CARTO_API_KEY (free at carto.com/basemaps/apikey).
+# Without it the maps fall back to plain OpenStreetMap tiles, light only.
+# CARTO stamps "API KEY REQUIRED" over keyless tiles. On Vercel, set it and
+# REDEPLOY, because NEXT_PUBLIC_ values are baked in at build time.
 npm run dev                  # http://localhost:3000
 ```
 

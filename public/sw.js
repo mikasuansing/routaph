@@ -20,7 +20,8 @@
  * with Turbopack.
  */
 
-const VERSION = 'parapo-v1';
+// v2: drops v1's tile cache, which held CARTO tiles stamped "API KEY REQUIRED".
+const VERSION = 'parapo-v2';
 const SHELL_CACHE = `${VERSION}-shell`;
 const DATA_CACHE  = `${VERSION}-data`;
 const TILE_CACHE  = `${VERSION}-tiles`;

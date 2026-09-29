@@ -13,11 +13,10 @@ import { t, loadLang, type Lang } from '@/lib/i18n';
 import { useTheme } from '@/app/providers';
 import { Check, Circle, AlertTriangle, LocateFixed } from 'lucide-react';
 import { ModeIcon } from '@/app/components/TransitIcons';
+import { tileConfig } from '@/lib/mapTiles';
 
 // Voyager (light) / Dark Matter (dark). Only used by the flat fallback map.
-const TILE_URL = (isDark: boolean) => isDark
-  ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
-  : 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png';
+const TILE_URL = (isDark: boolean) => tileConfig(isDark).url;
 
 /** Keyless OpenMapTiles vector tiles (ODbL) - see ADR 0004. */
 const VECTOR_STYLE = 'https://tiles.openfreemap.org/styles/liberty';
@@ -331,7 +330,7 @@ function TripScreen() {
       const walkLine = isDark ? '#A5988A' : '#8D8672';
 
       const map = L.map(mapElRef.current, { zoomControl: false, attributionControl: false });
-      tileRef.current = L.tileLayer(TILE_URL(isDark), { subdomains: 'abcd', maxZoom: 19 }).addTo(map);
+      tileRef.current = L.tileLayer(TILE_URL(isDark), { subdomains: tileConfig(isDark).subdomains, maxZoom: 19 }).addTo(map);
 
       const all: [number, number][] = [];
       for (const leg of trip.itinerary.legs) {
