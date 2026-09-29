@@ -86,9 +86,9 @@ const FARE_REF: [string, string][] = [
 type CatalogStop = { id: number; name: string; lat: number; lng: number };
 
 type WalkLeg = { type: 'walk'; fromName: string; toName: string; fromLat: number; fromLng: number; toLat: number; toLng: number; distKm: number; durationMin: number };
-type RideLeg = { type: 'ride'; mode: string; line: { id: number; name: string; color: string }; from: { id: number; name: string; lat: number; lng: number }; to: { id: number; name: string; lat: number; lng: number }; stops: { id: number; name: string; lat: number; lng: number }[]; distKm: number; durationMin: number; fare: number; fareRule?: { baseFare: number; perKmRate: number; flagDistanceKm: number } };
+type RideLeg = { type: 'ride'; mode: string; line: { id: number; name: string; color: string }; from: { id: number; name: string; lat: number; lng: number }; to: { id: number; name: string; lat: number; lng: number }; stops: { id: number; name: string; lat: number; lng: number }[]; distKm: number; durationMin: number; fare: number; fareRule?: { baseFare: number; perKmRate: number; flagDistanceKm: number }; floodProne?: { hazard: 2 | 3; segments: number } };
 type Leg = WalkLeg | RideLeg;
-type Itinerary = { legs: Leg[]; totalDurationMin: number; totalFare: number; transfers: number; objective: string; alternative?: true };
+type Itinerary = { legs: Leg[]; totalDurationMin: number; totalFare: number; transfers: number; objective: string; alternative?: true; floodAware?: true };
 type Disruption = { id: number; corridorId: number; description: string };
 type StationAccessibility = { stopId: number; feature: 'elevator' | 'escalator'; status: 'unknown' | 'operational' | 'out_of_service'; note: string | null };
 type RainAdvisory = { heavyRainExpected: boolean; message: string };
@@ -123,6 +123,13 @@ const LIVE_POLL_MS = 20_000;
 const OBJ_LABEL: Record<string, string> = {
   fastest: 'Fastest', fewest_transfers: 'Fewest transfers', cheapest: 'Cheapest',
 };
+
+// Project NOAH hazard maps are ODbL: the credit must travel with every flag.
+const FLOOD_ATTRIBUTION = 'Flood hazard data © Project NOAH, ODbL';
+
+function floodProneLegs(itin: Itinerary): RideLeg[] {
+  return rideLegs(itin).filter(l => l.floodProne);
+}
 
 function rideLegs(itin: Itinerary): RideLeg[] {
   return itin.legs.filter(l => l.type === 'ride') as RideLeg[];
@@ -1324,6 +1331,12 @@ export default function Planner() {
                       {comboLabel(itin)}
                     </p>
                     <JourneyBar itin={itin} />
+                    {floodProneLegs(itin).length > 0 && (
+                      <p style={{ margin: '10px 0 0', fontSize: 12, fontWeight: 700, color: C.error, display: 'flex', alignItems: 'center', gap: 4 }}>
+                        <AlertTriangle size={12} strokeWidth={2.5} color="currentColor" />
+                        Passes flood-prone roads · {floodProneLegs(itin).map(l => l.line.name).join(', ')}
+                      </p>
+                    )}
                     {worstRail && (
                       <p style={{
                         margin: '10px 0 0', fontSize: 12, fontWeight: 700,
@@ -1340,6 +1353,11 @@ export default function Planner() {
                 <p style={{ fontSize: 11, color: C.muted, textAlign: 'center', lineHeight: 1.6, marginTop: 16 }}>
                   Fares per person per boarding · LTFRB/DOTr 2026 · Walk legs free
                 </p>
+                {filtered.some(x => x.floodAware) && (
+                  <p style={{ fontSize: 11, color: C.muted, textAlign: 'center', lineHeight: 1.6, marginTop: 4 }}>
+                    Heavy rain: routes are steered away from flood-prone roads (hazard maps, not live flooding) · {FLOOD_ATTRIBUTION}
+                  </p>
+                )}
               </div>
             </Sheet>
           </>
@@ -1503,6 +1521,12 @@ export default function Planner() {
                           {beepFare.note && (
                             <p style={{ margin: '6px 0 0', fontSize: 11, color: C.accent, fontWeight: 600 }}>{beepFare.note}</p>
                           )}
+                          {ride.floodProne && (
+                            <p style={{ margin: '4px 0 0', fontSize: 11, color: C.error, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}>
+                              <AlertTriangle size={11} strokeWidth={2.5} color="currentColor" />
+                              Flood-prone in heavy rain ({ride.floodProne.hazard === 3 ? 'high' : 'medium'} hazard) · may be slow or impassable
+                            </p>
+                          )}
                           {outages.map((a, oi) => (
                             <p key={oi} style={{ margin: '4px 0 0', fontSize: 11, color: C.error, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}>
                               <AlertTriangle size={11} strokeWidth={2.5} color="currentColor" />
@@ -1607,6 +1631,9 @@ export default function Planner() {
                   }}>
                     {t(lang, 'plan_another_trip')}
                   </button>
+                  {floodProneLegs(selected).length > 0 && (
+                    <p style={{ margin: 0, fontSize: 11, color: C.muted, textAlign: 'center' }}>{FLOOD_ATTRIBUTION}</p>
+                  )}
                   <div style={{ textAlign: 'center', padding: '4px 0 0' }}>
                     <ReportIssueButton routeId={selectedRideLegs[0]?.line.id} contextLabel={comboLabel(selected)} />
                   </div>
