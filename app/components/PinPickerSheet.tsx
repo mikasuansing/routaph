@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { MapPin, X, LocateFixed, RefreshCw, Box } from 'lucide-react';
 import 'maplibre-gl/dist/maplibre-gl.css';
+import { tileConfig } from '@/lib/mapTiles';
 
 /*
  * Drop-a-pin location picker.
@@ -29,9 +30,8 @@ const C = {
   onPrimary: 'var(--color-on-primary)',
 };
 
-const TILE_URL = (isDark: boolean) => isDark
-  ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
-  : 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png';
+// Flat fallback basemap; the 3D view uses OpenFreeMap. See lib/mapTiles.ts.
+const TILE_URL = (isDark: boolean) => tileConfig(isDark).url;
 
 /**
  * Keyless OpenMapTiles-schema vector tiles (ODbL). Carries a `building-3d`
@@ -170,7 +170,7 @@ export function PinPickerSheet({ title, initial, onConfirm, onCancel }: Props) {
           attributionControl: false,
         });
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (L as any).tileLayer(TILE_URL(isDark), { subdomains: 'abcd', maxZoom: 19 }).addTo(map);
+        (L as any).tileLayer(TILE_URL(isDark), { subdomains: tileConfig(isDark).subdomains, maxZoom: 19 }).addTo(map);
 
         map.on('move', () => { const c = map.getCenter(); onMove(c.lat, c.lng); });
         map.on('moveend', () => { const c = map.getCenter(); onSettle(c.lat, c.lng); });

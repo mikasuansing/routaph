@@ -19,7 +19,10 @@ const securityHeaders = [
       // Leaflet + CARTO tiles
       // Raster tiles (CARTO/OSM) plus the vector tiles, sprites and glyphs
       // the 3D pin picker pulls from OpenFreeMap — see ADR 0004.
-      "img-src 'self' data: blob: https://*.tile.openstreetmap.org https://*.basemaps.cartocdn.com https://tiles.openfreemap.org",
+      // The bare hosts matter: `*.host` does not match `host` itself, and
+      // lib/mapTiles.ts requests tile.openstreetmap.org and
+      // basemaps.cartocdn.com with no subdomain. Wildcards kept for old URLs.
+      "img-src 'self' data: blob: https://tile.openstreetmap.org https://*.tile.openstreetmap.org https://basemaps.cartocdn.com https://*.basemaps.cartocdn.com https://tiles.openfreemap.org",
       // MapLibre fetches vector tiles over XHR and renders in a worker.
       "worker-src 'self' blob:",
       // Google Fonts + Leaflet CSS (unpkg) used in auth/planner pages

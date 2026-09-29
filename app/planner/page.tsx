@@ -12,6 +12,7 @@ import { useTheme } from '@/app/providers';
 import { PinPickerSheet, type PickedLocation } from '@/app/components/PinPickerSheet';
 import { Settings, MapPin, X, ArrowUpRight, ArrowLeftRight, ArrowUpDown, AlertTriangle, Check, Circle, CircleDot, ArrowLeft } from 'lucide-react';
 import { ModeIcon } from '@/app/components/TransitIcons';
+import { tileConfig } from '@/lib/mapTiles';
 import type { Mode } from '@/lib/routing/types';
 
 const BEEP_STORAGE_KEY = 'parapo:has_beep';
@@ -112,12 +113,11 @@ const MODE_GROUPS: { key: ModeGroup; label: string; engineModes: string[]; icon:
 ];
 
 const MY_LOCATION = 'My location';
-// Warm basemaps - Voyager (light) / Dark Matter (dark). Picked at map init
-// AND swapped on every theme change; a dark basemap under a cream page is
-// the one thing that makes the whole screen look broken.
-const TILE_URL = (isDark: boolean) => isDark
-  ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
-  : 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png';
+// Basemap (lib/mapTiles.ts): Voyager (light) / Dark Matter (dark) with a
+// CARTO key, plain OSM without. Picked at map init AND swapped on every
+// theme change; a dark basemap under a cream page is the one thing that
+// makes the whole screen look broken.
+const TILE_URL = (isDark: boolean) => tileConfig(isDark).url;
 // Live estimates go stale after 2 min server-side, so polling faster than
 // this buys nothing but battery.
 const LIVE_POLL_MS = 20_000;
@@ -618,8 +618,8 @@ export default function Planner() {
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       tileRef.current = (L as any).tileLayer(tileUrl, {
-        attribution: '© OpenStreetMap contributors © CARTO',
-        subdomains: 'abcd', maxZoom: 19,
+        attribution: tileConfig(isDark).attribution,
+        subdomains: tileConfig(isDark).subdomains, maxZoom: 19,
       }).addTo(map);
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
