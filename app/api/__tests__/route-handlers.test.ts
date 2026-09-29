@@ -8,7 +8,7 @@
  *   - 401 when auth is required and no Bearer token provided
  *   - response shapes match the API envelope spec
  */
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { NextRequest } from 'next/server';
 
 // ── Shared mocks ─────────────────────────────────────────────────────────────
@@ -130,6 +130,64 @@ describe('POST /api/v1/routes/plan', () => {
     expect(res.status).toBe(404);
     const json = await res.json();
     expect(json.error.code).toBe('no_route_found');
+  });
+});
+
+// ── POST /api/v1/routes/plan: flood-aware routing ───────────────────────────
+
+describe('POST /api/v1/routes/plan (flood-aware)', () => {
+  const body = { origin: { lat: 14.55, lng: 121.0 }, destination: { lat: 14.62, lng: 121.05 } };
+
+  // Spy on the engine to see what the handler resolved floodAware to.
+  async function loadWith(opts: { heavyRain?: boolean; weatherFails?: boolean }) {
+    vi.resetModules();
+    const planRoute = vi.fn().mockReturnValue([]);
+    vi.doMock('@/lib/routing/engine', () => ({ planRoute }));
+    // Configure the file-level weather mock rather than replacing it, so
+    // later suites still see the default no-rain forecast.
+    const weather = await import('@/lib/weather');
+    if (opts.weatherFails) {
+      vi.mocked(weather.fetchOpenMeteoForecast).mockRejectedValueOnce(new Error('Open-Meteo down'));
+    } else if (opts.heavyRain !== undefined) {
+      // Queued only when a test will consume it: an unconsumed Once value
+      // would leak into the next test's forecast.
+      vi.mocked(weather.interpretForecast).mockReturnValueOnce({
+        heavyRainExpected: !!opts.heavyRain, currentPrecipitationMm: 0, maxProbabilityPercent: 0, message: '',
+      });
+    }
+    const { POST } = await import('../v1/routes/plan/route');
+    return { POST, planRoute };
+  }
+
+  it('returns 400 when floodAware is not a boolean', async () => {
+    const { POST } = await loadWith({});
+    const res = await POST(makeRequest('POST', { ...body, floodAware: 'yes' }));
+    expect(res.status).toBe(400);
+    const json = await res.json();
+    expect(json.error.code).toBe('validation_error');
+  });
+
+  it('turns flood-aware on from the rain advisory when floodAware is omitted', async () => {
+    const { POST, planRoute } = await loadWith({ heavyRain: true });
+    await POST(makeRequest('POST', body));
+    expect(planRoute.mock.calls[0][1].floodAware).toBe(true);
+  });
+
+  it('lets an explicit floodAware override the advisory', async () => {
+    const { POST, planRoute } = await loadWith({});
+    await POST(makeRequest('POST', { ...body, floodAware: false }));
+    expect(planRoute.mock.calls[0][1].floodAware).toBe(false);
+  });
+
+  it('treats a failed weather fetch as no rain, not an error', async () => {
+    const { POST, planRoute } = await loadWith({ weatherFails: true });
+    const res = await POST(makeRequest('POST', body));
+    expect(res.status).toBe(404); // empty mocked plan -> no_route_found, never 500
+    expect(planRoute.mock.calls[0][1].floodAware).toBe(false);
+  });
+
+  afterEach(() => {
+    vi.doUnmock('@/lib/routing/engine');
   });
 });
 

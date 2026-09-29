@@ -20,6 +20,8 @@ export const SearchBodySchema = z.object({
   preference:   z.enum(["fastest", "fewest_transfers", "cheapest"]).optional(),
   // At least one mode must remain usable, so at most 3 of the 4 can be excluded
   excludeModes: z.array(z.enum(["jeepney", "bus", "mrt", "lrt"])).max(3).optional(),
+  // Omitted = follow the rain advisory; explicit true/false overrides it
+  floodAware:   z.boolean().optional(),
 });
 
 export const CrowdReportSchema = z.object({

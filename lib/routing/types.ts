@@ -62,10 +62,19 @@ export type LineData = {
   stops: Stop[]; // ordered by stop_sequence
 };
 
+/** Flood hazard of a road segment: 2 = medium (0.5-1.5 m), 3 = high (>1.5 m). */
+export type FloodHazard = 2 | 3;
+
 export type TransitGraph = {
   nodes: Map<number, GraphNode>;
   lines: Map<number, LineData>;
   fareRules: FareRule[];
+  /**
+   * Road segments crossing a Project NOAH flood hazard zone, keyed by
+   * floodSegmentKey(lineId, fromStopId, toStopId) in BOTH directions.
+   * Absent when the data couldn't be loaded; routing then ignores floods.
+   */
+  floodSegments?: Map<string, FloodHazard>;
 };
 
 // Itinerary output types
@@ -94,6 +103,12 @@ export type RideLeg = {
   // Rule actually applied to this boarding, so the UI can show the
   // computation (base + per-km beyond the flag distance) honestly.
   fareRule?: { baseFare: number; perKmRate: number; flagDistanceKm: number };
+  /**
+   * Set only on flood-aware plans, when this leg crosses a flood hazard
+   * zone. A scenario from hazard maps, not an observation: "flood-prone",
+   * never "flooded".
+   */
+  floodProne?: { hazard: FloodHazard; segments: number };
 };
 
 export type Leg = WalkLeg | RideLeg;
@@ -112,6 +127,8 @@ export type Itinerary = {
    * planner offers the runner-up modes instead of insisting on one answer.
    */
   alternative?: true;
+  /** Flood-prone road segments were penalized while planning this trip. */
+  floodAware?: true;
 };
 
 export type PlanQuery = {
@@ -124,4 +141,5 @@ export type PlanQuery = {
   preference?: Objective;
   excludeLines?: number[];  // line IDs whose ride edges are skipped (F13/F15 reroute)
   excludeModes?: Mode[];    // modes to exclude entirely (e.g. 'bus' during bus strike)
+  floodAware?: boolean;     // penalize flood-prone road segments (caller resolves from rain advisory)
 };

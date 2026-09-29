@@ -1,6 +1,6 @@
 # ParaPo — API Contracts
 
-> Last verified from code: 2026-07-26
+> Last verified from code: 2026-09-29
 
 All responses use the standard envelope:
 
@@ -35,9 +35,24 @@ GPS trip tracking; there is no login, saved commutes, or trip history.
   "departAt":     "ISO8601 datetime (optional)",
   "rush":         "boolean (optional) — force rush-hour congestion; defaults from departAt hour (Manila 7-9am / 5-7pm)",
   "preference":   "fastest | fewest_transfers | cheapest (optional, default: all three)",
-  "excludeModes": ["jeepney" | "bus" | "mrt" | "lrt"]  // optional, max 3 of 4 — at least one mode must remain
+  "excludeModes": ["jeepney" | "bus" | "mrt" | "lrt"],  // optional, max 3 of 4 — at least one mode must remain
+  "floodAware":   "boolean (optional) — force flood-prone penalty on/off; defaults from the rain advisory"
 }
 ```
+
+**Flood-aware routing (verified from code and against production data 2026-09-29):** while the
+rain advisory is active (or `floodAware: true`), jeepney/bus segments that
+cross a Project NOAH medium/high flood hazard zone (25-year scenario) cost
+more, so routes around them win. Rail is never penalized. Flagged legs carry
+`floodProne`; the itinerary carries `floodAware: true` when the penalty was
+applied. The cache key includes the resolved flood state. Attribution
+"Flood hazard data (c) Project NOAH, ODbL" is required wherever `floodProne`
+is shown. See `docs/flood-data.md`.
+
+Failure cases (contract tests): `floodAware` not a boolean → 400; flood
+data unavailable → plan still returns 200 with no `floodProne` flags and no
+`floodAware` (degrades, never errors); advisory fetch fails → treated as no
+rain.
 **Returns:** `{ "data": Itinerary[] }`  
 **Status codes:**
 - 200 — itineraries found
@@ -54,6 +69,7 @@ GPS trip tracking; there is no login, saved commutes, or trip history.
   totalFare: number;
   transfers: number;
   objective: "fastest" | "fewest_transfers" | "cheapest";
+  floodAware?: true;   // flood-prone penalty was applied to this plan
 }
 
 RideLeg {
@@ -63,6 +79,7 @@ RideLeg {
   from: Stop; to: Stop; stops: Stop[];
   distKm: number; durationMin: number; fare: number;
   fareRule?: { baseFare: number; perKmRate: number; flagDistanceKm: number };  // rule applied to this boarding
+  floodProne?: { hazard: 2 | 3; segments: number };  // highest hazard crossed, count of flagged segments
 }
 
 WalkLeg {

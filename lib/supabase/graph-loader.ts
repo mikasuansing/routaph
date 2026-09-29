@@ -3,9 +3,10 @@
  * Falls back to seed data when Supabase is unconfigured or the query fails.
  * Server-only - never import from a Client Component.
  */
-import type { FareRule, Line, Stop, TransitGraph } from '@/lib/routing/types';
+import type { FareRule, FloodHazard, Line, Stop, TransitGraph } from '@/lib/routing/types';
 import { DEFAULT_FARE_RULES } from '@/lib/routing/fares';
 import { buildGraphFromData, getGraph } from '@/lib/routing/graph';
+import { floodSegmentKey } from '@/lib/routing/utils';
 
 // DB mode → engine Mode
 function mapMode(dbMode: string, name = ''): Line['mode'] {
@@ -126,11 +127,39 @@ export async function loadTransitGraph(): Promise<TransitGraph> {
     fareRules.push(...DEFAULT_FARE_RULES);
 
     const graph = buildGraphFromData(lines, stops, lineStops, fareRules);
+    graph.floodSegments = await loadFloodSegments(supabaseServer);
     _cache = { graph, at: Date.now() };
     return graph;
 
   } catch {
     return getGraph(); // any error → fall back to seed data
+  }
+}
+
+/**
+ * Road segments crossing a Project NOAH flood zone (migration 011,
+ * docs/flood-data.md). The PostGIS function does the geometry; this only
+ * reshapes rows into the engine's lookup. The engine rides every line in
+ * both directions from one stop order, so each segment is stored both ways.
+ *
+ * Returns undefined on any failure: flood-aware routing is an enhancement,
+ * and a plan without it beats no plan.
+ */
+async function loadFloodSegments(
+  client: typeof import('./server').supabaseServer,
+): Promise<Map<string, FloodHazard> | undefined> {
+  try {
+    const { data, error } = await client.rpc('flood_prone_segments');
+    if (error || !Array.isArray(data)) return undefined;
+    const segments = new Map<string, FloodHazard>();
+    for (const row of data as Array<{ route_id: number; from_stop_id: number; to_stop_id: number; hazard: number }>) {
+      if (row.hazard !== 2 && row.hazard !== 3) continue;
+      segments.set(floodSegmentKey(row.route_id, row.from_stop_id, row.to_stop_id), row.hazard);
+      segments.set(floodSegmentKey(row.route_id, row.to_stop_id, row.from_stop_id), row.hazard);
+    }
+    return segments;
+  } catch {
+    return undefined;
   }
 }
 

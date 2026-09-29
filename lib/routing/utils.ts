@@ -47,3 +47,8 @@ export function timeBucket(d: Date = new Date()): string {
   const m = d.getMinutes() < 30 ? '00' : '30';
   return `${h}:${m}`;
 }
+
+/** Key for TransitGraph.floodSegments. Direction matters, so callers store both. */
+export function floodSegmentKey(lineId: number, fromStopId: number, toStopId: number): string {
+  return `${lineId}:${fromStopId}:${toStopId}`;
+}

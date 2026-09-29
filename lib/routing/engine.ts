@@ -9,8 +9,9 @@
  */
 
 import { computeFare, findFareRule } from './fares';
-import { haversineKm, nearestStops, walkMinutes } from './utils';
+import { floodSegmentKey, haversineKm, nearestStops, walkMinutes } from './utils';
 import type {
+  FloodHazard,
   GraphEdge,
   Itinerary,
   Leg,
@@ -74,6 +75,25 @@ type RideMult = (mode: Mode) => number;
 function rushRideMult(rush: boolean): RideMult {
   if (!rush) return () => 1;
   return (mode) => (mode === 'mrt' || mode === 'lrt' ? RUSH_MULT_RAIL : RUSH_MULT_ROAD);
+}
+
+// ---------------------------------------------------------------------------
+// Flood-aware routing (docs/flood-data.md)
+// While it's raining, a road segment crossing a flood hazard zone is costed
+// as if it took this many times longer. That is a RANKING device, not a
+// prediction: nobody publishes how long a flooded EDSA crawl actually takes,
+// so displayed durations stay unpenalized and the leg is tagged instead.
+// The penalty is added unweighted so it bites under every objective,
+// including `cheapest`, where time only counts 0.3x.
+// ---------------------------------------------------------------------------
+const FLOOD_COST_MULT: Record<FloodHazard, number> = { 2: 2, 3: 3 };
+
+type FloodLookup = (lineId: number, fromStopId: number, toStopId: number) => FloodHazard | undefined;
+
+const NO_FLOOD: FloodLookup = () => undefined;
+
+function floodLookup(segments: Map<string, FloodHazard>): FloodLookup {
+  return (lineId, from, to) => segments.get(floodSegmentKey(lineId, from, to));
 }
 
 // ---------------------------------------------------------------------------
@@ -149,6 +169,7 @@ function search(
   excludeLineSet?: Set<number>,
   excludeModeSet?: Set<Mode>,
   rideMult: RideMult = () => 1,
+  flood: FloodLookup = NO_FLOOD,
 ): PQItem | null {
   const MAX_SPEED_KMH = 60;
 
@@ -213,11 +234,14 @@ function search(
         const prevBoardingFare = boarding ? 0 : computeFare(mode, cur.distOnLine, edge.lineId, graph.fareRules);
         const fare = computeFare(mode, distOnLine, edge.lineId, graph.fareRules) - prevBoardingFare;
         const rideTime = edge.timeMin * rideMult(mode);
+        const hazard = flood(edge.lineId, cur.stopId, edge.toStopId);
+        const floodCost = hazard ? rideTime * (FLOOD_COST_MULT[hazard] - 1) : 0;
 
         const addedCost =
           rideTime * w.timeFactor +
           transferPenalty +
-          fare * w.fareFactor;
+          fare * w.fareFactor +
+          floodCost;
 
         const ng = cur.g + addedCost;
         const f = ng + heuristic(edge.toStopId);
@@ -282,6 +306,7 @@ function reconstructItinerary(
   destStopId: number,
   objective: Objective,
   rideMult: RideMult = () => 1,
+  flood: FloodLookup = NO_FLOOD,
 ): Itinerary {
   // Collect path nodes bottom-up
   const chain: PQItem[] = [];
@@ -321,10 +346,17 @@ function reconstructItinerary(
       const rideStopIds: number[] = [chain[i - 1].stopId];
       let totalDist = 0;
       let totalTime = 0;
+      let floodSegments = 0;
+      let floodHazard: FloodHazard | undefined;
 
       while (i < chain.length && chain[i].prevEdge?.type === 'ride' &&
              (chain[i].prevEdge as { lineId: number }).lineId === lineId) {
         const e = chain[i].prevEdge as { distKm: number; timeMin: number };
+        const hazard = flood(lineId, chain[i - 1].stopId, chain[i].stopId);
+        if (hazard) {
+          floodSegments++;
+          if (!floodHazard || hazard > floodHazard) floodHazard = hazard;
+        }
         rideStopIds.push(chain[i].stopId);
         totalDist += e.distKm;
         totalTime += e.timeMin * rideMult(line.mode); // congestion-adjusted
@@ -355,6 +387,7 @@ function reconstructItinerary(
             flagDistanceKm: fareRule.flagDistanceKm ?? 4,
           },
         } : {}),
+        ...(floodHazard ? { floodProne: { hazard: floodHazard, segments: floodSegments } } : {}),
       } satisfies RideLeg);
     } else {
       // transfer walk — shown inline only if long enough
@@ -438,6 +471,11 @@ export function planRoute(graph: TransitGraph, query: PlanQuery): Itinerary[] {
   const rush = query.rush ?? isRushHour(query.departAt ?? new Date());
   const rideMult = rushRideMult(rush);
 
+  // Flood-aware only when asked AND the hazard data actually loaded, so a
+  // plan never claims to have avoided floods it knew nothing about.
+  const floodActive = !!query.floodAware && (graph.floodSegments?.size ?? 0) > 0;
+  const flood = floodActive ? floodLookup(graph.floodSegments!) : NO_FLOOD;
+
   for (const obj of objectives) {
     const w = WEIGHTS[obj];
     let best: PQItem | null = null;
@@ -448,7 +486,7 @@ export function planRoute(graph: TransitGraph, query: PlanQuery): Itinerary[] {
       // Seed the search with the access-walk cost so farther origin stops
       // are correctly penalised relative to closer ones.
       const initialG = walkMinutes(accessDist) * w.timeFactor;
-      const result = search(graph, oStop.id, destStopIds, destLat, destLng, w, initialG, excludeLineSet, excludeModeSet, rideMult);
+      const result = search(graph, oStop.id, destStopIds, destLat, destLng, w, initialG, excludeLineSet, excludeModeSet, rideMult, flood);
       if (!result) continue;
 
       if (!best || result.g < best.g) {
@@ -470,6 +508,7 @@ export function planRoute(graph: TransitGraph, query: PlanQuery): Itinerary[] {
       bestDestStop.id,
       obj,
       rideMult,
+      flood,
     );
 
     // Simple dedup key
@@ -519,7 +558,7 @@ export function planRoute(graph: TransitGraph, query: PlanQuery): Itinerary[] {
 
       for (const { stop: oStop, distKm: accessDist } of originCandidates) {
         const initialG = walkMinutes(accessDist) * w.timeFactor;
-        const result = search(graph, oStop.id, destStopIds, destLat, destLng, w, initialG, without, excludeModeSet, rideMult);
+        const result = search(graph, oStop.id, destStopIds, destLat, destLng, w, initialG, without, excludeModeSet, rideMult, flood);
         if (!result) continue;
         if (!best || result.g < best.g) {
           best = result;
@@ -539,6 +578,7 @@ export function planRoute(graph: TransitGraph, query: PlanQuery): Itinerary[] {
         bestDestStop.id,
         'fastest',
         rideMult,
+        flood,
       );
 
       // A detour several times longer isn't a real choice, it's a warning.
@@ -555,5 +595,5 @@ export function planRoute(graph: TransitGraph, query: PlanQuery): Itinerary[] {
     }
   }
 
-  return results;
+  return floodActive ? results.map(r => ({ ...r, floodAware: true as const })) : results;
 }
