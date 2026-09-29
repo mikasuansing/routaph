@@ -205,7 +205,20 @@ DB `'train'` → check corridor name for `'LRT'` → engine `'lrt'` else `'mrt'`
 - **Dedup**: itineraries deduped by ride-leg signature (line + from + to) before returning.
 - **Short-circuit**: if origin and destination are `< 0.05 km` apart, return `[]` immediately.
 
-### §7.4 Fare Model (2026 LTFRB / DOTr rates; verified 2026-07-08)
+### §7.4 Fare Model (2026 LTFRB / DOTr rates; verified 2026-09-29)
+
+> **Correction (2026-09-29):** the LTFRB road fare hike (announced 2026-03-19)
+> was suspended by the President amid the fuel crisis and only took effect on
+> **2026-09-28**. Until then the app quoted the higher fares early. The
+> MRT-3/LRT-2 50% discount (2026-03-23) is ongoing, "until further notice",
+> and could be lifted without warning. LRT-1 has no new hike after 2025-04-02.
+> Sources are news coverage, not the LTFRB circular.
+>
+> **Not modeled yet:** ordinary city bus (P15 + P2.49/km), modern jeepney
+> (P17 + P2.40/km), UV Express (provisional P2.60-3.00/km), P2P (+15%).
+> Every bus is priced A/C and every jeepney traditional. EDSA Carousel is
+> pinned to P15 + P2.65/km from migration 010 and is **unconfirmed** after
+> the hike.
 
 | Mode / line | Base fare | Flag km (free) | Per-km after |
 |---|---|---|---|

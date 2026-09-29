@@ -1,8 +1,16 @@
 import type { FareRule, Mode } from './types';
 
 /**
- * 2026 Philippine transit fare matrix (LTFRB / DOTr), verified 2026-07-08:
- * Mar 19 2026 LTFRB fare hike + Mar 23 2026 MRT-3/LRT-2 50% discount.
+ * 2026 Philippine transit fare matrix (LTFRB / DOTr), verified 2026-09-29
+ * against news coverage (Philstar, Top Gear, PNA), not the LTFRB circular:
+ * the LTFRB road fare hike announced Mar 19 2026 was SUSPENDED and only took
+ * effect Sep 28 2026; the Mar 23 2026 MRT-3/LRT-2 50% discount is ongoing
+ * with no announced end date.
+ *
+ * NOT MODELED: these rules price every bus as A/C and every jeepney as
+ * traditional. Ordinary city bus is P15 + P2.49/km, modern jeepney is
+ * P17 + P2.40/km, UV Express is provisionally P2.60-3.00/km. Fixing that
+ * needs a per-route service class, tracked in BASELINE.md 7.4.
  *
  * Jeepney - ₱14 flagdown covers first 4 km; ₱2.00/km after (traditional jeepney)
  * Bus - ₱18 flagdown covers first 5 km; ₱2.98/km after (A/C city bus)
