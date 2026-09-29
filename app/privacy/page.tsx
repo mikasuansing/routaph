@@ -115,7 +115,7 @@ export default function PrivacyPage() {
                 <li><strong>Supabase</strong> (database) &mdash; stores transit data, anonymous search logs, and crowd reports in the ap-northeast-1 region. <a href="https://supabase.com/privacy" style={{ color: C.accent }}>Supabase Privacy Policy</a>.</li>
                 <li><strong>Upstash Redis</strong> &mdash; rate limiting, route caching, and the 3-minute live-position cache. <a href="https://upstash.com/trust/privacy.pdf" style={{ color: C.accent }}>Upstash Privacy Policy</a>.</li>
                 <li><strong>Vercel</strong> &mdash; hosting. Request logs are retained per Vercel&apos;s default policy. <a href="https://vercel.com/legal/privacy-policy" style={{ color: C.accent }}>Vercel Privacy Policy</a>.</li>
-                <li><strong>OpenStreetMap / CARTO</strong> &mdash; map tiles. They may log your IP address when tiles load.</li>
+                <li><strong>OpenFreeMap / OpenStreetMap / CARTO</strong> &mdash; map tiles and map styling. They may log your IP address when tiles load.</li>
                 <li><strong>Open-Meteo</strong> &mdash; rain advisories, requested for one fixed Metro Manila point, never your location.</li>
                 <li><strong>Waze / Grab deep links</strong> &mdash; if you tap one, your destination coordinate is passed to that app. RoutaPH receives nothing back.</li>
                 <li><strong>Google Fonts</strong> &mdash; loaded at runtime; Google may log your IP per their terms.</li>
