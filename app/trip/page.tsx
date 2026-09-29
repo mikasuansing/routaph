@@ -13,10 +13,7 @@ import { t, loadLang, type Lang } from '@/lib/i18n';
 import { useTheme } from '@/app/providers';
 import { Check, Circle, AlertTriangle, LocateFixed } from 'lucide-react';
 import { ModeIcon } from '@/app/components/TransitIcons';
-import { tileConfig } from '@/lib/mapTiles';
-
-// Voyager (light) / Dark Matter (dark). Only used by the flat fallback map.
-const TILE_URL = (isDark: boolean) => tileConfig(isDark).url;
+import { addBasemap, type Basemap } from '@/lib/mapTiles';
 
 /** Keyless OpenMapTiles vector tiles (ODbL) - see ADR 0004. */
 const VECTOR_STYLE = 'https://tiles.openfreemap.org/styles/liberty';
@@ -74,6 +71,8 @@ const GLOBAL = `
 body{font-family:var(--font-sans);}
 button:active{opacity:0.85;}
 .tnum{font-variant-numeric:tabular-nums;}
+.leaflet-control-attribution{font-size:9px!important;opacity:0.5!important;background:transparent!important;color:inherit!important;}
+.leaflet-control-attribution a{color:inherit!important;text-decoration:underline;}
 /* @keyframes pulse now lives in app/globals.css (shared with app/loading.tsx) */
 `;
 
@@ -330,7 +329,15 @@ function TripScreen() {
       const walkLine = isDark ? '#A5988A' : '#8D8672';
 
       const map = L.map(mapElRef.current, { zoomControl: false, attributionControl: false });
-      tileRef.current = L.tileLayer(TILE_URL(isDark), { subdomains: tileConfig(isDark).subdomains, maxZoom: 19 }).addTo(map);
+      // OpenFreeMap's terms require the credit on screen; added before the
+      // basemap so the control picks up the layer's attribution as it arrives.
+      L.control.attribution({ position: 'bottomleft', prefix: false }).addTo(map);
+      // Loads asynchronously; re-read the theme on arrival in case it flipped.
+      addBasemap(L, map, isDark).then(basemap => {
+        tileRef.current = basemap;
+        const nowDark = document.documentElement.getAttribute('data-theme') === 'dark';
+        if (nowDark !== isDark) basemap.setTheme(nowDark);
+      }).catch(() => { /* map was torn down while the basemap loaded */ });
 
       const all: [number, number][] = [];
       for (const leg of trip.itinerary.legs) {
@@ -370,8 +377,7 @@ function TripScreen() {
   // page, which is what the toggle looked broken as before.
   useEffect(() => {
     if (!tileRef.current) return;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (tileRef.current as any).setUrl(TILE_URL(theme === 'dark'));
+    (tileRef.current as Basemap).setTheme(theme === 'dark');
   }, [theme]);
 
   /*

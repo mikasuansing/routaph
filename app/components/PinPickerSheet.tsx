@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { MapPin, X, LocateFixed, RefreshCw, Box } from 'lucide-react';
 import 'maplibre-gl/dist/maplibre-gl.css';
-import { tileConfig } from '@/lib/mapTiles';
+import { configureMapLibreWorker, tileConfig } from '@/lib/mapTiles';
 
 /*
  * Drop-a-pin location picker.
@@ -186,6 +186,7 @@ export function PinPickerSheet({ title, initial, onConfirm, onCancel }: Props) {
       import('maplibre-gl').then(mod => {
         if (cancelled || !mapElRef.current) return;
         const maplibregl = mod;
+        configureMapLibreWorker(maplibregl); // Turbopack breaks the default worker URL
 
         const map = new maplibregl.Map({
           container: mapElRef.current,

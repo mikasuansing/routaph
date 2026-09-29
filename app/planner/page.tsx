@@ -12,7 +12,7 @@ import { useTheme } from '@/app/providers';
 import { PinPickerSheet, type PickedLocation } from '@/app/components/PinPickerSheet';
 import { Settings, MapPin, X, ArrowUpRight, ArrowLeftRight, ArrowUpDown, AlertTriangle, Check, Circle, CircleDot, ArrowLeft } from 'lucide-react';
 import { ModeIcon } from '@/app/components/TransitIcons';
-import { tileConfig } from '@/lib/mapTiles';
+import { addBasemap, type Basemap } from '@/lib/mapTiles';
 import type { Mode } from '@/lib/routing/types';
 
 const BEEP_STORAGE_KEY = 'parapo:has_beep';
@@ -113,11 +113,10 @@ const MODE_GROUPS: { key: ModeGroup; label: string; engineModes: string[]; icon:
 ];
 
 const MY_LOCATION = 'My location';
-// Basemap (lib/mapTiles.ts): Voyager (light) / Dark Matter (dark) with a
-// CARTO key, plain OSM without. Picked at map init AND swapped on every
-// theme change; a dark basemap under a cream page is the one thing that
-// makes the whole screen look broken.
-const TILE_URL = (isDark: boolean) => tileConfig(isDark).url;
+// Basemap (lib/mapTiles.ts): OpenFreeMap Positron (light) / Dark (dark).
+// Picked at map init AND swapped on every theme change; a dark basemap
+// under a cream page is the one thing that makes the whole screen look
+// broken.
 // Live estimates go stale after 2 min server-side, so polling faster than
 // this buys nothing but battery.
 const LIVE_POLL_MS = 20_000;
@@ -606,7 +605,6 @@ export default function Planner() {
       const L = mod.default ?? mod;
 
       const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
-      const tileUrl = TILE_URL(isDark);
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const map = (L as any).map(mapElRef.current, {
@@ -616,11 +614,14 @@ export default function Planner() {
         attributionControl: false,
       });
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      tileRef.current = (L as any).tileLayer(tileUrl, {
-        attribution: tileConfig(isDark).attribution,
-        subdomains: tileConfig(isDark).subdomains, maxZoom: 19,
-      }).addTo(map);
+      // The basemap loads asynchronously (the vector layer is a lazy chunk),
+      // so a theme toggle can land before it is ready: re-read the theme on
+      // arrival rather than trusting the value from when the map was made.
+      addBasemap(L, map, isDark).then(basemap => {
+        tileRef.current = basemap;
+        const nowDark = document.documentElement.getAttribute('data-theme') === 'dark';
+        if (nowDark !== isDark) basemap.setTheme(nowDark);
+      }).catch(() => { /* map was torn down while the basemap loaded */ });
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (L as any).control.attribution({ position: 'bottomleft', prefix: false }).addTo(map);
@@ -761,8 +762,7 @@ export default function Planner() {
   /* ── Keep the basemap in step with the theme toggle ───────────────────── */
   useEffect(() => {
     if (!tileRef.current) return;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (tileRef.current as any).setUrl(TILE_URL(theme === 'dark'));
+    (tileRef.current as Basemap).setTheme(theme === 'dark');
     // Route/vehicle colours are baked into the drawn layers, so they need a
     // redraw too - otherwise cobalt-on-cream lines stay on a dark basemap.
     drawRoute();
@@ -913,6 +913,7 @@ export default function Planner() {
     .leaflet-container{font-family:'Inter',system-ui,sans-serif!important;}
     .leaflet-attribution-flag{display:none!important;}
     .leaflet-control-attribution{font-size:9px!important;opacity:0.4!important;background:transparent!important;color:inherit!important;}
+    .leaflet-control-attribution a{color:inherit!important;text-decoration:underline;}
   `;
 
   const canSearch = Boolean(from && to && from !== to && originCoords(from) && resolveStop(to) && Object.values(enabledModes).some(Boolean));
