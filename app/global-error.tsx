@@ -24,7 +24,7 @@ export default function GlobalError({
   unstable_retry: () => void;
 }) {
   useEffect(() => {
-    console.error('RoutaPH root layout error:', error);
+    console.error('Routa root layout error:', error);
     captureError(error, { boundary: 'app/global-error.tsx' });
   }, [error]);
 
@@ -38,10 +38,10 @@ export default function GlobalError({
       }}>
         <div style={{ maxWidth: 420, width: '100%' }}>
           <span style={{ fontSize: 20, fontWeight: 800, letterSpacing: '-0.02em', color: '#2947DE' }}>
-            RoutaPH<span style={{ color: '#191610' }}>.</span>
+            Routa<span style={{ color: '#191610' }}>.</span>
           </span>
           <h1 style={{ margin: '18px 0 0', fontSize: 26, fontWeight: 800, letterSpacing: '-0.02em', color: '#191610' }}>
-            RoutaPH could not start
+            Routa could not start
           </h1>
           <p style={{ margin: '12px 0 0', fontSize: 15, color: '#4A4436', lineHeight: 1.7 }}>
             Something broke before the app itself could load. Reloading

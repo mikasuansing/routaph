@@ -29,7 +29,7 @@ export default function Loading() {
           animation: 'pulse 1.6s ease-in-out infinite',
         }}
       >
-        RoutaPH<span style={{ color: 'var(--color-ink)' }}>.</span>
+        Routa<span style={{ color: 'var(--color-ink)' }}>.</span>
       </span>
     </div>
   );

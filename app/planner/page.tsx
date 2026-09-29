@@ -957,7 +957,7 @@ export default function Planner() {
               boxShadow: 'var(--shadow-sm)',
             }}>
               <span style={{ fontFamily: DISPLAY, fontSize: 16, fontWeight: 800, letterSpacing: '-0.02em', color: C.accent }}>
-                RoutaPH<span style={{ color: C.ink }}>.</span>
+                Routa<span style={{ color: C.ink }}>.</span>
               </span>
               <div style={{ width: 1, height: 14, background: C.border }} />
               {disruptions === null ? (
